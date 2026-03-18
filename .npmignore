@@ -1,0 +1,12 @@
+src/
+test/
+scripts/
+*.db
+*.db-shm
+*.db-wal
+.github/
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+eslint.config.js
+.gitignore
