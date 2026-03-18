@@ -43,7 +43,7 @@ const config = resolveConfig();
 program
   .name('rk')
   .description('Repo Knowledge System — know your repos')
-  .version('0.1.0');
+  .version('1.0.0');
 
 // ─── init ────────────────────────────────────────────────────────────────────
 program
@@ -589,4 +589,16 @@ audit
     closeDb();
   });
 
-program.parse();
+program.option('--debug', 'Show stack traces and verbose output', false);
+
+try {
+  program.parse();
+} catch (e: unknown) {
+  const err = e instanceof Error ? e : new Error(String(e));
+  if (program.opts().debug) {
+    console.error(err);
+  } else {
+    console.error(`Error: ${err.message}`);
+  }
+  process.exit(2);
+}

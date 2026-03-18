@@ -1,6 +1,6 @@
 {
   "name": "@mcptoolshop/repo-knowledge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Repo knowledge system — relational catalog with full-text search, audit evidence, and MCP access",
   "type": "module",
   "main": "./dist/index.js",

@@ -25,6 +25,16 @@ npm install -g @mcptoolshop/repo-knowledge
 - `gh` CLI (authenticated) for GitHub sync
 - C/C++ build tools for `better-sqlite3`, or prebuild binaries will be used automatically on supported platforms
 
+## Security Model
+
+**Data touched:** local SQLite database, GitHub API metadata via `gh` CLI (repo names, descriptions, topics, stars — no source code content).
+
+**Data NOT touched:** no source code is read from GitHub, no credentials are stored, no data is sent to external services.
+
+**Permissions:** requires `gh` CLI authenticated for GitHub sync; all data stays local.
+
+**No telemetry, no analytics, no phone-home.**
+
 ## Quick Start
 
 ```bash

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] - 2026-03-18
+## [1.0.0] - 2026-03-18
 
 ### Added
 - SQLite-backed repo knowledge catalog with FTS5 full-text search
