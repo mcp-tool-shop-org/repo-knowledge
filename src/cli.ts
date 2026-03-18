@@ -42,7 +42,7 @@ const config = resolveConfig();
 program
   .name('rk')
   .description('Repo Knowledge System — know your repos')
-  .version('1.0.0');
+  .version('1.0.1');
 
 // ─── init ────────────────────────────────────────────────────────────────────
 program

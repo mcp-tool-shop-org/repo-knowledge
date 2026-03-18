@@ -42,7 +42,7 @@ const config = resolveConfig();
 
 const server = new McpServer({
   name: 'repo-knowledge',
-  version: '1.0.0',
+  version: '1.0.1',
   description: 'Repo knowledge system — structured catalog with full-text search',
 });
 
