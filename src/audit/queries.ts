@@ -279,7 +279,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       LEFT JOIN audit_metrics am ON am.audit_run_id = ar.id
       WHERE ar.overall_posture = ?
       ORDER BY r.slug
-    `).all(filters.posture);
+    `).all(filters.posture) as Record<string, any>[];
   }
 
   if (filters.unaudited) {
@@ -290,7 +290,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       WHERE NOT EXISTS (SELECT 1 FROM audit_runs ar WHERE ar.repo_id = r.id)
       AND r.archived = 0
       ORDER BY r.slug
-    `).all();
+    `).all() as Record<string, any>[];
   }
 
   if (filters.has_critical) {
@@ -300,7 +300,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       JOIN repos r ON r.id = af.repo_id
       WHERE af.severity = 'critical' AND af.status = 'open'
       ORDER BY r.slug, af.created_at DESC
-    `).all();
+    `).all() as Record<string, any>[];
   }
 
   if (filters.failed_control) {
@@ -312,7 +312,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       WHERE cr.control_id = ? AND cr.result = 'fail'
       AND ar.id = (SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC LIMIT 1)
       ORDER BY r.slug
-    `).all(filters.failed_control);
+    `).all(filters.failed_control) as Record<string, any>[];
   }
 
   if (filters.domain_failing) {
@@ -325,7 +325,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       WHERE ac.domain = ? AND cr.result = 'fail'
       AND ar.id = (SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC LIMIT 1)
       ORDER BY r.slug, ac.id
-    `).all(filters.domain_failing);
+    `).all(filters.domain_failing) as Record<string, any>[];
   }
 
   return [];
@@ -373,7 +373,7 @@ export function getExceptions(repoId: number | bigint): Record<string, any>[] {
     LEFT JOIN audit_controls ac ON ac.id = ae.control_id
     WHERE ae.repo_id = ?
     ORDER BY ae.created_at DESC
-  `).all(repoId);
+  `).all(repoId) as Record<string, any>[];
 }
 
 /**

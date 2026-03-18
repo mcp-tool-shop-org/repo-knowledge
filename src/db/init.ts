@@ -90,23 +90,23 @@ function n<T>(v: T | undefined): T | null { return v === undefined ? null : v; }
 export interface RepoData {
   owner: string;
   name: string;
-  github_url?: string;
-  local_path?: string;
-  description?: string;
-  purpose?: string;
-  category?: string;
-  status?: string;
-  stage?: string;
-  visibility?: string;
-  archived?: boolean | number;
-  default_branch?: string;
-  stars?: number;
-  forks?: number;
-  open_issues?: number;
-  license?: string;
-  created_at?: string;
-  updated_at?: string;
-  pushed_at?: string;
+  github_url?: string | null;
+  local_path?: string | null;
+  description?: string | null;
+  purpose?: string | null;
+  category?: string | null;
+  status?: string | null;
+  stage?: string | null;
+  visibility?: string | null;
+  archived?: boolean | number | null;
+  default_branch?: string | null;
+  stars?: number | null;
+  forks?: number | null;
+  open_issues?: number | null;
+  license?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  pushed_at?: string | null;
 }
 
 export function upsertRepo(data: RepoData): number | bigint {
@@ -167,14 +167,14 @@ export function upsertRepo(data: RepoData): number | bigint {
 }
 
 export interface TechData {
-  primary_language?: string;
-  languages?: Record<string, unknown> | string[];
-  frameworks?: string[];
-  runtime?: string;
-  platform_targets?: string[];
-  package_manager?: string;
-  app_shape?: string;
-  deployment_shape?: string;
+  primary_language?: string | null;
+  languages?: Record<string, unknown> | string[] | null;
+  frameworks?: string[] | null;
+  runtime?: string | null;
+  platform_targets?: string[] | null;
+  package_manager?: string | null;
+  app_shape?: string | null;
+  deployment_shape?: string | null;
 }
 
 export function upsertTech(repoId: number | bigint, data: TechData): void {
@@ -402,7 +402,7 @@ export function findRepos(filters: RepoFilters = {}): Record<string, any>[] {
     LEFT JOIN repo_tech t ON t.repo_id = r.id
     ${where}
     ORDER BY r.pushed_at DESC NULLS LAST
-  `).all(...params);
+  `).all(...params) as Record<string, any>[];
 }
 
 export function getRelated(repoId: number | bigint): Record<string, any>[] {
@@ -417,7 +417,7 @@ export function getRelated(repoId: number | bigint): Record<string, any>[] {
     FROM repo_relationships r
     JOIN repos ON repos.id = r.from_repo_id
     WHERE r.to_repo_id = ?
-  `).all(repoId, repoId);
+  `).all(repoId, repoId) as Record<string, any>[];
 }
 
 export function getRepoIdBySlug(slug: string): number | null {
@@ -434,7 +434,7 @@ export function getAllRepos(): Record<string, any>[] {
     FROM repos r
     LEFT JOIN repo_tech t ON t.repo_id = r.id
     ORDER BY r.owner, r.name
-  `).all();
+  `).all() as Record<string, any>[];
 }
 
 export interface DbStats {

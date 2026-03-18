@@ -44,5 +44,5 @@ export type {
   AuditPosture, PortfolioEntry, RunComparison,
 } from './audit/queries.js';
 export type { GitHubRepo, GitHubSyncResult, ReleaseInfo } from './sync/github.js';
-export type { TechProfile, DocEntry, ScanResult, IngestResult, ScanDirResult } from './sync/local.js';
+export type { TechProfile, DocEntry, ScannedRepo, ScanResult, IngestResult } from './sync/local.js';
 export type { SearchResult, RepoSearchResult } from './search/fts.js';

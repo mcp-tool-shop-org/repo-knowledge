@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS audit_runs (
   domains_checked TEXT,                           -- JSON array of domain enums checked
   summary         TEXT,                           -- one-paragraph computed summary
   blocking_release INTEGER DEFAULT 0,            -- 1 = findings block release/use
+  repo_url        TEXT,
   started_at      TEXT DEFAULT (datetime('now')),
   completed_at    TEXT
 );
@@ -68,6 +69,9 @@ CREATE TABLE IF NOT EXISTS audit_control_results (
   evidence_ref    TEXT,                           -- path to artifact or inline evidence
   tool_source     TEXT,                           -- which tool produced this result
   measured_value  TEXT,                           -- e.g. "87%" or "3 findings"
+  evidence        TEXT,                           -- JSON array of evidence refs
+  summary         TEXT,                           -- distinct from notes
+  domain          TEXT,                           -- denormalized for faster queries
   checked_at      TEXT DEFAULT (datetime('now'))
 );
 
@@ -105,6 +109,7 @@ CREATE TABLE IF NOT EXISTS audit_findings (
   remediation     TEXT,                           -- recommended fix
   cve_id          TEXT,                           -- if applicable
   cvss_score      REAL,
+  evidence        TEXT,                           -- JSON array of evidence refs
   created_at      TEXT DEFAULT (datetime('now')),
   resolved_at     TEXT
 );
@@ -160,6 +165,23 @@ CREATE TABLE IF NOT EXISTS audit_metrics (
   controls_warned           INTEGER DEFAULT 0,
   controls_skipped          INTEGER DEFAULT 0,
   controls_total            INTEGER DEFAULT 0,
+  controls_na               INTEGER DEFAULT 0,
+  controls_not_run          INTEGER DEFAULT 0,
+  -- Finding severity breakdown
+  findings_open_critical    INTEGER DEFAULT 0,
+  findings_open_high        INTEGER DEFAULT 0,
+  findings_open_medium      INTEGER DEFAULT 0,
+  findings_open_low         INTEGER DEFAULT 0,
+  findings_open_info        INTEGER DEFAULT 0,
+  -- Extended metrics
+  domains_checked_count     INTEGER DEFAULT 0,
+  dependency_count          INTEGER,
+  ci_present                INTEGER DEFAULT 0,
+  tests_present             INTEGER DEFAULT 0,
+  container_present         INTEGER DEFAULT 0,
+  iac_present               INTEGER DEFAULT 0,
+  deploy_present            INTEGER DEFAULT 0,
+  integrations_count        INTEGER,
   -- Computed
   pass_rate                 REAL,                   -- controls_passed / controls_total
   created_at                TEXT DEFAULT (datetime('now'))
@@ -188,5 +210,5 @@ CREATE INDEX IF NOT EXISTS idx_exceptions_repo ON audit_exceptions(repo_id);
 --------------------------------------------------------------------------------
 -- Update schema version
 --------------------------------------------------------------------------------
-INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2');
+INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '3');
 INSERT OR REPLACE INTO meta(key, value) VALUES ('audit_schema_added', datetime('now'));
