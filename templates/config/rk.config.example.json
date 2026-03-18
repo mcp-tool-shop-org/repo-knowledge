@@ -1,0 +1,6 @@
+{
+  "owners": ["your-github-org", "your-github-user"],
+  "localDirs": ["."],
+  "dbPath": "./data/knowledge.db",
+  "artifactsRoot": "./data/artifacts"
+}
