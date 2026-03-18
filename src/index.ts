@@ -46,3 +46,6 @@ export type {
 export type { GitHubRepo, GitHubSyncResult, ReleaseInfo } from './sync/github.js';
 export type { TechProfile, DocEntry, ScannedRepo, ScanResult, IngestResult } from './sync/local.js';
 export type { SearchResult, RepoSearchResult } from './search/fts.js';
+
+// Games (scoring engine)
+export * from './games/index.js';

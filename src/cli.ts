@@ -23,8 +23,8 @@
  *   audit unaudited          List repos with no audit runs
  */
 import { program } from 'commander';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { openDb, getDb, closeDb, getRepo, findRepos, getRelated, getAllRepos, getStats, upsertNote, addRelationship } from './db/init.js';
 import { fullSync } from './sync/index.js';
 import { ingestLocalRepo } from './sync/local.js';
@@ -33,6 +33,9 @@ import { seedControls } from './audit/controls.js';
 import { importAudit } from './audit/import.js';
 import { getAuditPosture, getPortfolioPosture, findByAuditStatus, getOpenFindings } from './audit/queries.js';
 import { resolveConfig } from './config.js';
+import { parseWorklist } from './games/parser.js';
+import { scoreGame } from './games/scorer.js';
+import { renderReport, renderJSON, renderMarkdown } from './games/render.js';
 
 const config = resolveConfig();
 
@@ -583,6 +586,47 @@ audit
       if (r.notes) console.log(`    ${r.notes}`);
     }
     closeDb();
+  });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GAMES SUBCOMMANDS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const games = program.command('games').description('Claude Games scoring engine');
+
+games
+  .command('score <worklist>')
+  .description('Score a REMEDIATION-WORKLIST.md and show leaderboard')
+  .option('--json', 'Output as JSON')
+  .option('--markdown', 'Output as markdown table')
+  .option('--md', 'Output as markdown table (alias)')
+  .action((worklistPath: string, opts: { json?: boolean; markdown?: boolean; md?: boolean }): void => {
+    const fullPath = resolve(worklistPath);
+    let content: string;
+    try {
+      content = readFileSync(fullPath, 'utf-8');
+    } catch (err: unknown) {
+      console.error(`Error: cannot read file ${fullPath}`);
+      console.error(`  ${(err as Error).message}`);
+      process.exit(1);
+    }
+
+    const rows = parseWorklist(content);
+    if (rows.length === 0) {
+      console.error('Error: no worklist rows found in file');
+      console.error('  Expected markdown table with | Status | Slug | Findings | Pass Rate |');
+      process.exit(1);
+    }
+
+    const summary = scoreGame(rows);
+
+    if (opts.json) {
+      console.log(renderJSON(summary));
+    } else if (opts.markdown || opts.md) {
+      console.log(renderMarkdown(summary));
+    } else {
+      console.log(renderReport(summary));
+    }
   });
 
 program.option('--debug', 'Show stack traces and verbose output', false);
