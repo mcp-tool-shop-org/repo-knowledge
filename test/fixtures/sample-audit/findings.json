@@ -1,0 +1,14 @@
+[
+  {
+    "domain": "secrets",
+    "control_id": "SCR-002",
+    "title": "Hardcoded API token in config",
+    "description": "A live API token was found in .env.example",
+    "severity": "critical",
+    "confidence": "high",
+    "status": "open",
+    "location": ".env.example:3",
+    "tool_source": "gitleaks",
+    "remediation": "Rotate token and remove from repo"
+  }
+]

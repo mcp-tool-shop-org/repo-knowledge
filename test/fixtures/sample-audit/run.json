@@ -1,0 +1,11 @@
+{
+  "slug": "test-org/sample-test-repo",
+  "branch": "main",
+  "commit_sha": "abc123def456",
+  "auditor": "test-runner",
+  "scope_level": "core",
+  "overall_status": "pass_with_findings",
+  "overall_posture": "needs_attention",
+  "domains_checked": ["inventory", "code_quality", "security_sast"],
+  "summary": "Test audit: 2 controls checked, 1 finding."
+}

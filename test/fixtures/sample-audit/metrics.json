@@ -1,0 +1,15 @@
+{
+  "controls_total": 2,
+  "controls_passed": 1,
+  "controls_failed": 1,
+  "controls_warned": 0,
+  "controls_skipped": 0,
+  "critical_count": 1,
+  "high_count": 0,
+  "medium_count": 0,
+  "low_count": 0,
+  "info_count": 0,
+  "pass_rate": 0.5,
+  "sbom_present": false,
+  "backup_plan_present": false
+}

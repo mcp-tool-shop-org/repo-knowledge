@@ -1,0 +1,13 @@
+{
+  "name": "sample-test-repo",
+  "version": "1.0.0",
+  "description": "A sample repo for testing tech detection",
+  "bin": { "sample": "./bin/sample.js" },
+  "dependencies": {
+    "express": "^4.18.0",
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,4 @@
+[
+  { "control_id": "INV-001", "result": "pass", "notes": "README present", "tool_source": "filesystem" },
+  { "control_id": "SEC-002", "result": "fail", "notes": "Hardcoded token found", "tool_source": "gitleaks" }
+]
