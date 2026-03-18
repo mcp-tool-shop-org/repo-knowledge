@@ -11,7 +11,7 @@
  * This module validates and imports them into SQLite.
  * Raw artifacts stay on disk; only references enter the DB.
  */
-import { readFileSync, existsSync, statSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import type { Database as DatabaseType } from 'better-sqlite3';
@@ -151,7 +151,7 @@ function validate(value: string | undefined, allowed: string[], field: string): 
 /**
  * Import a full audit from a directory containing the JSON contract files.
  */
-export function importAudit(auditDir: string, artifactsRoot?: string): ImportResult {
+export function importAudit(auditDir: string, _artifactsRoot?: string): ImportResult {
   const db = getDb();
 
   // Load and validate run.json
@@ -370,7 +370,7 @@ function insertMetrics(db: DatabaseType, runId: number | bigint, m: MetricsInput
 /**
  * Import a single audit from inline JSON objects (for MCP / programmatic use).
  */
-export function importAuditInline({ run, controls, findings, metrics, artifacts }: AuditInlineInput): ImportResult {
+export function importAuditInline({ run, controls, findings, metrics, artifacts: _artifacts }: AuditInlineInput): ImportResult {
   const db = getDb();
 
   const repoId = getRepoIdBySlug(run.slug);

@@ -125,7 +125,7 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
     `).all(ftsQuery, limit) as SearchResult[];
 
     return results;
-  } catch (e) {
+  } catch {
     // If FTS query syntax fails, try a simpler approach
     const simpleTerm = query.replace(/[^\w\s]/g, '');
     if (!simpleTerm.trim()) return [];

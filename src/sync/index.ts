@@ -3,13 +3,12 @@
  */
 import { syncGitHub } from './github.js';
 import type { GitHubSyncResult } from './github.js';
-import { scanDirectory, ingestLocalRepo } from './local.js';
+import { scanDirectory } from './local.js';
 import type { ScanResult } from './local.js';
 import { rebuildIndex } from '../search/fts.js';
 import { openDb, getStats } from '../db/init.js';
 import type { DbStats } from '../db/init.js';
 import { resolveConfig } from '../config.js';
-import type { RkConfig } from '../config.js';
 
 export interface SyncConfig {
   dbPath?: string;
@@ -36,7 +35,7 @@ export async function fullSync(config: SyncConfig = {}): Promise<FullSyncResult>
     localDirs: config.localDirs,
   });
 
-  const db = openDb(resolved.dbPath);
+  openDb(resolved.dbPath);
 
   const owners = resolved.owners;
   const localDirs = resolved.localDirs;
@@ -53,7 +52,7 @@ export async function fullSync(config: SyncConfig = {}): Promise<FullSyncResult>
   }
 
   console.log('\n=== Local Scan ===');
-  let localTotal: ScanResult = { scanned: 0, skipped: 0, errors: [] };
+  const localTotal: ScanResult = { scanned: 0, skipped: 0, errors: [] };
   for (const dir of localDirs) {
     console.log(`Scanning ${dir}...`);
     const result = scanDirectory(dir);

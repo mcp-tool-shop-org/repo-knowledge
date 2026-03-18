@@ -21,14 +21,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
-  openDb, closeDb, getDb, getRepo, findRepos, getRelated,
-  getRepoIdBySlug, getAllRepos, getStats, upsertNote,
+  openDb, getDb, getRepo, findRepos, getRelated,
+  getAllRepos, getStats, upsertNote,
   addRelationship as addRel,
 } from '../db/init.js';
 import type { RepoFilters } from '../db/init.js';
-import { searchRepos, search, rebuildIndex } from '../search/fts.js';
+import { searchRepos, rebuildIndex } from '../search/fts.js';
 import { fullSync } from '../sync/index.js';
-import { seedControls, CONTROLS, DOMAINS } from '../audit/controls.js';
+import { seedControls, DOMAINS } from '../audit/controls.js';
 import type { Domain } from '../audit/controls.js';
 import { importAuditInline } from '../audit/import.js';
 import {
@@ -36,8 +36,6 @@ import {
   findByAuditStatus, getOpenFindings,
 } from '../audit/queries.js';
 import { resolveConfig } from '../config.js';
-
-// Note: zod comes bundled with @modelcontextprotocol/sdk
 
 // Resolve config at startup
 const config = resolveConfig();

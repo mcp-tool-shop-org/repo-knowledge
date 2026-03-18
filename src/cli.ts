@@ -34,10 +34,6 @@ import { importAudit } from './audit/import.js';
 import { getAuditPosture, getPortfolioPosture, findByAuditStatus, getOpenFindings } from './audit/queries.js';
 import { resolveConfig } from './config.js';
 
-import type Database from 'better-sqlite3';
-
-type DatabaseType = Database.Database;
-
 const config = resolveConfig();
 
 program

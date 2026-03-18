@@ -2,11 +2,11 @@
  * Local repo scanner — reads package files, README, docs to extract knowledge.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { join, basename, extname } from 'path';
+import { join, basename } from 'path';
 import { createHash } from 'crypto';
 import { execSync } from 'child_process';
 import {
-  upsertRepo, upsertTech, upsertFact, upsertDoc, getDb
+  upsertRepo, upsertTech, upsertFact, upsertDoc,
 } from '../db/init.js';
 
 export interface TechProfile {
@@ -83,7 +83,7 @@ function getGitRemote(repoPath: string): string | null {
 function parseRemote(url: string | null): { owner: string; name: string } | null {
   if (!url) return null;
   // SSH: git@github.com:owner/name.git
-  let m = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+  const m = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
   if (m) return { owner: m[1], name: m[2] };
   return null;
 }
@@ -356,7 +356,7 @@ export function ingestLocalRepo(repoPath: string): IngestResult {
   upsertTech(repoId, scanned.tech);
 
   // Language facts
-  for (const [lang, _] of Object.entries(scanned.tech.languages)) {
+  for (const [lang] of Object.entries(scanned.tech.languages)) {
     upsertFact(repoId, 'language', lang, 'true', 'detected');
   }
   for (const fw of scanned.tech.frameworks) {
@@ -392,7 +392,7 @@ export function scanDirectory(parentDir: string): ScanResult {
     }
 
     try {
-      const result = ingestLocalRepo(repoPath);
+      ingestLocalRepo(repoPath);
       results.scanned++;
       process.stdout.write('.');
     } catch (e: any) {
