@@ -2,6 +2,19 @@
 
 Operational guide for running and maintaining the repo-knowledge system.
 
+## Branch Protection & CI Policy
+
+The `main` branch is the release branch. All changes should follow these rules:
+
+- **Required checks:** CI must pass (build, typecheck, lint, test) before merging
+- **Direct push:** Allowed for maintainers (single-maintainer project)
+- **Force push:** Never force-push to `main`
+- **Release flow:** Version bump in `package.json` → commit → push → `npm publish`
+- **CI matrix:** Node 20 + 22 on `ubuntu-latest`
+- **Dependency audit:** `npm audit --audit-level=moderate` runs in CI (non-blocking)
+
+If CI fails on push, fix immediately before any further work.
+
 ## Daily Operations
 
 ```bash
@@ -31,7 +44,13 @@ cp data/knowledge.db data/knowledge-backup-$(date +%Y%m%d).db
 
 You only need to copy the `.db` file — the `-wal` and `-shm` files are transient and will be recreated.
 
-## Recovery
+## Disaster Recovery
+
+**Critical state:** `data/knowledge.db` (SQLite database). This is the only stateful artifact. Everything else is reconstructable.
+
+**Recovery time:** ~5 minutes for a full re-sync of 176 repos.
+
+**Data loss risk:** Manual notes, relationships, and audit evidence are lost if no backup exists. GitHub metadata and local repo scans are fully reconstructable.
 
 If the database becomes corrupt or you need a fresh start:
 
