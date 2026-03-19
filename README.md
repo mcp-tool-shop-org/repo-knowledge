@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="repo-knowledge" width="600" />
+  <img src="assets/logo.png" alt="repo-knowledge" width="800" />
 </p>
 
 <h1 align="center">@mcptoolshop/repo-knowledge</h1>
