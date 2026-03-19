@@ -31,6 +31,7 @@
     "build": "tsup && node scripts/postbuild.js",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
@@ -39,19 +40,20 @@
     "prepublishOnly": "npm run verify"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
     "better-sqlite3": "^11.7.0",
-    "commander": "^13.1.0",
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "commander": "^13.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "tsup": "^8.0.0",
-    "vitest": "^3.0.0",
-    "eslint": "^9.0.0",
     "@eslint/js": "^9.0.0",
-    "typescript-eslint": "^8.0.0",
     "@types/better-sqlite3": "^7.6.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
   },
   "engines": {
     "node": ">=20"
