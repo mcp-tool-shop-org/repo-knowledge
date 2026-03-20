@@ -33,6 +33,7 @@ import { seedControls } from './audit/controls.js';
 import { importAudit } from './audit/import.js';
 import { getAuditPosture, getPortfolioPosture, findByAuditStatus, getOpenFindings } from './audit/queries.js';
 import { resolveConfig } from './config.js';
+import { syncDogfood } from './sync/dogfood.js';
 import { parseWorklist } from './games/parser.js';
 import { scoreGame } from './games/scorer.js';
 import { renderReport, renderJSON, renderMarkdown } from './games/render.js';
@@ -115,6 +116,25 @@ program
     const result = ingestLocalRepo(path);
     console.log(`Scanned: ${result.name} (${result.docs} docs indexed)`);
     rebuildIndex();
+    closeDb();
+  });
+
+// ─── sync-dogfood ────────────────────────────────────────────────────────────
+program
+  .command('sync-dogfood')
+  .description('Sync dogfood evidence from dogfood-labs into repo_facts (one-way read)')
+  .option('--local <path>', 'Local dogfood-labs checkout path (default: fetch from GitHub)')
+  .action(async (opts: { local?: string }): Promise<void> => {
+    openDb(config.dbPath);
+    const result = await syncDogfood({
+      localPath: opts.local || undefined,
+    });
+    console.log(`Dogfood sync complete:`);
+    console.log(`  Repos synced: ${result.repos}`);
+    console.log(`  Facts upserted: ${result.facts_upserted}`);
+    if (result.skipped.length > 0) {
+      console.log(`  Skipped (not in DB): ${result.skipped.join(', ')}`);
+    }
     closeDb();
   });
 

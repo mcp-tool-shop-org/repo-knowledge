@@ -28,6 +28,7 @@ import {
 import type { RepoFilters } from '../db/init.js';
 import { searchRepos, rebuildIndex } from '../search/fts.js';
 import { fullSync } from '../sync/index.js';
+import { syncDogfood } from '../sync/dogfood.js';
 import { seedControls, DOMAINS } from '../audit/controls.js';
 import type { Domain } from '../audit/controls.js';
 import { importAuditInline } from '../audit/import.js';
@@ -383,6 +384,27 @@ server.tool(
     });
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(result.stats, null, 2) }],
+    };
+  },
+);
+
+// ─── sync_dogfood ────────────────────────────────────────────────────────────
+server.tool(
+  'sync_dogfood',
+  'Sync dogfood evidence from dogfood-labs into repo_facts. One-way read — dogfood-labs remains write authority.',
+  {
+    local_path: z.string().optional()
+      .describe('Local dogfood-labs checkout path. If omitted, fetches from GitHub raw URL.'),
+  },
+  async ({ local_path }) => {
+    const result = await syncDogfood({
+      localPath: local_path || undefined,
+    });
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify(result, null, 2),
+      }],
     };
   },
 );
