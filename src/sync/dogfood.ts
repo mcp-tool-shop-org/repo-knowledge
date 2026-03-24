@@ -7,7 +7,7 @@
  * dogfood-labs remains sole write authority.
  * repo-knowledge is a read model only.
  */
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { upsertFact, getRepoIdBySlug } from '../db/init.js';
 
@@ -29,10 +29,6 @@ interface IndexEntry {
 }
 
 type DogfoodIndex = Record<string, Record<string, IndexEntry>>;
-
-interface PolicyEnforcement {
-  mode: string;
-}
 
 export interface DogfoodSyncResult {
   repos: number;
