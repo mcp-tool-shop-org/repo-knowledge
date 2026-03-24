@@ -9,6 +9,7 @@ import { join } from 'path';
 const SCHEMA_PATH = join(import.meta.dirname, 'schema.sql');
 const MIGRATION_002 = join(import.meta.dirname, 'migration-002-audit.sql');
 const MIGRATION_003 = join(import.meta.dirname, 'migration-003-metrics-v2.sql');
+const MIGRATION_004 = join(import.meta.dirname, 'migration-004-findings-idempotent.sql');
 
 let _db: DatabaseType | null = null;
 
@@ -57,6 +58,13 @@ export function openDb(dbPath: string): DatabaseType {
     } catch (e: any) {
       if (!e.message.includes('duplicate column')) console.error('Migration 003 error:', e.message);
     }
+  }
+
+  const version3 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
+  if (parseInt(version3) < 4) {
+    const migration = readFileSync(MIGRATION_004, 'utf-8');
+    _db.exec(migration);
+    console.log('Applied migration 004: findings idempotency (UNIQUE constraint + dedup)');
   }
 
   return _db;
@@ -448,6 +456,8 @@ export interface DbStats {
   audit_controls?: number;
   audit_findings?: number;
   audited_repos?: number;
+  /** True if audit tables are missing — schema needs migration. Never silently returns zeros. */
+  audit_schema_missing?: boolean;
 }
 
 export function getStats(): DbStats {
@@ -461,13 +471,23 @@ export function getStats(): DbStats {
     relationships: (db.prepare('SELECT COUNT(*) as count FROM repo_relationships').get() as { count: number }).count,
   };
 
-  // Audit stats (only if tables exist)
-  try {
+  // Audit stats — fail explicitly if tables are missing (schema drift)
+  const hasAuditTables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_runs'"
+  ).get();
+  if (hasAuditTables) {
     stats.audit_runs = (db.prepare('SELECT COUNT(*) as count FROM audit_runs').get() as { count: number }).count;
     stats.audit_controls = (db.prepare('SELECT COUNT(*) as count FROM audit_controls').get() as { count: number }).count;
     stats.audit_findings = (db.prepare('SELECT COUNT(*) as count FROM audit_findings').get() as { count: number }).count;
     stats.audited_repos = (db.prepare('SELECT COUNT(DISTINCT repo_id) as count FROM audit_runs').get() as { count: number }).count;
-  } catch { /* audit tables may not exist yet */ }
+  } else {
+    // Explicit: audit tables not present — schema needs migration
+    stats.audit_runs = undefined;
+    stats.audit_controls = undefined;
+    stats.audit_findings = undefined;
+    stats.audited_repos = undefined;
+    stats.audit_schema_missing = true;
+  }
 
   return stats;
 }

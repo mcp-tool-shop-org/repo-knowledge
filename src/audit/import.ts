@@ -16,6 +16,7 @@ import { join } from 'path';
 import { createHash } from 'crypto';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import { getDb, getRepoIdBySlug } from '../db/init.js';
+import { rebuildIndex } from '../search/fts.js';
 
 // ─── Input interfaces ────────────────────────────────────────────────────────
 
@@ -226,7 +227,7 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
   if (existsSync(findingsPath)) {
     const findings: FindingInput[] = JSON.parse(readFileSync(findingsPath, 'utf-8'));
     const insFinding = db.prepare(`
-      INSERT INTO audit_findings (
+      INSERT OR REPLACE INTO audit_findings (
         audit_run_id, repo_id, domain, control_id, title, description,
         severity, confidence, status, location, tool_source,
         evidence_ref, remediation, cve_id, cvss_score
@@ -289,6 +290,9 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
     });
     tx();
   }
+
+  // Rebuild FTS5 index so newly imported audit content is immediately searchable
+  rebuildIndex();
 
   return { runId, controls: controlCount, findings: findingCount, artifacts: artifactCount };
 }
@@ -418,7 +422,7 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
 
   if (findings?.length) {
     const ins = db.prepare(`
-      INSERT INTO audit_findings (
+      INSERT OR REPLACE INTO audit_findings (
         audit_run_id, repo_id, domain, control_id, title, description,
         severity, confidence, status, location, tool_source,
         evidence_ref, remediation, cve_id, cvss_score
@@ -442,6 +446,9 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
   if (metrics) {
     insertMetrics(db, runId, metrics);
   }
+
+  // Rebuild FTS5 index so newly imported audit content is immediately searchable
+  rebuildIndex();
 
   return { runId, controls: controlCount, findings: findingCount };
 }
