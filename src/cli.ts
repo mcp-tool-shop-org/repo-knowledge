@@ -23,6 +23,7 @@
  *   audit unaudited          List repos with no audit runs
  */
 import { program } from 'commander';
+import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { openDb, getDb, closeDb, getRepo, findRepos, getRelated, getAllRepos, getStats, upsertNote, addRelationship } from './db/init.js';
@@ -38,12 +39,15 @@ import { parseWorklist } from './games/parser.js';
 import { scoreGame } from './games/scorer.js';
 import { renderReport, renderJSON, renderMarkdown } from './games/render.js';
 
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json') as { version: string };
+
 const config = resolveConfig();
 
 program
   .name('rk')
   .description('Repo Knowledge System — know your repos')
-  .version('1.0.1');
+  .version(version);
 
 // ─── init ────────────────────────────────────────────────────────────────────
 program

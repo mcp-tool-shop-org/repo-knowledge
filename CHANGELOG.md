@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.5] - 2026-03-25
+
+### Added
+
+- 4 version consistency tests (semver, >= 1.0.0, CHANGELOG, --version flag)
+
+### Fixed
+
+- CLI `--version` was hardcoded to 1.0.1 — now reads dynamically from package.json
+
 ## [1.0.0] - 2026-03-18
 
 ### Added
