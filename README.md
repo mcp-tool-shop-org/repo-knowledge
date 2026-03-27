@@ -79,8 +79,8 @@ rk audit seed-controls
 | `rk list` | List all repos (filterable by status, language, shape) |
 | `rk find <query>` | Full-text search across all indexed content |
 | `rk related <slug>` | Show repos related to a given repo |
-| `rk note <slug>` | Add a typed note (thesis, architecture, warning, etc.) |
-| `rk relate <from> <type> <to>` | Record a relationship between repos |
+| `rk note <slug>` | Add a typed note (thesis, architecture, warning, etc.) with `--type` and `--content` (optional `--title`) |
+| `rk relate <from> <type> <to>` | Record a relationship between repos (optional `--note`) |
 | `rk stats` | Show database statistics |
 | `rk reindex` | Rebuild the FTS index |
 | `rk sync-dogfood` | Sync dogfood evidence from dogfood-labs into repo facts |
@@ -107,22 +107,7 @@ rk audit seed-controls
 
 The MCP server exposes 19 tools for AI-integrated workflows. Add it to your MCP client config:
 
-**claude_desktop_config.json:**
-```json
-{
-  "mcpServers": {
-    "repo-knowledge": {
-      "command": "node",
-      "args": ["node_modules/@mcptoolshop/repo-knowledge/dist/mcp/server.js"],
-      "env": {
-        "RK_DB_PATH": "/path/to/knowledge.db"
-      }
-    }
-  }
-}
-```
-
-**.claude.json (project-scoped):**
+**Claude Code (project-scoped `.claude.json`):**
 ```json
 {
   "mcpServers": {
@@ -134,6 +119,20 @@ The MCP server exposes 19 tools for AI-integrated workflows. Add it to your MCP 
   }
 }
 ```
+
+**Claude Desktop (`claude_desktop_config.json`):**
+```json
+{
+  "mcpServers": {
+    "repo-knowledge": {
+      "command": "node",
+      "args": ["node_modules/@mcptoolshop/repo-knowledge/dist/mcp/server.js"]
+    }
+  }
+}
+```
+
+The server reads `rk.config.json` from the working directory at startup. Make sure `rk.config.json` exists in the directory where the server runs.
 
 ### MCP Tools
 
@@ -207,7 +206,7 @@ Create `rk.config.json` in your workspace root (or run `rk init`):
 }
 ```
 
-Environment variables: `RK_DB_PATH`, `RK_OWNERS`, `RK_LOCAL_DIRS`.
+All settings come from `rk.config.json` (created by `rk init`). The MCP server also reads config from the working directory.
 
 ## License
 

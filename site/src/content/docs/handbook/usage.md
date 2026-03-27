@@ -58,11 +58,11 @@ rk list --status active              # filter by status
 
 ### `rk find <query>`
 
-Full-text search across all indexed content: READMEs, changelogs, notes, descriptions.
+Full-text search across all indexed content: READMEs, changelogs, notes, descriptions. Use `--limit` (`-n`) to control the number of results (default: 10).
 
 ```bash
 rk find "authentication middleware"
-rk find "react component testing"
+rk find "react component testing" --limit 20
 ```
 
 ### `rk related <slug>`
@@ -75,18 +75,24 @@ rk related my-org/my-repo
 
 ### `rk note <slug>`
 
-Add a typed note to a repo. Note types: `thesis`, `architecture`, `convention`, `warning`, `next_step`, `drift_risk`, `release_summary`, `command`, `pain_point`, `general`.
+Add a typed note to a repo. Required flags: `--type` (`-t`) and `--content` (`-c`). Optional: `--title`.
+
+Note types: `thesis`, `architecture`, `convention`, `warning`, `next_step`, `drift_risk`, `release_summary`, `command`, `pain_point`, `general`.
 
 ```bash
 rk note my-org/my-repo --type thesis --content "Core auth service for all org APIs"
+rk note my-org/my-repo -t warning -c "Rate limiter is hardcoded" --title "Rate limit config"
 ```
 
 ### `rk relate <from> <type> <to>`
 
-Record a relationship between two repos. Types: `depends_on`, `related_to`, `supersedes`, `shares_domain_with`, `shares_package_with`, `companion_to`.
+Record a relationship between two repos. Optional: `--note` to add context.
+
+Types: `depends_on`, `related_to`, `supersedes`, `shares_domain_with`, `shares_package_with`, `companion_to`.
 
 ```bash
 rk relate my-org/api-gateway depends_on my-org/auth-service
+rk relate my-org/new-api supersedes my-org/legacy-api --note "Migration planned Q2"
 ```
 
 ### `rk stats`
@@ -168,3 +174,11 @@ rk games score REMEDIATION-WORKLIST.md
 rk games score REMEDIATION-WORKLIST.md --json
 rk games score REMEDIATION-WORKLIST.md --markdown
 ```
+
+## Global options
+
+| Option | Description |
+|--------|-------------|
+| `--version` | Show the current version |
+| `--debug` | Show stack traces and verbose output on errors |
+| `--help` | Show help for any command |

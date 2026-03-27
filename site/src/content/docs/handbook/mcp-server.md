@@ -9,24 +9,6 @@ The MCP server exposes 19 tools over stdio, enabling Claude and other AI agents 
 
 ## Configuration
 
-### Claude Desktop
-
-Add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "repo-knowledge": {
-      "command": "node",
-      "args": ["node_modules/@mcptoolshop/repo-knowledge/dist/mcp/server.js"],
-      "env": {
-        "RK_DB_PATH": "/path/to/knowledge.db"
-      }
-    }
-  }
-}
-```
-
 ### Claude Code (project-scoped)
 
 Add to `.claude.json`:
@@ -42,6 +24,23 @@ Add to `.claude.json`:
   }
 }
 ```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "repo-knowledge": {
+      "command": "node",
+      "args": ["node_modules/@mcptoolshop/repo-knowledge/dist/mcp/server.js"]
+    }
+  }
+}
+```
+
+The MCP server reads `rk.config.json` from the working directory at startup. Ensure the config file exists in the directory where the server process runs.
 
 ## Knowledge tools
 

@@ -65,10 +65,6 @@ rk show my-org/my-repo
 rk find "authentication"
 ```
 
-## Environment variables
+## Configuration
 
-| Variable | Description |
-|----------|-------------|
-| `RK_DB_PATH` | Path to the SQLite database file |
-| `RK_OWNERS` | Comma-separated list of GitHub org owners |
-| `RK_LOCAL_DIRS` | Comma-separated list of local directories to scan |
+All settings live in `rk.config.json` in your workspace root. Edit this file to change database path, GitHub owners, or local scan directories. See the [Reference](/handbook/reference/) page for the full schema.

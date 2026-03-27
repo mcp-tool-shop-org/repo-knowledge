@@ -167,10 +167,12 @@ All errors from the programmatic API follow a structured shape:
 | `cause` | string? | Underlying cause |
 | `retryable` | boolean | Whether the operation can be retried |
 
-## Environment variables
+## Configuration resolution
 
-| Variable | Description |
-|----------|-------------|
-| `RK_DB_PATH` | Path to the SQLite database file |
-| `RK_OWNERS` | Comma-separated list of GitHub org owners |
-| `RK_LOCAL_DIRS` | Comma-separated list of local directories to scan |
+The config is resolved in this order (later sources override earlier ones):
+
+1. **Defaults** -- `data/knowledge.db` in CWD, no owners, local dirs = `["."]`
+2. **`rk.config.json`** in CWD -- merged over defaults
+3. **CLI flags** -- `--owners`, `--local`, etc. override for that command
+
+Relative paths in config are resolved from the current working directory.
