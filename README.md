@@ -53,6 +53,9 @@ rk init
 # Sync repos from your GitHub org
 rk sync --owners my-org
 
+# Include forked repos
+rk sync --owners my-org --forks
+
 # Inspect a specific repo
 rk show my-org/my-repo
 
@@ -80,6 +83,7 @@ rk audit seed-controls
 | `rk relate <from> <type> <to>` | Record a relationship between repos |
 | `rk stats` | Show database statistics |
 | `rk reindex` | Rebuild the FTS index |
+| `rk sync-dogfood` | Sync dogfood evidence from dogfood-labs into repo facts |
 
 ### Audit Commands
 
@@ -93,9 +97,15 @@ rk audit seed-controls
 | `rk audit unaudited` | List repos with no audit runs |
 | `rk audit failing <domain>` | List repos failing a specific audit domain |
 
+### Games Commands
+
+| Command | Description |
+|---------|-------------|
+| `rk games score <worklist>` | Score a REMEDIATION-WORKLIST.md and show leaderboard |
+
 ## MCP Server
 
-The MCP server exposes 20 tools for AI-integrated workflows. Add it to your MCP client config:
+The MCP server exposes 19 tools for AI-integrated workflows. Add it to your MCP client config:
 
 **claude_desktop_config.json:**
 ```json
@@ -127,7 +137,7 @@ The MCP server exposes 20 tools for AI-integrated workflows. Add it to your MCP 
 
 ### MCP Tools
 
-`get_repo` `find_repos` `search_repos` `related_repos` `repos_by_stack` `repos_needing_work` `repo_summary` `add_repo_note` `add_relationship` `knowledge_stats` `sync_repos` `audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
+`get_repo` `find_repos` `search_repos` `related_repos` `repos_by_stack` `repos_needing_work` `repo_summary` `add_repo_note` `add_relationship` `knowledge_stats` `sync_repos` `sync_dogfood` `audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
 
 ## Audit Framework
 
