@@ -83,7 +83,7 @@ rk audit seed-controls
 | `rk relate <from> <type> <to>` | Record a relationship between repos (optional `--note`) |
 | `rk stats` | Show database statistics |
 | `rk reindex` | Rebuild the FTS index |
-| `rk sync-dogfood` | Sync dogfood evidence from dogfood-labs into repo facts |
+| `rk sync-dogfood` | Sync dogfood evidence from dogfood-lab/testing-os into repo facts |
 
 ### Audit Commands
 

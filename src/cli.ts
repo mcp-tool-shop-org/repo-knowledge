@@ -35,6 +35,7 @@ import { importAudit } from './audit/import.js';
 import { getAuditPosture, getPortfolioPosture, findByAuditStatus, getOpenFindings } from './audit/queries.js';
 import { resolveConfig } from './config.js';
 import { syncDogfood } from './sync/dogfood.js';
+import { suggestByRepo, suggestBySurface } from './sync/dogfood-suggest.js';
 import { parseWorklist } from './games/parser.js';
 import { scoreGame } from './games/scorer.js';
 import { renderReport, renderJSON, renderMarkdown } from './games/render.js';
@@ -126,8 +127,8 @@ program
 // ─── sync-dogfood ────────────────────────────────────────────────────────────
 program
   .command('sync-dogfood')
-  .description('Sync dogfood evidence from dogfood-labs into repo_facts (one-way read)')
-  .option('--local <path>', 'Local dogfood-labs checkout path (default: fetch from GitHub)')
+  .description('Sync dogfood evidence from dogfood-lab/testing-os into repo_facts (one-way read)')
+  .option('--local <path>', 'Local testing-os checkout path (default: fetch from GitHub)')
   .action(async (opts: { local?: string }): Promise<void> => {
     openDb(config.dbPath);
     const result = await syncDogfood({
@@ -139,6 +140,74 @@ program
     if (result.skipped.length > 0) {
       console.log(`  Skipped (not in DB): ${result.skipped.join(', ')}`);
     }
+    if (result.intelligence) {
+      const i = result.intelligence;
+      console.log(`  Intelligence layer:`);
+      console.log(`    Findings: ${i.findings}, Patterns: ${i.patterns}, Recommendations: ${i.recommendations}, Doctrine: ${i.doctrine}`);
+      console.log(`    Facts upserted: ${i.facts_upserted}`);
+    }
+    closeDb();
+  });
+
+// ─── suggest-dogfood ─────────────────────────────────────────────────────────
+program
+  .command('suggest-dogfood')
+  .description('Get dogfood intelligence suggestions for a repo or surface')
+  .option('--repo <slug>', 'Repo slug (e.g., mcp-tool-shop-org/shipcheck)')
+  .option('--surface <surface>', 'Product surface (e.g., cli, mcp-server, desktop)')
+  .action((opts: { repo?: string; surface?: string }): void => {
+    if (!opts.repo && !opts.surface) {
+      console.error('Specify --repo <slug> or --surface <surface>');
+      process.exit(2);
+    }
+    openDb(config.dbPath);
+    const result = opts.repo ? suggestByRepo(opts.repo) : suggestBySurface(opts.surface!);
+
+    if (result.findings.length === 0 && result.patterns.length === 0 &&
+        result.recommendations.length === 0 && result.doctrine.length === 0) {
+      console.log('No dogfood intelligence found. Run rk sync-dogfood --local <path> first.');
+      closeDb();
+      return;
+    }
+
+    console.log(`Dogfood intelligence for: ${opts.repo || opts.surface}\n`);
+
+    if (result.findings.length > 0) {
+      console.log(`Findings (${result.findings.length}):`);
+      for (const f of result.findings) {
+        console.log(`  ${f.finding_id} [${f.issue_kind}]`);
+        console.log(`    ${f.title}`);
+      }
+      console.log();
+    }
+
+    if (result.patterns.length > 0) {
+      console.log(`Patterns (${result.patterns.length}):`);
+      for (const p of result.patterns) {
+        console.log(`  ${p.pattern_id} [${p.pattern_strength}]`);
+        console.log(`    ${p.title}`);
+      }
+      console.log();
+    }
+
+    if (result.recommendations.length > 0) {
+      console.log(`Recommendations (${result.recommendations.length}):`);
+      for (const r of result.recommendations) {
+        console.log(`  ${r.recommendation_id} [${r.confidence}]`);
+        console.log(`    ${r.title}`);
+        console.log(`    Action: ${r.action_details}`);
+      }
+      console.log();
+    }
+
+    if (result.doctrine.length > 0) {
+      console.log(`Doctrine (${result.doctrine.length}):`);
+      for (const d of result.doctrine) {
+        console.log(`  ${d.doctrine_id} [${d.strength}]`);
+        console.log(`    ${d.statement}`);
+      }
+    }
+
     closeDb();
   });
 
