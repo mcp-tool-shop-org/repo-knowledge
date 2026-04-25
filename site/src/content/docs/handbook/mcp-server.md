@@ -57,7 +57,7 @@ The MCP server reads `rk.config.json` from the working directory at startup. Ens
 | `add_relationship` | Record a relationship between two repos |
 | `knowledge_stats` | Database statistics |
 | `sync_repos` | Trigger a full sync cycle |
-| `sync_dogfood` | Sync dogfood evidence from dogfood-labs into repo facts |
+| `sync_dogfood` | Sync dogfood evidence from dogfood-lab/testing-os into repo facts |
 
 ## Audit tools
 

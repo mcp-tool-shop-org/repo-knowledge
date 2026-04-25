@@ -391,10 +391,10 @@ server.tool(
 // ─── sync_dogfood ────────────────────────────────────────────────────────────
 server.tool(
   'sync_dogfood',
-  'Sync dogfood evidence from dogfood-labs into repo_facts. One-way read — dogfood-labs remains write authority.',
+  'Sync dogfood evidence from dogfood-lab/testing-os into repo_facts. One-way read — testing-os remains write authority.',
   {
     local_path: z.string().optional()
-      .describe('Local dogfood-labs checkout path. If omitted, fetches from GitHub raw URL.'),
+      .describe('Local testing-os checkout path. If omitted, fetches from GitHub raw URL.'),
   },
   async ({ local_path }) => {
     const result = await syncDogfood({

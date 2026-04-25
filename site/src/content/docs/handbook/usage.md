@@ -153,14 +153,14 @@ List repos that have failing controls in a specific domain.
 
 ### `rk sync-dogfood`
 
-Sync dogfood evidence from dogfood-labs into repo facts. One-way read — dogfood-labs remains the write authority.
+Sync dogfood evidence from dogfood-lab/testing-os into repo facts. One-way read — testing-os remains the write authority.
 
 ```bash
 # Fetch from GitHub raw URLs (default)
 rk sync-dogfood
 
-# Use a local dogfood-labs checkout
-rk sync-dogfood --local /path/to/dogfood-labs
+# Use a local testing-os checkout
+rk sync-dogfood --local /path/to/testing-os
 ```
 
 ## Games commands
