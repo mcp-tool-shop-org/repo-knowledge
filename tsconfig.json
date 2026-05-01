@@ -11,7 +11,8 @@
     "rootDir": "src",
     "resolveJsonModule": true,
     "types": ["node"],
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "ignoreDeprecations": "5.0"
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "test"]
