@@ -103,13 +103,17 @@ program
   .option('--forks', 'Include forked repos', false)
   .action(async (opts: { owners: string; local: string; releases: boolean; forks: boolean }): Promise<void> => {
     openDb(config.dbPath);
-    await fullSync({
-      owners: opts.owners ? opts.owners.split(',') : undefined,
-      localDirs: opts.local ? opts.local.split(',') : undefined,
-      includeReleases: opts.releases,
-      includeForks: opts.forks,
-    });
-    closeDb();
+    try {
+      await fullSync({
+        dbPath: config.dbPath,
+        owners: opts.owners ? opts.owners.split(',') : undefined,
+        localDirs: opts.local ? opts.local.split(',') : undefined,
+        includeReleases: opts.releases,
+        includeForks: opts.forks,
+      });
+    } finally {
+      closeDb();
+    }
   });
 
 // ─── scan ────────────────────────────────────────────────────────────────────
@@ -724,9 +728,9 @@ games
 
 program.option('--debug', 'Show stack traces and verbose output', false);
 
-try {
-  program.parse();
-} catch (e: unknown) {
+// parseAsync is required so async action rejections (e.g. fullSync) propagate
+// here instead of becoming silent unhandled rejections that exit 0.
+program.parseAsync().catch((e: unknown) => {
   const err = e instanceof Error ? e : new Error(String(e));
   if (program.opts().debug) {
     console.error(err);
@@ -734,4 +738,4 @@ try {
     console.error(`Error: ${err.message}`);
   }
   process.exit(2);
-}
+});

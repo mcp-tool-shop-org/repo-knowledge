@@ -7,7 +7,7 @@ const root = join(__dirname, '..');
 
 mkdirSync(join(root, 'dist', 'db'), { recursive: true });
 
-const sqlFiles = ['schema.sql', 'migration-002-audit.sql', 'migration-003-metrics-v2.sql'];
+const sqlFiles = ['schema.sql', 'migration-002-audit.sql', 'migration-003-metrics-v2.sql', 'migration-004-findings-idempotent.sql'];
 for (const f of sqlFiles) {
   cpSync(join(root, 'src', 'db', f), join(root, 'dist', 'db', f));
 }
