@@ -3,9 +3,10 @@
  *
  * Writes a minimal v1 schema to a temp DB and opens it via openDb().
  * Asserts that:
- *   - schema_version reaches '7' (current head — was '4' through Stage A,
+ *   - schema_version reaches '8' (current head — was '4' through Stage A,
  *     bumped by migration-006 in FT-1 for lifecycle + cross-rig paths,
- *     then migration-007 in FT-2 for publish state)
+ *     migration-007 in FT-2 for publish state, then migration-008 in FT-3
+ *     for build/dep/CI health)
  *   - audit_runs / audit_controls / audit_findings tables exist
  *   - idx_findings_canonical (from migration 004) exists
  *   - migration-006 added repos.lifecycle_status column, rigs table,
@@ -17,7 +18,8 @@
  *
  * History: F-DB-001 unified version bumping so v1 → '4' after openDb. FT-1
  * extended the ladder with migration-006 (additive, bumps to '6'); FT-2
- * added migration-007 (additive, bumps to '7'). The FTS-trigger
+ * added migration-007 (additive, bumps to '7'); FT-3 added migration-008
+ * (additive, bumps to '8'). The FTS-trigger
  * migration (005) is independent and intentionally does NOT bump the
  * linear version (uses its own meta marker fts_triggers_added).
  */
@@ -96,10 +98,10 @@ describe('Migration sequence (F-TS-007)', () => {
     openDb(dbPath);
     const db = getDb();
 
-    // Post-condition: version is '7' (current head after FT-2's
+    // Post-condition: version is '8' (current head after FT-2's
     // migration-007 added publish state on top of FT-1's lifecycle paths).
     const v = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
-    expect(v.value).toBe('7');
+    expect(v.value).toBe('8');
   });
 
   it('creates audit tables on migration', () => {
@@ -161,18 +163,18 @@ describe('Migration sequence (F-TS-007)', () => {
     // Second open: already at head, should not re-run anything destructive
     openDb(dbPath);
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('7');
-    expect(v2).toBe('7');
+    expect(v1).toBe('8');
+    expect(v2).toBe('8');
   });
 
   it('opening a brand-new (no-file) DB produces head schema directly', () => {
     // No pre-existing file — openDb should detect missing repos table,
     // load schema.sql, then run migrations 002+ to bring schema_version
-    // to '7' (the FT-2 head).
+    // to '8' (the FT-2 head).
     const freshPath = join(tmpDir, 'fresh.db');
     openDb(freshPath);
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('7');
+    expect(v).toBe('8');
 
     const tables = getDb().prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = 'audit_runs'"
@@ -230,7 +232,7 @@ describe('Migration sequence (F-TS-007)', () => {
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('7');
+    expect(v).toBe('8');
   });
 
   it('migration-007 adds repos.npm_package_name / pypi_package_name / publisher_method columns', () => {

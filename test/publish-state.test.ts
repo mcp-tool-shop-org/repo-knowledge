@@ -294,17 +294,17 @@ describe('getReposByNpmPackage (F-TS-FT2)', () => {
 });
 
 describe('migration-007 idempotency (F-TS-FT2)', () => {
-  it('re-opening a v7 DB is a no-op (does not throw, does not regress version)', () => {
+  it('re-opening the DB is a no-op (does not throw, does not regress version)', () => {
     closeDb();
     openDb(dbPath);
     const db = getDb();
     const v1 = (db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('7');
+    expect(v1).toBe('8');
 
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v2).toBe('7');
+    expect(v2).toBe('8');
   });
 });
 

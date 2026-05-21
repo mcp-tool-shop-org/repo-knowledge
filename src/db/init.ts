@@ -27,6 +27,7 @@ const MIGRATION_004 = resolveSql('migration-004-findings-idempotent.sql');
 const MIGRATION_005 = resolveSql('migration-005-fts-triggers.sql');
 const MIGRATION_006 = resolveSql('migration-006-lifecycle-paths.sql');
 const MIGRATION_007 = resolveSql('migration-007-publish-state.sql');
+const MIGRATION_008 = resolveSql('migration-008-build-health.sql');
 
 let _db: DatabaseType | null = null;
 let _dbPath: string | null = null;
@@ -189,6 +190,17 @@ export function openDb(dbPath: string): DatabaseType {
     const migration = readFileSync(MIGRATION_007, 'utf-8');
     execMigrationIdempotent(_db, migration, '007 (publish state)');
     console.log('Applied migration 007: publish state (package bindings + version registry)');
+  }
+
+  // Migration 008 — build/dep/CI health (FT-3). Gated on schema_version:
+  // only runs if current version < 8. Additive (ALTER TABLE ADD COLUMN,
+  // CREATE TABLE/INDEX IF NOT EXISTS) and bumps schema_version to '8' at
+  // the end.
+  const version7 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
+  if (parseInt(version7) < 8) {
+    const migration = readFileSync(MIGRATION_008, 'utf-8');
+    execMigrationIdempotent(_db, migration, '008 (build/dep/CI health)');
+    console.log('Applied migration 008: build/dep/CI health (toolchain + audit state + workflow actions)');
   }
 
   return _db;
@@ -1096,4 +1108,285 @@ export function getReposByNpmPackage(npm_name: string): Record<string, unknown>[
   return db.prepare(
     'SELECT * FROM repos WHERE npm_package_name = ? ORDER BY slug'
   ).all(npm_name) as Record<string, unknown>[];
+}
+
+// ─── FT-3: build / dep / CI health ──────────────────────────────────────────
+
+/**
+ * Closed enum of valid `last_ci_status` values for repos. Enforced at the
+ * application layer (same reason as lifecycle_status + publisher_method —
+ * SQLite ADD COLUMN can't include a self-referential CHECK constraint and
+ * we want migrations idempotent).
+ *
+ *   - 'passing'     — most recent observed CI run succeeded
+ *   - 'failing'     — most recent run failed / cancelled / timed_out
+ *   - 'unknown'     — gh probe failed (auth missing, network, no runs yet)
+ *   - 'no_workflow' — repo has no detectable CI workflow file
+ */
+export const CI_STATUSES = [
+  'passing',
+  'failing',
+  'unknown',
+  'no_workflow',
+] as const;
+export type CiStatus = typeof CI_STATUSES[number];
+
+/**
+ * JSON-shaped pin for toolchain versions. All fields optional — different
+ * repos pin different subsets (a Python project may only set `python`).
+ * Stored as JSON.stringify(this) in repos.toolchain_pin. Helpers below
+ * handle the round-trip so callers never serialize by hand.
+ */
+export interface ToolchainPin {
+  node?: string;
+  typescript?: string;
+  python?: string;
+  rust?: string;
+}
+
+export interface DepAuditStateRow {
+  repo_id: number;
+  severity_critical: number;
+  severity_high: number;
+  severity_moderate: number;
+  severity_low: number;
+  last_checked_at: string;
+  last_clean_at: string | null;
+  tool: string;
+}
+
+export interface WorkflowActionRow {
+  id: number;
+  repo_id: number;
+  workflow_file: string;
+  action_ref: string;
+  pinned_version: string;
+  latest_known: string | null;
+  last_checked_at: string;
+}
+
+export interface PortfolioHealthRow {
+  slug: string;
+  lifecycle_status: string | null;
+  last_ci_status: string | null;
+  severity_critical: number;
+  severity_high: number;
+  workflow_action_count: number;
+}
+
+export interface DepAuditStateUpsert {
+  repo_id: number | bigint;
+  severity_critical: number;
+  severity_high: number;
+  severity_moderate: number;
+  severity_low: number;
+  tool: string;
+}
+
+/**
+ * Insert-or-replace the (one-and-only) audit-state row for a repo.
+ * `last_checked_at` is always refreshed to datetime('now') — every call
+ * is "I just ran the auditor again."
+ *
+ * `last_clean_at` is set to the current time IFF
+ * (severity_critical + severity_high) == 0; otherwise the prior value is
+ * preserved (a fresh dirty run shouldn't erase the timestamp of the last
+ * known-clean state). Because we do this with INSERT OR REPLACE, we
+ * read-then-write inside a transaction so we can carry the prior
+ * last_clean_at across the replace.
+ */
+export function upsertDepAuditState(args: DepAuditStateUpsert): void {
+  const db = getDb();
+  const isClean = (args.severity_critical + args.severity_high) === 0;
+
+  const tx = db.transaction(() => {
+    const prior = db.prepare(
+      'SELECT last_clean_at FROM repo_dep_audit_state WHERE repo_id = ?'
+    ).get(args.repo_id) as { last_clean_at: string | null } | undefined;
+
+    // If clean now → stamp now (use datetime('now') for format parity
+    // with last_checked_at). If not clean → carry the prior value (so
+    // "we haven't seen a clean run since X" stays valid). If no prior
+    // row and not clean → leave NULL.
+    if (isClean) {
+      db.prepare(`
+        INSERT OR REPLACE INTO repo_dep_audit_state
+          (repo_id, severity_critical, severity_high, severity_moderate,
+           severity_low, last_checked_at, last_clean_at, tool)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?)
+      `).run(
+        args.repo_id,
+        args.severity_critical,
+        args.severity_high,
+        args.severity_moderate,
+        args.severity_low,
+        args.tool
+      );
+    } else {
+      const lastCleanAt = prior?.last_clean_at ?? null;
+      db.prepare(`
+        INSERT OR REPLACE INTO repo_dep_audit_state
+          (repo_id, severity_critical, severity_high, severity_moderate,
+           severity_low, last_checked_at, last_clean_at, tool)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?)
+      `).run(
+        args.repo_id,
+        args.severity_critical,
+        args.severity_high,
+        args.severity_moderate,
+        args.severity_low,
+        lastCleanAt,
+        args.tool
+      );
+    }
+  });
+  tx();
+}
+
+export function getDepAuditState(repo_id: number | bigint): DepAuditStateRow | null {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT * FROM repo_dep_audit_state WHERE repo_id = ?'
+  ).get(repo_id) as DepAuditStateRow | undefined;
+  return row ?? null;
+}
+
+export interface WorkflowActionUpsert {
+  repo_id: number | bigint;
+  workflow_file: string;
+  action_ref: string;
+  pinned_version: string;
+  latest_known?: string | null;
+}
+
+/**
+ * Insert-or-update a (repo_id, workflow_file, action_ref) row.
+ *
+ * pinned_version is always overwritten with the latest scan (the YAML is
+ * the source of truth for "what's pinned right now"). latest_known is
+ * coalesced — pass undefined to leave it, pass a string to overwrite, the
+ * column is nullable so a scan that has no probe data simply doesn't
+ * touch it.
+ *
+ * `last_checked_at` is always refreshed to datetime('now') because every
+ * call represents a fresh scan.
+ */
+export function upsertWorkflowAction(args: WorkflowActionUpsert): void {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO repo_workflow_actions
+      (repo_id, workflow_file, action_ref, pinned_version,
+       latest_known, last_checked_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(repo_id, workflow_file, action_ref) DO UPDATE SET
+      pinned_version  = excluded.pinned_version,
+      latest_known    = coalesce(excluded.latest_known, latest_known),
+      last_checked_at = datetime('now')
+  `).run(
+    args.repo_id,
+    args.workflow_file,
+    args.action_ref,
+    args.pinned_version,
+    n(args.latest_known)
+  );
+}
+
+export function listWorkflowActions(repo_id: number | bigint): WorkflowActionRow[] {
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM repo_workflow_actions WHERE repo_id = ? ORDER BY workflow_file, action_ref'
+  ).all(repo_id) as WorkflowActionRow[];
+}
+
+/**
+ * Update the three CI-status columns on repos. Validates the enum at the
+ * application layer (the migration doesn't have a CHECK constraint).
+ * undefined values leave the existing column intact; explicit null
+ * clears. status MUST be one of CI_STATUSES — out-of-enum throws.
+ *
+ * Returns { updated: false } if the repo_id doesn't exist.
+ */
+export function setRepoCiStatus(
+  repo_id: number | bigint,
+  args: { status: CiStatus; run_at?: string | null; url?: string | null }
+): { updated: boolean } {
+  if (!CI_STATUSES.includes(args.status)) {
+    throw new Error(
+      `Invalid CI status: ${JSON.stringify(args.status)} — must be one of ${CI_STATUSES.join(', ')}`
+    );
+  }
+  const db = getDb();
+  // Build dynamic SET so undefined leaves columns alone; we always write
+  // last_ci_status because it's the load-bearing field.
+  const sets: string[] = ['last_ci_status = ?'];
+  const params: (string | number | bigint | null)[] = [args.status];
+  if (args.run_at !== undefined) {
+    sets.push('last_ci_run_at = ?');
+    params.push(args.run_at);
+  }
+  if (args.url !== undefined) {
+    sets.push('last_ci_url = ?');
+    params.push(args.url);
+  }
+  params.push(repo_id);
+  const r = db.prepare(
+    `UPDATE repos SET ${sets.join(', ')} WHERE id = ?`
+  ).run(...params);
+  return { updated: r.changes > 0 };
+}
+
+/**
+ * Persist a toolchain-pin JSON object onto repos.toolchain_pin. We
+ * JSON.stringify here so callers can pass the structured shape directly
+ * without thinking about serialization. Pass an empty object `{}` to
+ * explicitly clear vs. an unset state — both result in the same DB
+ * representation, but `null` (via the explicit clear path) is more
+ * conventional.
+ *
+ * Returns { updated: false } if repo_id doesn't exist.
+ */
+export function setRepoToolchainPin(
+  repo_id: number | bigint,
+  pin: ToolchainPin | null
+): { updated: boolean } {
+  const db = getDb();
+  const value = pin === null ? null : JSON.stringify(pin);
+  const r = db.prepare(
+    'UPDATE repos SET toolchain_pin = ? WHERE id = ?'
+  ).run(value, repo_id);
+  return { updated: r.changes > 0 };
+}
+
+/**
+ * Portfolio-health rollup — one row per repo with lifecycle + CI status
+ * + worst-tier audit counts + workflow-action count.
+ *
+ * LEFT JOIN against repo_dep_audit_state and a subquery COUNT so repos
+ * that have never been scanned still appear (with zeros). Sorted by
+ * severity_critical DESC, severity_high DESC, then slug — riskiest first
+ * for the dashboard. The composite index added by migration-008
+ * (idx_dep_audit_severity) covers the JOIN-side sort.
+ */
+export function getPortfolioHealth(): PortfolioHealthRow[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT
+      r.slug                                    AS slug,
+      r.lifecycle_status                        AS lifecycle_status,
+      r.last_ci_status                          AS last_ci_status,
+      coalesce(d.severity_critical, 0)          AS severity_critical,
+      coalesce(d.severity_high, 0)              AS severity_high,
+      coalesce(wa.action_count, 0)              AS workflow_action_count
+    FROM repos r
+    LEFT JOIN repo_dep_audit_state d ON d.repo_id = r.id
+    LEFT JOIN (
+      SELECT repo_id, COUNT(*) AS action_count
+      FROM repo_workflow_actions
+      GROUP BY repo_id
+    ) wa ON wa.repo_id = r.id
+    ORDER BY
+      coalesce(d.severity_critical, 0) DESC,
+      coalesce(d.severity_high, 0) DESC,
+      r.slug ASC
+  `).all() as PortfolioHealthRow[];
 }
