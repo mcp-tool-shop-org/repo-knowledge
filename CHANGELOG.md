@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Added (FT-4 — operational hygiene CLI, 2026-05-21)
+
+Operational observability for the silent-failure regression the ROADMAP cited as the originating motivation for FT-4: `rk sync` could complete with zero repos added/updated and leave nothing behind to look at. FT-4 adds two append-only run-history tables plus three CLI surfaces (`rk fsck`, `rk diff`, `rk runs`) that turn the DB into a self-auditing system.
+
+- migration-010 — additive schema extension (schema_version 9 → 10):
+  - `db_health_runs` table — one row per `rk fsck` invocation. Records the seven integrity-check counts plus a final `exit_code`. Indexed by `run_at DESC`. The audit-trail counterpart to the live check report; "when was the last clean fsck?" is now a single SELECT.
+  - `sync_runs` table — one row per `rk sync` invocation. Records `owners_json` + `dirs_scanned_json` + `repos_added/updated/skipped` counts + `errors_json` + `exit_code`. `started_at` lands at INSERT (in-progress row), `finished_at` lands at the matching UPDATE on completion (or thrown-error catch path). Indexed by `started_at DESC`. Closes the silent-zero-sync regression — the operator now has a permanent record of every sync attempt regardless of whether it added work.
+  - Both tables are FK-independent from `repos` — operator-grain audit, not repo-grain. They survive a portfolio that goes to zero repos.
+- DB helpers: `insertDbHealthRun`, `listDbHealthRuns(limit=20)`, `getLatestDbHealthRun`, `insertSyncRun`, `completeSyncRun`, `listSyncRuns(limit=20)`. All transactional; the count fields are individually nullable so a caller that opts out of a particular check can pass undefined.
+- `src/health/fsck.ts` — seven-check integrity scan composed by `runFsck(opts?)`:
+  - `orphan_rows` — child rows whose `repo_id` doesn't exist in `repos` (legacy data pre-dating FK enforcement). Covers `repo_facts`, `repo_docs`, `repo_notes`, `repo_audits`, `repo_releases`, `repo_tech`, `repo_topics`, `repo_local_paths`, `audit_runs`, `audit_findings`, `audit_exceptions`, `repo_published_versions`, `repo_dep_audit_state`, `repo_dep_audit_history`, `repo_workflow_actions`, `repo_workflow_permissions`, `repo_observed_toolchain`.
+  - `broken_relationships` — `repo_relationships` rows with `from_repo_id` or `to_repo_id` missing from `repos`.
+  - `null_local_path_active` — `lifecycle_status='active'` AND `local_path IS NULL` (sync gap per F-DB-007 Stage A).
+  - `stale_local_path` — `local_path` set but `existsSync` is false on the current rig (informational — `repo_local_paths` is the multi-rig authority).
+  - `fts_row_count_mismatch` — `repo_search` FTS5 row count vs sum of indexable sources (repos with description/purpose + docs + notes).
+  - `invalid_lifecycle_status` — any value outside `LIFECYCLE_STATUSES`.
+  - `incomplete_sync_runs` — `sync_runs` with `NULL finished_at` older than 24h (sync crashed without completing the row).
+  - Every check returns `{ count, samples (≤5), description }`. Composed report writes one `db_health_runs` row per invocation, returns the report so the CLI can render.
+- `src/health/diff.ts` — `getRepoDiff(slug, opts?)` answers "what changed for this repo's DB entry between two timestamps?" Tracked sources: `repo_notes.created_at`, `audit_runs.started_at`, `repo_dep_audit_history.taken_at` (with delta computation across the window's first and last snapshots), `repo_published_versions.synced_at`. Untracked sources surface in the report footer with explicit reasons (`repo_facts` lacks a history table; `repo_relationships` lacks a timestamp; repo-level fields are not snapshotted — see git log). Default window is the last 7 days; `--since` / `--until` override.
+- `rk fsck [--strict] [--json]` — runs the seven checks, writes the audit row, prints summary. `--strict` exits non-zero if any check returns count > 0 (CI gates); default is informational (exit 0). `--json` emits the structured `FsckReport`.
+- `rk diff <slug> [--since <date>] [--until <date>] [--json]` — structured DB-entry change history for one repo across the resolved window. Pretty text by default, grouped by source.
+- `rk runs [--db-health|--sync] [--limit N] [--json]` — lists recent `db_health_runs` and/or `sync_runs` rows. Default shows both with last 10 each. JSON-first per Stage A doctrine.
+- `fullSync` now writes a `sync_runs` row at start + UPDATEs at completion (or on thrown error). Transparent wrap — the `FullSyncResult` shape is unchanged. Error path embeds `{message, stack}` in `errors_json` before re-throwing so the audit row is complete even when the run crashes.
+- Public API re-exports: `runFsck`, `renderFsckText`, `getRepoDiff`, `renderRepoDiffText`, plus all FT-4 DB helpers and row/insert types from `@mcptoolshop/repo-knowledge`.
+
 ### Added (FT-3.5 — research-grounded build health, 2026-05-21)
 
 Research arc: 5-agent study-swarm dispatched 2026-05-20 produced 24 cited findings (2022-2026). Every column, table, and grading threshold below traces back to a named study; citations appear inline at each load-bearing code-decision site.

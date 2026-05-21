@@ -51,7 +51,13 @@ import {
   buildFeed, renderFeedText,
   buildRepoDoctor, renderDoctorText,
   buildHealthTable, renderHealthTableText,
+  // FT-4: operational hygiene primitives
+  runFsck, renderFsckText,
+  getRepoDiff, renderRepoDiffText,
 } from './health/index.js';
+import {
+  listDbHealthRuns, listSyncRuns,
+} from './db/init.js';
 import { fullSync } from './sync/index.js';
 import { ingestLocalRepo } from './sync/local.js';
 import { rebuildIndex, searchRepos } from './search/fts.js';
@@ -1580,6 +1586,143 @@ async function refreshAllRepos(opts: { rigId?: string }): Promise<void> {
     }
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FT-4: OPERATIONAL HYGIENE (fsck / diff / runs)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── fsck ────────────────────────────────────────────────────────────────────
+//
+// `rk fsck` — DB integrity checker. Runs seven independent checks and
+// writes a db_health_runs audit row. --strict makes any non-zero check
+// non-zero-exit (CI gates); default is informational.
+program
+  .command('fsck')
+  .description('Run DB integrity checks (orphan rows, broken relationships, stale paths, FTS drift, etc.) and write a db_health_runs audit row')
+  .option('--strict', 'Exit non-zero if any check returns count > 0', false)
+  .option('--json', 'Emit FsckReport as JSON (per Stage A jq doctrine)', false)
+  .action((opts: { strict: boolean; json: boolean }): void => {
+    openDb(config().dbPath);
+    const report = runFsck({ strict: opts.strict });
+    if (opts.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(renderFsckText(report));
+    }
+    closeDb();
+    if (report.exit_code !== 0) {
+      // --strict surfaced at least one non-zero check; mirror to the
+      // process exit code so CI gates can react.
+      process.exit(report.exit_code);
+    }
+  });
+
+// ─── diff ────────────────────────────────────────────────────────────────────
+//
+// `rk diff <slug>` — DB-entry change history for a single repo across a
+// time window. Defaults to last 7 days; --since / --until tune the
+// window. JSON-first per Stage A doctrine; pretty text is the default
+// rendering.
+program
+  .command('diff <slug>')
+  .description('Show DB-entry change history for a repo (notes added, audit runs, dep-audit snapshots, published versions) over a time window')
+  .option('--since <date>', 'Lower bound on the window (YYYY-MM-DD or SQLite datetime; default: 7 days ago)')
+  .option('--until <date>', 'Upper bound on the window (default: now)')
+  .option('--json', 'Emit RepoDiffReport as JSON', false)
+  .action((slug: string, opts: { since?: string; until?: string; json: boolean }): void => {
+    openDb(config().dbPath);
+    const repoId = resolveRepoId(slug);
+    if (repoId === null) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
+    // Re-resolve canonical slug from id so partial matches surface
+    // the full slug in the diff header.
+    const db = getDb();
+    const canonical = db.prepare('SELECT slug FROM repos WHERE id = ?').get(repoId) as { slug: string } | undefined;
+    const report = getRepoDiff(canonical?.slug ?? slug, {
+      since: opts.since,
+      until: opts.until,
+    });
+    if (!report) {
+      console.error(`Error: diff could not be built for ${slug}`);
+      closeDb();
+      process.exit(1);
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(renderRepoDiffText(report));
+    }
+    closeDb();
+  });
+
+// ─── runs ────────────────────────────────────────────────────────────────────
+//
+// `rk runs` — list recent db_health_runs and/or sync_runs entries.
+// --db-health / --sync filter to one; default shows both. --json emits
+// structured output.
+program
+  .command('runs')
+  .description('List recent operational runs (db_health_runs from `rk fsck`, sync_runs from `rk sync`)')
+  .option('--db-health', 'Show only db_health_runs rows', false)
+  .option('--sync', 'Show only sync_runs rows', false)
+  .option('--limit <n>', 'Rows per category (default: 10)', (v) => parsePositiveInt(v, '--limit'), 10)
+  .option('--json', 'Emit structured JSON', false)
+  .action((opts: { dbHealth: boolean; sync: boolean; limit: number; json: boolean }): void => {
+    openDb(config().dbPath);
+    const showHealth = opts.dbHealth || (!opts.dbHealth && !opts.sync);
+    const showSync = opts.sync || (!opts.dbHealth && !opts.sync);
+    const result: { db_health_runs?: ReturnType<typeof listDbHealthRuns>; sync_runs?: ReturnType<typeof listSyncRuns> } = {};
+    if (showHealth) result.db_health_runs = listDbHealthRuns(opts.limit);
+    if (showSync)   result.sync_runs      = listSyncRuns(opts.limit);
+
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      closeDb();
+      return;
+    }
+
+    // Pretty-text rendering — one section per category.
+    if (showHealth) {
+      const rows = result.db_health_runs ?? [];
+      console.log(`=== db_health_runs (last ${rows.length}) ===`);
+      if (rows.length === 0) {
+        console.log('  (no fsck runs recorded yet — try `rk fsck`)');
+      } else {
+        for (const r of rows) {
+          const totalDirty =
+            (r.orphan_path_count ?? 0) +
+            (r.broken_relationship_count ?? 0) +
+            (r.null_local_path_active_count ?? 0) +
+            (r.stale_local_path_count ?? 0);
+          const tag = totalDirty === 0 ? 'OK  ' : `${totalDirty} warnings`;
+          console.log(`  #${r.id}  ${r.run_at}  exit=${r.exit_code}  ${tag}  repos=${r.repo_count ?? 'n/a'}  fts=${r.fts_entry_count ?? 'n/a'}`);
+        }
+      }
+      console.log('');
+    }
+
+    if (showSync) {
+      const rows = result.sync_runs ?? [];
+      console.log(`=== sync_runs (last ${rows.length}) ===`);
+      if (rows.length === 0) {
+        console.log('  (no sync runs recorded yet — try `rk sync`)');
+      } else {
+        for (const r of rows) {
+          const status = r.finished_at
+            ? (r.exit_code === 0 ? 'done   ' : 'errored')
+            : 'pending';
+          console.log(`  #${r.id}  ${r.started_at}  ${status}  added=${r.repos_added}  updated=${r.repos_updated}  skipped=${r.repos_skipped}  exit=${r.exit_code}`);
+        }
+      }
+      console.log('');
+    }
+
+    closeDb();
+  });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GAMES SUBCOMMANDS

@@ -57,6 +57,11 @@ export {
   setRepoCiStatus, setRepoToolchainPin,
   getPortfolioHealth,
   CI_STATUSES, PIN_QUALITIES,
+  // FT-4: operational hygiene run tables (migration-010). db_health_runs
+  // is the audit trail of `rk fsck` invocations; sync_runs gives the
+  // sync surface its missing observability.
+  insertDbHealthRun, listDbHealthRuns, getLatestDbHealthRun,
+  insertSyncRun, completeSyncRun, listSyncRuns,
 } from './db/init.js';
 export type {
   RigRow, RepoLocalPathRow,
@@ -71,6 +76,9 @@ export type {
   ToolchainDriftRow,
   PortfolioHealthRow,
   CiStatus, PinQuality, ToolchainPin,
+  // FT-4 types
+  DbHealthRunRow, DbHealthRunInsert,
+  SyncRunRow, SyncRunInsert, SyncRunComplete,
 } from './db/init.js';
 
 // Sync (publish state)
@@ -90,14 +98,23 @@ export type {
   SyncBuildHealthSummary, RepoForBuildHealth,
 } from './sync/build-health.js';
 
-// Health renderers (FT-3.5)
+// Health renderers (FT-3.5) + operational hygiene (FT-4)
 export {
   buildFeed, renderFeedText,
   buildRepoDoctor, renderDoctorText,
   buildHealthTable, renderHealthTableText,
+  // FT-4
+  runFsck, renderFsckText,
+  getRepoDiff, renderRepoDiffText,
 } from './health/index.js';
 export type {
   FeedEvent, RepoDoctorReport, HealthTableRow,
+  // FT-4
+  FsckCheck, FsckReport, FsckOptions,
+  RepoDiffReport, RepoDiffOptions,
+  NoteAddedEntry, AuditRunEntry,
+  DepAuditSnapshotEntry, DepAuditDelta,
+  PublishedVersionEntry,
 } from './health/index.js';
 
 // Search

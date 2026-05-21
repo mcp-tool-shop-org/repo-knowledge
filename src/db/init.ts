@@ -29,6 +29,7 @@ const MIGRATION_006 = resolveSql('migration-006-lifecycle-paths.sql');
 const MIGRATION_007 = resolveSql('migration-007-publish-state.sql');
 const MIGRATION_008 = resolveSql('migration-008-build-health.sql');
 const MIGRATION_009 = resolveSql('migration-009-build-health-extensions.sql');
+const MIGRATION_010 = resolveSql('migration-010-operational-runs.sql');
 
 let _db: DatabaseType | null = null;
 let _dbPath: string | null = null;
@@ -222,6 +223,21 @@ export function openDb(dbPath: string): DatabaseType {
     const migration = readFileSync(MIGRATION_009, 'utf-8');
     execMigrationIdempotent(_db, migration, '009 (build health extensions)');
     console.log('Applied migration 009: build health extensions (CVE IDs + history + pin quality + workflow permissions + observed toolchain)');
+  }
+
+  // Migration 010 — operational hygiene run tables (FT-4). Gated on
+  // schema_version: only runs if current version < 10. Additive
+  // (CREATE TABLE / CREATE INDEX IF NOT EXISTS for the two new tables)
+  // and bumps schema_version to '10' at the end.
+  //
+  // Adds: db_health_runs (audit trail of `rk fsck` invocations) +
+  // sync_runs (observability for `rk sync` invocations — closes the
+  // silent-failure regression that originated FT-4).
+  const version9 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
+  if (parseInt(version9) < 10) {
+    const migration = readFileSync(MIGRATION_010, 'utf-8');
+    execMigrationIdempotent(_db, migration, '010 (operational runs)');
+    console.log('Applied migration 010: operational runs (db_health_runs + sync_runs)');
   }
 
   return _db;
@@ -1782,4 +1798,200 @@ export function getPortfolioHealth(): PortfolioHealthRow[] {
       coalesce(d.severity_high, 0) DESC,
       r.slug ASC
   `).all() as PortfolioHealthRow[];
+}
+
+// ─── FT-4: operational hygiene run tables ───────────────────────────────────
+
+export interface DbHealthRunRow {
+  id: number;
+  run_at: string;
+  repo_count: number | null;
+  fts_entry_count: number | null;
+  orphan_path_count: number | null;
+  broken_relationship_count: number | null;
+  null_local_path_active_count: number | null;
+  stale_local_path_count: number | null;
+  exit_code: number;
+}
+
+export interface DbHealthRunInsert {
+  run_at?: string;
+  repo_count?: number | null;
+  fts_entry_count?: number | null;
+  orphan_path_count?: number | null;
+  broken_relationship_count?: number | null;
+  null_local_path_active_count?: number | null;
+  stale_local_path_count?: number | null;
+  exit_code: number;
+}
+
+/**
+ * Insert a single audit-trail row for a `rk fsck` run.
+ *
+ * `run_at` defaults to datetime('now') if not provided. The exit_code is
+ * required (0 = clean / non-strict, 1 = --strict and any check non-zero);
+ * counts are individually nullable so a caller that opts out of a check
+ * (e.g. stale_local_path is rig-dependent and informational) can pass
+ * undefined.
+ *
+ * Returns the inserted row id as a plain number — better-sqlite3 returns
+ * bigint for INTEGER PRIMARY KEY AUTOINCREMENT, but the row IDs here
+ * stay well within Number.MAX_SAFE_INTEGER and Number() keeps the
+ * downstream type ergonomic.
+ */
+export function insertDbHealthRun(args: DbHealthRunInsert): number {
+  const db = getDb();
+  const r = db.prepare(`
+    INSERT INTO db_health_runs (
+      run_at, repo_count, fts_entry_count, orphan_path_count,
+      broken_relationship_count, null_local_path_active_count,
+      stale_local_path_count, exit_code
+    ) VALUES (
+      coalesce(?, datetime('now')), ?, ?, ?, ?, ?, ?, ?
+    )
+  `).run(
+    n(args.run_at),
+    n(args.repo_count),
+    n(args.fts_entry_count),
+    n(args.orphan_path_count),
+    n(args.broken_relationship_count),
+    n(args.null_local_path_active_count),
+    n(args.stale_local_path_count),
+    args.exit_code
+  );
+  return Number(r.lastInsertRowid);
+}
+
+/**
+ * Most-recent N db_health_runs rows, newest first. Default of 20 matches
+ * the `rk runs` operator surface. Ordered by run_at DESC, id DESC so
+ * multiple inserts inside the same second tie-break in insertion order.
+ */
+export function listDbHealthRuns(limit: number = 20): DbHealthRunRow[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM db_health_runs
+     ORDER BY run_at DESC, id DESC
+     LIMIT ?
+  `).all(limit) as DbHealthRunRow[];
+}
+
+/**
+ * Convenience accessor for the most recent fsck run, or null if none
+ * have been recorded yet. Used by `rk runs` summary line.
+ */
+export function getLatestDbHealthRun(): DbHealthRunRow | null {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT * FROM db_health_runs
+     ORDER BY run_at DESC, id DESC
+     LIMIT 1
+  `).get() as DbHealthRunRow | undefined;
+  return row ?? null;
+}
+
+export interface SyncRunRow {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  owners_json: string | null;
+  dirs_scanned_json: string | null;
+  repos_added: number;
+  repos_updated: number;
+  repos_skipped: number;
+  errors_json: string | null;
+  exit_code: number;
+}
+
+export interface SyncRunInsert {
+  started_at?: string;
+  owners_json?: string | null;
+  dirs_scanned_json?: string | null;
+  exit_code?: number;
+}
+
+export interface SyncRunComplete {
+  finished_at?: string;
+  repos_added?: number;
+  repos_updated?: number;
+  repos_skipped?: number;
+  errors_json?: string | null;
+  exit_code: number;
+}
+
+/**
+ * Insert a sync_runs row at the START of a sync invocation. Returns the
+ * row id so the caller can pass it to completeSyncRun() at the
+ * end-of-sync (normal completion or thrown error path).
+ *
+ * `started_at` defaults to datetime('now'); owners_json + dirs_scanned_json
+ * are JSON-serialized strings that the caller produces (the helper does
+ * NOT JSON.stringify on the caller's behalf — passing an empty-string,
+ * "[]", or a partial scan record is up to the caller and we don't want
+ * to silently rewrite "null" vs an empty array). exit_code defaults to 0
+ * so an in-progress row registers as "no error yet."
+ */
+export function insertSyncRun(args: SyncRunInsert): number {
+  const db = getDb();
+  const r = db.prepare(`
+    INSERT INTO sync_runs (
+      started_at, owners_json, dirs_scanned_json, exit_code
+    ) VALUES (
+      coalesce(?, datetime('now')), ?, ?, coalesce(?, 0)
+    )
+  `).run(
+    n(args.started_at),
+    n(args.owners_json),
+    n(args.dirs_scanned_json),
+    n(args.exit_code)
+  );
+  return Number(r.lastInsertRowid);
+}
+
+/**
+ * Update an existing sync_runs row at end-of-sync (normal completion or
+ * thrown error). `finished_at` defaults to datetime('now') if not
+ * provided. `exit_code` is required — the caller knows whether they're
+ * recording a clean exit (0) or a thrown error (1).
+ *
+ * undefined counts default to 0 (the in-progress row already has 0 from
+ * insertSyncRun's INSERT DEFAULTs; passing undefined here re-writes 0,
+ * which is a no-op semantically). errors_json defaults to null on a
+ * clean exit; on a thrown error path the caller passes a JSON string.
+ */
+export function completeSyncRun(id: number | bigint, args: SyncRunComplete): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE sync_runs SET
+      finished_at   = coalesce(?, datetime('now')),
+      repos_added   = coalesce(?, repos_added),
+      repos_updated = coalesce(?, repos_updated),
+      repos_skipped = coalesce(?, repos_skipped),
+      errors_json   = ?,
+      exit_code     = ?
+    WHERE id = ?
+  `).run(
+    n(args.finished_at),
+    n(args.repos_added),
+    n(args.repos_updated),
+    n(args.repos_skipped),
+    n(args.errors_json),
+    args.exit_code,
+    id
+  );
+}
+
+/**
+ * Most-recent N sync_runs rows, newest first. Default of 20 matches the
+ * `rk runs --sync` operator surface. Ordered by started_at DESC, id DESC
+ * so multiple inserts inside the same second tie-break in insertion
+ * order.
+ */
+export function listSyncRuns(limit: number = 20): SyncRunRow[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM sync_runs
+     ORDER BY started_at DESC, id DESC
+     LIMIT ?
+  `).all(limit) as SyncRunRow[];
 }
