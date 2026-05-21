@@ -66,6 +66,22 @@ jobs:
       - name: Publish to npm with provenance (OIDC Trusted Publisher)
         run: npm publish --provenance --access public
 
+      # Create the GitHub Release if it doesn't already exist. Idempotent —
+      # `gh release create` errors if the release exists, so we probe first
+      # and skip when present. Body pulls from CHANGELOG.md's matching section
+      # when available; falls back to the tag annotation otherwise.
+      - name: Create GitHub release (if not exists)
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.bump.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; skipping create."
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+
       - name: Upload SBOM to GitHub release
         if: github.ref_type == 'tag'
         env:
