@@ -46,6 +46,12 @@ import {
   PUBLISHER_METHODS, PUBLISHED_VERSION_CHANNELS,
 } from './db/init.js';
 import { syncPublishStateForRepo } from './sync/publish.js';
+import { syncBuildHealthForRepo } from './sync/build-health.js';
+import {
+  buildFeed, renderFeedText,
+  buildRepoDoctor, renderDoctorText,
+  buildHealthTable, renderHealthTableText,
+} from './health/index.js';
 import { fullSync } from './sync/index.js';
 import { ingestLocalRepo } from './sync/local.js';
 import { rebuildIndex, searchRepos } from './search/fts.js';
@@ -1440,6 +1446,140 @@ audit
     }
     closeDb();
   });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUILD HEALTH SUBCOMMANDS (FT-3.5 — research-grounded)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Surface trichotomy per Treude & Storey 2010 (ICSE'10):
+//   - feed:   change since last sync (default; per Beyer 2016 "robotic
+//             response" suppression — feed silences flake-shaped events)
+//   - doctor: single-repo deep-dive (decision moment per Dowding 2025)
+//   - table:  portfolio rollup (JSON-first per McIlroy 1978 / jq design)
+//
+// Per Tidelift 2024 (62% maintainers overwhelmed by dep notifications)
+// + He 2022 (11.3% Dependabot deprecation from fatigue): the default
+// surface is the feed — high engagement, low noise.
+
+const health = program
+  .command('health')
+  .description('Build / dep / CI health — research-grounded surfaces (feed / doctor / table)');
+
+// `rk health` with no subcommand → feed.
+health
+  .command('feed', { isDefault: true })
+  .description('Change feed since last sync (default surface)')
+  .option('--refresh', 'Run build-health sync for every repo before rendering', false)
+  .option('--rig <id>', 'Rig id for toolchain observation (default: RK_RIG_ID env or hostname)')
+  .option('--json', 'Output JSON instead of text lines', false)
+  .action(async (opts: { refresh: boolean; rig?: string; json: boolean }): Promise<void> => {
+    openDb(config().dbPath);
+    if (opts.refresh) {
+      await refreshAllRepos({ rigId: resolveRigId(opts.rig) });
+    }
+    const events = buildFeed();
+    if (opts.json) {
+      console.log(JSON.stringify(events, null, 2));
+    } else {
+      console.log(renderFeedText(events));
+    }
+    closeDb();
+  });
+
+health
+  .command('doctor <slug>')
+  .description('Single-repo deep-dive — dep audit + CI + actions + toolchain')
+  .option('--refresh', 'Re-run build-health sync for this repo before rendering', false)
+  .option('--rig <id>', 'Rig id for toolchain observation')
+  .option('--json', 'Output JSON instead of text', false)
+  .action(async (slug: string, opts: { refresh: boolean; rig?: string; json: boolean }): Promise<void> => {
+    openDb(config().dbPath);
+    const repoRow = resolveRepoRow(slug);
+    if (!repoRow) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
+    if (opts.refresh) {
+      const summary = await syncBuildHealthForRepo(repoRow.id, {
+        slug: repoRow.slug,
+        owner: repoRow.owner,
+        name: repoRow.name,
+        local_path: repoRow.local_path,
+      }, { rigId: resolveRigId(opts.rig) });
+      if (summary.errors.length > 0) {
+        for (const err of summary.errors) console.error(`  ${err}`);
+      }
+    }
+    const report = buildRepoDoctor(repoRow.slug);
+    if (!report) {
+      console.error(`Error: doctor report could not be built for ${repoRow.slug}`);
+      closeDb();
+      process.exit(1);
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(renderDoctorText(report));
+    }
+    closeDb();
+  });
+
+health
+  .command('table')
+  .description('Portfolio health table (JSON default per McIlroy 1978 / jq)')
+  .option('--refresh', 'Run build-health sync for every repo before rendering', false)
+  .option('--rig <id>', 'Rig id for toolchain observation')
+  .option('--text', 'Pretty-text rendering instead of JSON (default: JSON)', false)
+  .action(async (opts: { refresh: boolean; rig?: string; text: boolean }): Promise<void> => {
+    openDb(config().dbPath);
+    if (opts.refresh) {
+      await refreshAllRepos({ rigId: resolveRigId(opts.rig) });
+    }
+    const rows = buildHealthTable();
+    if (opts.text) {
+      console.log(renderHealthTableText(rows));
+    } else {
+      // Per McIlroy 1978 / jq design — JSON is the default contract.
+      console.log(JSON.stringify(rows, null, 2));
+    }
+    closeDb();
+  });
+
+// Helper used by --refresh paths above. Walks every repo with a
+// non-null local_path and runs syncBuildHealthForRepo against it.
+// Per Tidelift 2024 we never throw — errors are logged per-repo and
+// the walk continues so a partial result beats a crashed portfolio.
+async function refreshAllRepos(opts: { rigId?: string }): Promise<void> {
+  const db = getDb();
+  const repos = db.prepare(`
+    SELECT id, slug, owner, name, local_path
+    FROM repos
+    ORDER BY slug
+  `).all() as Array<{
+    id: number;
+    slug: string;
+    owner: string | null;
+    name: string | null;
+    local_path: string | null;
+  }>;
+  for (const r of repos) {
+    try {
+      const summary = await syncBuildHealthForRepo(r.id, {
+        slug: r.slug,
+        owner: r.owner,
+        name: r.name,
+        local_path: r.local_path,
+      }, opts);
+      if (summary.errors.length > 0) {
+        for (const err of summary.errors) console.error(`  ${r.slug}: ${err}`);
+      }
+    } catch (e: unknown) {
+      console.error(`  ${r.slug}: sync threw — ${(e as Error)?.message ?? String(e)}`);
+    }
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GAMES SUBCOMMANDS

@@ -101,7 +101,7 @@ describe('Migration sequence (F-TS-007)', () => {
     // Post-condition: version is '8' (current head after FT-2's
     // migration-007 added publish state on top of FT-1's lifecycle paths).
     const v = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
-    expect(v.value).toBe('8');
+    expect(v.value).toBe('9');
   });
 
   it('creates audit tables on migration', () => {
@@ -163,18 +163,18 @@ describe('Migration sequence (F-TS-007)', () => {
     // Second open: already at head, should not re-run anything destructive
     openDb(dbPath);
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('8');
-    expect(v2).toBe('8');
+    expect(v1).toBe('9');
+    expect(v2).toBe('9');
   });
 
   it('opening a brand-new (no-file) DB produces head schema directly', () => {
     // No pre-existing file — openDb should detect missing repos table,
     // load schema.sql, then run migrations 002+ to bring schema_version
-    // to '8' (the FT-2 head).
+    // to '9' (the FT-3.5 head — migration-009 build-health extensions).
     const freshPath = join(tmpDir, 'fresh.db');
     openDb(freshPath);
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('8');
+    expect(v).toBe('9');
 
     const tables = getDb().prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = 'audit_runs'"
@@ -225,14 +225,14 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(idx!.sql).toMatch(/repo_local_paths/);
   });
 
-  it('migration-006 is idempotent — re-opening v7 DB does not error', () => {
-    // Bring up to v7, close, open again. No throw, version unchanged.
+  it('migration-006 is idempotent — re-opening v9 DB does not error', () => {
+    // Bring up to v9, close, open again. No throw, version unchanged.
     writeMinimalV1Schema(dbPath);
     openDb(dbPath);
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('8');
+    expect(v).toBe('9');
   });
 
   it('migration-007 adds repos.npm_package_name / pypi_package_name / publisher_method columns', () => {

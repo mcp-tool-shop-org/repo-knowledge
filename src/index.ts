@@ -46,11 +46,31 @@ export {
   upsertPublishedVersion, getLatestPublishedVersion, listPublishedVersions,
   setRepoPackageNames, getReposByNpmPackage,
   PUBLISHER_METHODS, PUBLISHED_VERSION_CHANNELS,
+  // FT-3 / FT-3.5: build-health helpers (migrations 008 + 009). Research-
+  // grounded — every column / table cited inline in db/init.ts and
+  // db/migration-00{8,9}-*.sql to specific 2022-2026 findings.
+  upsertDepAuditState, getDepAuditState,
+  appendDepAuditHistory, getDepAuditHistory,
+  upsertWorkflowAction, listWorkflowActions,
+  upsertWorkflowPermissions, listWorkflowPermissions,
+  upsertObservedToolchain, listObservedToolchain, getToolchainDrift,
+  setRepoCiStatus, setRepoToolchainPin,
+  getPortfolioHealth,
+  CI_STATUSES, PIN_QUALITIES,
 } from './db/init.js';
 export type {
   RigRow, RepoLocalPathRow,
   PublishedVersionRow, PublishedVersionUpsert,
   PublisherMethod, PublishedVersionChannel,
+  // FT-3 / FT-3.5 types
+  DepAuditStateRow, DepAuditStateUpsert,
+  DepAuditHistoryRow,
+  WorkflowActionRow, WorkflowActionUpsert,
+  WorkflowPermissionsRow, WorkflowPermissionsUpsert,
+  ObservedToolchainRow, ObservedToolchainUpsert,
+  ToolchainDriftRow,
+  PortfolioHealthRow,
+  CiStatus, PinQuality, ToolchainPin,
 } from './db/init.js';
 
 // Sync (publish state)
@@ -58,6 +78,27 @@ export {
   syncNpmVersion, syncPyPIVersion, syncGitHubReleases, syncPublishStateForRepo,
 } from './sync/publish.js';
 export type { PublishedVersionRecord, RepoBindingRow, PublishSyncSummary } from './sync/publish.js';
+
+// Sync (build health — FT-3.5)
+export {
+  syncNpmAudit, scanWorkflowActions, syncCiStatus,
+  scanWorkflowPermissions, observeToolchain, syncBuildHealthForRepo,
+} from './sync/build-health.js';
+export type {
+  NpmAuditResult, WorkflowActionRef, CiStatusResult,
+  WorkflowPermissionsScan, ObservedToolchainEntry,
+  SyncBuildHealthSummary, RepoForBuildHealth,
+} from './sync/build-health.js';
+
+// Health renderers (FT-3.5)
+export {
+  buildFeed, renderFeedText,
+  buildRepoDoctor, renderDoctorText,
+  buildHealthTable, renderHealthTableText,
+} from './health/index.js';
+export type {
+  FeedEvent, RepoDoctorReport, HealthTableRow,
+} from './health/index.js';
 
 // Search
 export { rebuildIndex, search, searchRepos } from './search/fts.js';

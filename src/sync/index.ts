@@ -25,6 +25,29 @@ export type {
   RepoBindingRow,
 } from './publish.js';
 
+// FT-3.5: research-grounded build-health workers (npm audit, workflow
+// action scan + pin grading, CI status, workflow permissions, observed
+// toolchain). Same rationale as publish: opt-in per-repo via `rk health
+// --refresh`, never on every fullSync — these workers shell out to npm
+// audit + gh and would be hostile to the registries at portfolio scale.
+export {
+  syncNpmAudit,
+  scanWorkflowActions,
+  syncCiStatus,
+  scanWorkflowPermissions,
+  observeToolchain,
+  syncBuildHealthForRepo,
+} from './build-health.js';
+export type {
+  NpmAuditResult,
+  WorkflowActionRef,
+  CiStatusResult,
+  WorkflowPermissionsScan,
+  ObservedToolchainEntry,
+  SyncBuildHealthSummary,
+  RepoForBuildHealth,
+} from './build-health.js';
+
 export interface SyncConfig {
   dbPath?: string;
   owners?: string[];
