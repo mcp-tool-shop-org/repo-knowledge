@@ -6,18 +6,28 @@ import type { Database as DatabaseType } from 'better-sqlite3';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
-// Resolve a SQL asset by name across both layouts:
-//   - dev (tsx / vitest): this module lives at src/db/, SQL siblings are right here
-//   - prod (tsup bundle): cli.js lives at dist/, SQL is one level deeper at dist/db/
-// import.meta.dirname is computed at module load time per layout. We probe the
-// direct sibling first and fall back to the dist/db/ subfolder before giving up.
+// Resolve a SQL asset by name across all bundled layouts. import.meta.dirname
+// varies by entry point:
+//   - dev (tsx / vitest): src/db/      → SQL siblings live here
+//   - prod cli bundle:    dist/        → SQL lives at dist/db/<name>
+//   - prod mcp bundle:    dist/mcp/    → SQL lives at dist/db/<name> (one up + db/)
+//   - any future deeper bundle target: keep probing parent dirs until found.
+// We probe sibling → ./db/ → ../db/ → ../../db/ in order, capping depth at 3
+// so a missing asset surfaces as a clear error instead of an infinite walk.
 function resolveSql(name: string): string {
   const here = import.meta.dirname;
-  const sibling = join(here, name);
-  if (existsSync(sibling)) return sibling;
-  const nested = join(here, 'db', name);
-  if (existsSync(nested)) return nested;
-  throw new Error(`SQL asset not found: ${name} (looked in ${here} and ${join(here, 'db')})`);
+  const probed: string[] = [];
+  const candidates = [
+    join(here, name),
+    join(here, 'db', name),
+    join(here, '..', 'db', name),
+    join(here, '..', '..', 'db', name),
+  ];
+  for (const candidate of candidates) {
+    probed.push(candidate);
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(`SQL asset not found: ${name} (probed: ${probed.join(', ')})`);
 }
 
 const SCHEMA_PATH = resolveSql('schema.sql');
