@@ -1,9 +1,9 @@
 <p align="center">
-  <a href="README.ja.md">日本語</a> | <a href="README.zh.md">中文</a> | <a href="README.es.md">Español</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.it.md">Italiano</a> | <a href="README.md">English</a>
+  <a href="README.ja.md">日本語</a> | <a href="README.zh.md">中文</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.it.md">Italiano</a> | <a href="README.md">English</a>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/repo-knowledge/readme.png" alt="repo-knowledge" width="400" />
+  <img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/repo-knowledge/readme.png" alt="repo-knowledge" width="800" />
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 
 ## Por que
 
-Os registros de pacotes e as APIs do GitHub informam o que um repositório _é_. Eles não informam para que ele _serve_, como ele se relaciona com seus outros repositórios, qual é a sua arquitetura, ou se ele passou na sua última auditoria de segurança. O repo-knowledge preenche essa lacuna: um único banco de dados local que armazena a arquitetura, a auditoria, evidências, relacionamentos e permite a busca de texto completo em todos eles.
+Os registros de pacotes e as APIs do GitHub informam o que um repositório _é_. Eles não informam para que ele _serve_, como ele se relaciona com seus outros repositórios, qual é a sua tese arquitetural ou se ele passou na sua última auditoria de segurança. O repo-knowledge preenche essa lacuna: um único banco de dados local que armazena teses, arquitetura, evidências de auditoria, relacionamentos e pesquisa de texto completo em tudo isso.
 
 ## Instalação
 
@@ -40,9 +40,9 @@ npm install -g @mcptoolshop/repo-knowledge
 
 **Dados NÃO acessados:** nenhum código-fonte é lido do GitHub, nenhuma credencial é armazenada, nenhum dado é enviado para serviços externos.
 
-**Permissões:** requer a CLI `gh` autenticada para sincronização com o GitHub; todos os dados permanecem locais.
+**Permissões:** requer CLI `gh` autenticada para sincronização com o GitHub; todos os dados permanecem locais.
 
-**Sem telemetria, sem análise, sem envio de dados.**
+**Sem telemetria, sem análises, sem envio de dados.**
 
 ## Início Rápido
 
@@ -52,6 +52,9 @@ rk init
 
 # Sync repos from your GitHub org
 rk sync --owners my-org
+
+# Include forked repos
+rk sync --owners my-org --forks
 
 # Inspect a specific repo
 rk show my-org/my-repo
@@ -69,50 +72,80 @@ rk audit seed-controls
 
 | Comando | Descrição |
 |---------|-------------|
-| `rk init` | Inicializa a configuração, o banco de dados e define os controles de auditoria. |
-| `rk sync` | Sincronização completa: organizações do GitHub + repositórios locais + índice de busca de texto completo. |
+| `rk init` | Inicializa a configuração, o banco de dados e os controles de auditoria. |
+| `rk sync` | Sincronização completa: organizações do GitHub + repositórios locais + índice de pesquisa de texto completo. |
 | `rk scan <path>` | Analisa um único diretório de repositório local. |
-| `rk show <slug>` | Exibe o conhecimento completo do repositório, incluindo o status da auditoria. |
+| `rk show <slug>` | Exibe todo o conhecimento do repositório com a postura de auditoria. |
 | `rk list` | Lista todos os repositórios (filtráveis por status, linguagem, estrutura). |
-| `rk find <query>` | Busca de texto completo em todo o conteúdo indexado. |
-| `rk related <slug>` | Exibe os repositórios relacionados a um determinado repositório. |
-| `rk note <slug>` | Adiciona uma nota categorizada (tese, arquitetura, aviso, etc.). |
-| `rk relate <from> <type> <to>` | Registra um relacionamento entre repositórios. |
+| `rk find <query>` | Pesquisa de texto completo em todo o conteúdo indexado. |
+| `rk related <slug>` | Exibe repositórios relacionados a um determinado repositório. |
+| `rk note <slug>` | Adiciona uma nota tipada (tese, arquitetura, aviso, etc.) com `--type` e `--content` (opcional `--title`). |
+| `rk relate <from> <type> <to>` | Registra um relacionamento entre repositórios (opcional `--note`). |
 | `rk stats` | Exibe estatísticas do banco de dados. |
-| `rk reindex` | Reconstrói o índice de busca de texto completo. |
+| `rk reindex` | Reconstrói o índice de pesquisa de texto completo. |
+| `rk sync-dogfood` | Importa evidências do "dogfood" de dogfood-lab/testing-os para os fatos do repositório. |
+| `rk suggest-dogfood --repo <slug>` | Sugere descobertas de "dogfood" conhecidas para um repositório ou ambiente. |
+
+### Comandos do Ciclo de Vida (v2.0.0)
+
+| Comando | Descrição |
+|---------|-------------|
+| `rk delete <slug> [--yes]` | Exclui em cascata um repositório e todas as linhas filhas. |
+| `rk archive <slug> [--reason <text>]` | Altera o status do ciclo de vida para "arquivado" (preserva notas/descobertas). |
+| `rk verify-local [--rig <id>] [--strict]` | Verifica se o `local_path` existe para cada ambiente; atualiza `repo_local_paths`. |
+| `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` | Registra o ambiente atual. |
+| `rk prune [--dry-run] [--apply] [--days <N>]` | Exclui permanentemente repositórios arquivados há mais de N dias (padrão: 30). |
+
+### Comandos de Publicação de Estado (v2.0.0)
+
+| Comando | Descrição |
+|---------|-------------|
+| `rk versions <slug> [--refresh] [--channel <name>]` | Painel de versão publicada entre diferentes canais (npm/pypi/github_release). |
+| `rk drift <slug> [--strict]` | Compara a versão de referência com a versão mais recente do registro. |
+| `rk bind-package <slug> [--npm <name>] [--pypi <name>] [--publisher-method <method>]` | Definidor de vinculação manual. |
+
+### Comandos de Saúde (v2.0.0 — baseados em pesquisa)
+
+| Comando | Descrição |
+|---------|-------------|
+| `rk health` (padrão = feed) | Altera o feed: diferenças desde a última sincronização, interseção KEV, interrupções da CI, desvio do "action-pin". |
+| `rk health doctor <slug>` | Análise detalhada de um único repositório (auditoria de dependências, ações de fluxo de trabalho, sinal da CI, cadeia de ferramentas). |
+| `rk health table [--json\ | --text]` | Tabela de saúde do portfólio; JSON é o contrato de suporte. |
+
+### Comandos Operacionais (v2.0.0)
+
+| Comando | Descrição |
+|---------|-------------|
+| `rk fsck [--strict] [--json]` | Verificação da integridade do banco de dados; grava uma linha de auditoria em `db_health_runs`. |
+| `rk diff <slug> [--since <date>] [--until <date>] [--json]` | Histórico de alterações de uma entrada para um repositório. |
+| `rk runs [--db-health\ | --sync] [--limit <N>] [--json]` | Lista as entradas recentes de `db_health_runs` / `sync_runs`. |
+| `rk owners list` | Lista os proprietários do GitHub configurados. |
+| `rk owners add <owner>` | Adiciona proprietários a `rk.config.json`. |
+| `rk owners remove <owner>` | Remove proprietários de `rk.config.json`. |
 
 ### Comandos de Auditoria
 
 | Comando | Descrição |
 |---------|-------------|
-| `rk audit seed-controls` | Define/atualiza o catálogo canônico com 80 controles. |
+| `rk audit seed-controls` | Semeia/atualiza o catálogo canônico de 80 controles. |
 | `rk audit import <dir>` | Importa resultados de auditoria de arquivos de contrato JSON. |
-| `rk audit posture [slug]` | Exibe o status da auditoria para um repositório ou para todo o portfólio. |
-| `rk audit findings` | Lista os problemas pendentes em todo o portfólio. |
-| `rk audit controls` | Lista os controles canônicos por domínio. |
-| `rk audit unaudited` | Lista os repositórios que não foram auditados. |
-| `rk audit failing <domain>` | Lista os repositórios que falharam em um domínio de auditoria específico. |
+| `rk audit posture [slug]` | Mostrar o estado de auditoria de um repositório ou de todo o portfólio. |
+| `rk audit findings` | Listar as descobertas pendentes em todo o portfólio. |
+| `rk audit controls` | Listar os controles canônicos por domínio. |
+| `rk audit unaudited` | Listar os repositórios que não tiveram auditorias executadas. |
+| `rk audit failing <domain>` | Listar os repositórios que falharam em um domínio de auditoria específico. |
+
+### Comandos dos Jogos Claude
+
+| Comando | Descrição |
+|---------|-------------|
+| `rk games score <worklist>` | Calcular a pontuação de um arquivo REMEDIATION-WORKLIST.md e exibir a tabela de classificação. |
 
 ## Servidor MCP
 
-O servidor MCP expõe 20 ferramentas para fluxos de trabalho integrados com IA. Adicione-o à configuração do seu cliente MCP:
+O servidor MCP expõe 19 ferramentas para fluxos de trabalho integrados com IA. Adicione-o à configuração do seu cliente MCP:
 
-**claude_desktop_config.json:**
-```json
-{
-  "mcpServers": {
-    "repo-knowledge": {
-      "command": "node",
-      "args": ["node_modules/@mcptoolshop/repo-knowledge/dist/mcp/server.js"],
-      "env": {
-        "RK_DB_PATH": "/path/to/knowledge.db"
-      }
-    }
-  }
-}
-```
-
-**.claude.json (escopo do projeto):**
+**Claude Code (arquivo `.claude.json` específico do projeto):**
 ```json
 {
   "mcpServers": {
@@ -125,11 +158,25 @@ O servidor MCP expõe 20 ferramentas para fluxos de trabalho integrados com IA. 
 }
 ```
 
+**Claude Desktop (`claude_desktop_config.json`):**
+```json
+{
+  "mcpServers": {
+    "repo-knowledge": {
+      "command": "node",
+      "args": ["node_modules/@mcptoolshop/repo-knowledge/dist/mcp/server.js"]
+    }
+  }
+}
+```
+
+O servidor lê o arquivo `rk.config.json` do diretório de trabalho na inicialização. Certifique-se de que o arquivo `rk.config.json` exista no diretório onde o servidor está sendo executado.
+
 ### Ferramentas MCP
 
-`get_repo` `find_repos` `search_repos` `related_repos` `repos_by_stack` `repos_needing_work` `repo_summary` `add_repo_note` `add_relationship` `knowledge_stats` `sync_repos` `audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
+`get_repo` `find_repos` `search_repos` `related_repos` `repos_by_stack` `repos_needing_work` `repo_summary` `add_repo_note` `add_relationship` `knowledge_stats` `sync_repos` `sync_dogfood` `audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
 
-## Estrutura de Auditoria
+## Framework de Auditoria
 
 O sistema de auditoria cobre 19 domínios com 80 controles:
 
@@ -139,33 +186,33 @@ O sistema de auditoria cobre 19 domínios com 80 controles:
 | qualidade_do_código | Análise de código, formatação, complexidade. |
 | segurança_sast | Análise estática, injeção, autenticação. |
 | dependências_sca | Análise de vulnerabilidades, versão. |
-| licenças | Conformidade de licenças, compatibilidade. |
-| segredos | Detecção de segredos, rotação. |
+| licenças | Conformidade e compatibilidade de licenças. |
+| segredos | Detecção e rotação de segredos. |
 | config_iac | Higiene de infraestrutura como código. |
-| contêineres | Segurança da imagem, análise. |
+| contêineres | Segurança e análise de imagens. |
 | tempo_de_execução | Tratamento de erros, resiliência. |
 | desempenho | Perfilamento, otimização. |
-| Observabilidade | Registro, rastreamento, métricas |
-| Testes | Cobertura, tipos, integração com CI |
-| CI/CD | Segurança do pipeline, etapas de validação |
-| Implantação | Processo de lançamento, reversão |
-| Backup e recuperação de desastres | Planos de backup, recuperação |
-| Monitoramento | Alertas, tempo de atividade |
-| Conformidade e privacidade | Tratamento de dados, GDPR |
-| Cadeia de suprimentos | SBOM, rastreabilidade |
-| Integrações | Contratos de API, versionamento |
+| observabilidade | Registro, rastreamento, métricas. |
+| testes | Cobertura, tipos, integração com CI. |
+| cicd | Segurança do pipeline, validações. |
+| implantação | Processo de lançamento, reversão. |
+| backup_dr | Planos de backup e recuperação. |
+| monitoramento | Alertas, tempo de atividade. |
+| conformidade_privacidade | Tratamento de dados, GDPR. |
+| cadeia_de_suprimentos | SBOM, rastreabilidade. |
+| integrações | Contratos de API, versionamento. |
 
-Cada execução de auditoria produz evidências estruturadas: resultados de controle (aprovado/reprovado/alerta/não aplicável), descobertas com severidade e correção, e métricas agregadas. A avaliação geral (postura) é derivada automaticamente: **saudável**, **requer atenção** ou **crítica**.
+Cada execução de auditoria gera evidências estruturadas: resultados dos controles (aprovado/reprovado/alerta/não aplicável), descobertas com severidade e correção, e métricas agregadas. O estado é derivado automaticamente: **saudável**, **requer atenção** ou **crítico**.
 
 ## Orquestração Multi-Agente: Os Jogos Claude
 
-O conhecimento do repositório inclui modelos para operações paralelas multi-Claude em grandes portfólios. Os Jogos Claude coordenam vários agentes de IA através de uma lista de tarefas compartilhada:
+repo-knowledge inclui modelos para operações paralelas multi-Claude em grandes portfólios. Os Jogos Claude coordenam vários agentes de IA por meio de uma lista de trabalho compartilhada:
 
-1. **Fase de Auditoria:** Cada agente seleciona repositórios da lista de tarefas, executa a auditoria de 80 controles e envia resultados estruturados.
-2. **Fase de Enriquecimento:** Os agentes adicionam análises, notas de arquitetura e mapeamentos de relacionamento.
-3. **Fase de Correção:** Os agentes corrigem as descobertas usando um fluxo de trabalho de 8 etapas com pontuação.
+1. **Passo de Auditoria** — Cada agente seleciona repositórios da lista de trabalho, executa a auditoria de 80 controles e envia os resultados estruturados.
+2. **Passo de Enriquecimento** — Os agentes adicionam teses, notas de arquitetura e mapeamentos de relacionamento.
+3. **Passo de Correção** — Os agentes corrigem as descobertas usando um fluxo de trabalho pontuado de 8 etapas.
 
-Consulte [`templates/claude-games/`](templates/claude-games/) para obter o roteiro completo.
+Veja [`templates/claude-games/`](templates/claude-games/) para o playbook completo.
 
 ## Modelo de Dados
 
@@ -186,7 +233,7 @@ Todos os dados são armazenados em um único banco de dados SQLite com pesquisa 
 
 ## Configuração
 
-Crie um arquivo `rk.config.json` na raiz do seu espaço de trabalho (ou execute `rk init`):
+Crie o arquivo `rk.config.json` na raiz do seu espaço de trabalho (ou execute `rk init`):
 
 ```json
 {
@@ -197,7 +244,7 @@ Crie um arquivo `rk.config.json` na raiz do seu espaço de trabalho (ou execute 
 }
 ```
 
-Variáveis de ambiente: `RK_DB_PATH`, `RK_OWNERS`, `RK_LOCAL_DIRS`.
+Todas as configurações são lidas do arquivo `rk.config.json` (criado por `rk init`). O servidor MCP também lê as configurações do diretório de trabalho.
 
 ## Licença
 
@@ -205,4 +252,4 @@ Variáveis de ambiente: `RK_DB_PATH`, `RK_OWNERS`, `RK_LOCAL_DIRS`.
 
 ---
 
-Desenvolvido por <a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a
+Desenvolvido por <a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a>
