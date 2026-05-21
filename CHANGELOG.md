@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `rk delete <slug>` — cascade-delete a repo and all child rows (notes, facts, docs, relationships, audit runs). `--yes` skips the confirmation prompt; default flow requires typing `yes` to confirm. Exits 2 on not-found or user abort.
+- `rk archive <slug> [--reason <text>]` — flip `lifecycle_status` to `archived` without deleting (preserves notes/findings). `--reason` is persisted as a `warning` note. Idempotent: archiving an already-archived repo is a no-op.
+- `rk verify-local [--rig <id>] [--strict]` — verify each repo's `local_path` exists on the current rig and update `repo_local_paths` with a fresh timestamp. Rig defaults to `RK_RIG_ID` env or `os.hostname()`. `--strict` exits non-zero if any drift detected.
+- `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` — one-shot registration of the current rig in the `rigs` table. Idempotent; safe to re-run.
+- `rk prune [--dry-run] [--apply] [--days <N>]` — hard-delete repos archived longer than N days (default 30). Dry-run by default; `--apply` requires a single batch confirmation listing all candidates. GitHub-404 probe deferred to Feature 2.
+
+### Changed
+
+- CLI now uses `parseAsync()` so unhandled rejections from async action handlers surface (and exit non-zero) instead of being swallowed.
+
 ## [1.0.5] - 2026-03-25
 
 ### Added

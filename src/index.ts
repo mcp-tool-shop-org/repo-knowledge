@@ -34,7 +34,14 @@ export {
   upsertRepo, upsertTech, setTopics, upsertFact, upsertDoc, upsertNote,
   upsertRelease, addRelationship,
   getRepo, findRepos, getRelated, getRepoIdBySlug, getAllRepos, getStats,
+  // F-BE-FT1: lifecycle + cross-rig path helpers (migration-006). Surface
+  // them from the public API so MCP server and integration tests can
+  // reach them without importing from db/init directly.
+  upsertRig, getRig, listRigs,
+  upsertRepoLocalPath, getRepoLocalPaths,
+  deleteRepoBySlug, archiveRepoBySlug, setReplacedBy, findStaleArchived,
 } from './db/init.js';
+export type { RigRow, RepoLocalPathRow } from './db/init.js';
 
 // Search
 export { rebuildIndex, search, searchRepos } from './search/fts.js';

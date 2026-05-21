@@ -3,14 +3,18 @@
  *
  * Writes a minimal v1 schema to a temp DB and opens it via openDb().
  * Asserts that:
- *   - schema_version reaches '4' (the current head)
+ *   - schema_version reaches '6' (current head — was '4' through Stage A,
+ *     bumped by migration-006 in FT-1 for lifecycle + cross-rig paths)
  *   - audit_runs / audit_controls / audit_findings tables exist
  *   - idx_findings_canonical (from migration 004) exists
+ *   - migration-006 added repos.lifecycle_status column, rigs table,
+ *     repo_local_paths table, and idx_repo_local_paths_repo index
  *   - the per-migration version bumps run in order (no skips)
  *
- * The backend agent's F-DB-001 fix unifies version bumping so that the
- * end state is always '4' after openDb on a v1 DB. This test pins that
- * post-condition.
+ * History: F-DB-001 unified version bumping so v1 → '4' after openDb. FT-1
+ * extended the ladder with migration-006 (additive, bumps to '6'); the
+ * FTS-trigger migration (005) is independent and intentionally does NOT
+ * bump the linear version (uses its own meta marker fts_triggers_added).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
@@ -73,7 +77,7 @@ function writeMinimalV1Schema(path: string): void {
 }
 
 describe('Migration sequence (F-TS-007)', () => {
-  it('migrates v1 → v4 on first openDb', () => {
+  it('migrates v1 → v6 on first openDb', () => {
     writeMinimalV1Schema(dbPath);
 
     // Pre-condition: version is '1'
@@ -87,9 +91,10 @@ describe('Migration sequence (F-TS-007)', () => {
     openDb(dbPath);
     const db = getDb();
 
-    // Post-condition: version is '4' (current head)
+    // Post-condition: version is '6' (current head after FT-1's
+    // migration-006 added lifecycle + cross-rig paths).
     const v = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
-    expect(v.value).toBe('4');
+    expect(v.value).toBe('6');
   });
 
   it('creates audit tables on migration', () => {
@@ -142,7 +147,7 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(colNames).toContain('pass_rate');
   });
 
-  it('is idempotent — opening an already-v4 DB does not regress', () => {
+  it('is idempotent — opening an already-v6 DB does not regress', () => {
     writeMinimalV1Schema(dbPath);
     openDb(dbPath);
     const v1 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
@@ -151,22 +156,75 @@ describe('Migration sequence (F-TS-007)', () => {
     // Second open: already at head, should not re-run anything destructive
     openDb(dbPath);
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('4');
-    expect(v2).toBe('4');
+    expect(v1).toBe('6');
+    expect(v2).toBe('6');
   });
 
   it('opening a brand-new (no-file) DB produces head schema directly', () => {
     // No pre-existing file — openDb should detect missing repos table,
     // load schema.sql, then run migrations 002+ to bring schema_version
-    // to '4'.
+    // to '6' (the FT-1 head).
     const freshPath = join(tmpDir, 'fresh.db');
     openDb(freshPath);
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('4');
+    expect(v).toBe('6');
 
     const tables = getDb().prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = 'audit_runs'"
     ).all() as { name: string }[];
     expect(tables.length).toBe(1);
+  });
+
+  it('migration-006 adds repos.lifecycle_status / deprecated_at / replaced_by_repo_id columns', () => {
+    writeMinimalV1Schema(dbPath);
+    openDb(dbPath);
+    const db = getDb();
+
+    const cols = db.prepare("PRAGMA table_info(repos)").all() as { name: string; dflt_value: string | null }[];
+    const colNames = cols.map(c => c.name);
+    expect(colNames).toContain('lifecycle_status');
+    expect(colNames).toContain('deprecated_at');
+    expect(colNames).toContain('replaced_by_repo_id');
+
+    // The default for lifecycle_status is 'active' per migration-006's
+    // ADD COLUMN ... DEFAULT 'active'. PRAGMA returns it as a quoted literal.
+    const lc = cols.find(c => c.name === 'lifecycle_status');
+    expect(lc).toBeDefined();
+    expect(lc!.dflt_value).toMatch(/active/);
+  });
+
+  it('migration-006 creates the rigs and repo_local_paths tables', () => {
+    writeMinimalV1Schema(dbPath);
+    openDb(dbPath);
+    const db = getDb();
+
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+    ).all() as { name: string }[];
+    const names = tables.map(t => t.name);
+    expect(names).toContain('rigs');
+    expect(names).toContain('repo_local_paths');
+  });
+
+  it('migration-006 creates the idx_repo_local_paths_repo index', () => {
+    writeMinimalV1Schema(dbPath);
+    openDb(dbPath);
+    const db = getDb();
+
+    const idx = db.prepare(
+      "SELECT name, sql FROM sqlite_master WHERE type='index' AND name = 'idx_repo_local_paths_repo'"
+    ).get() as { name: string; sql: string } | undefined;
+    expect(idx).toBeDefined();
+    expect(idx!.sql).toMatch(/repo_local_paths/);
+  });
+
+  it('migration-006 is idempotent — re-opening v6 DB does not error', () => {
+    // Bring up to v6, close, open again. No throw, version unchanged.
+    writeMinimalV1Schema(dbPath);
+    openDb(dbPath);
+    closeDb();
+    expect(() => openDb(dbPath)).not.toThrow();
+    const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
+    expect(v).toBe('6');
   });
 });

@@ -26,7 +26,19 @@ import { program } from 'commander';
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { openDb, getDb, closeDb, getRepo, findRepos, getRelated, getAllRepos, getStats, upsertNote, addRelationship } from './db/init.js';
+import * as readline from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
+import { hostname } from 'node:os';
+import {
+  openDb, getDb, closeDb, getRepo, findRepos, getRelated, getAllRepos, getStats,
+  upsertNote, addRelationship,
+  // F-BE-FT1: lifecycle + cross-rig helpers (provided by DB agent in
+  // migration-006 + init.ts extensions). CLI assumes these signatures;
+  // coordinator reconciles if mismatched.
+  upsertRig, listRigs,
+  upsertRepoLocalPath,
+  deleteRepoBySlug, archiveRepoBySlug, findStaleArchived,
+} from './db/init.js';
 import { fullSync } from './sync/index.js';
 import { ingestLocalRepo } from './sync/local.js';
 import { rebuildIndex, searchRepos } from './search/fts.js';
@@ -483,6 +495,328 @@ program
     closeDb();
   });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIFECYCLE + CROSS-RIG SUBCOMMANDS (F-BE-FT1 — Axis 3 + Axis 5 commands)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// F-BE-FT1: slug shape validator. Matches owner/name where each segment may
+// contain word chars, dots, hyphens. Centralized here so all FT1 commands
+// reject malformed slugs with the same friendly error before opening the DB.
+const SLUG_RE = /^[\w.-]+\/[\w.-]+$/;
+function validateSlug(slug: string, cmdHint: string): void {
+  if (!SLUG_RE.test(slug)) {
+    console.error(`Error: invalid slug "${slug}".`);
+    console.error(`Expected: owner/name (e.g., mcp-tool-shop-org/repo-knowledge).`);
+    console.error(`Example: rk ${cmdHint} mcp-tool-shop-org/repo-knowledge`);
+    process.exit(2);
+  }
+}
+
+// F-BE-FT1: resolve the active rig id with the documented precedence:
+// explicit CLI flag > RK_RIG_ID env > os.hostname() > 'unknown'. Used by
+// both verify-local and init-rig.
+function resolveRigId(explicit?: string): string {
+  if (explicit && explicit.trim()) return explicit.trim();
+  const envId = process.env.RK_RIG_ID;
+  if (envId && envId.trim()) return envId.trim();
+  const host = hostname();
+  if (host && host.trim()) return host.trim();
+  return 'unknown';
+}
+
+// F-BE-FT1: prompt for explicit "yes" confirmation. Anything else aborts.
+// Uses node's built-in readline/promises so we don't take a new dep. The
+// caller is responsible for closing the DB on abort — confirm() returns
+// false and the action exits 2.
+async function confirm(question: string): Promise<boolean> {
+  const rl = readline.createInterface({ input, output });
+  try {
+    const answer = await rl.question(`${question} (type 'yes' to confirm): `);
+    return answer.trim().toLowerCase() === 'yes';
+  } finally {
+    rl.close();
+  }
+}
+
+// ─── delete ──────────────────────────────────────────────────────────────────
+// F-BE-FT1 (Axis 3): hard-delete a repo + all child rows via FK cascade.
+// Replaces the hand-rolled `sqlite3 ... DELETE FROM repos ...` workflow we
+// did for `npm-sovereignty` 2026-05-01.
+program
+  .command('delete <slug>')
+  .description('Hard-delete a repo and all child rows (cascade). Irreversible.')
+  .option('-y, --yes', 'Skip confirmation prompt', false)
+  .action(async (slug: string, opts: { yes: boolean }): Promise<void> => {
+    validateSlug(slug, 'delete');
+    openDb(config().dbPath);
+
+    // Resolve the repo first so we exit 2 cleanly on not-found before we
+    // prompt the user for anything.
+    const db = getDb();
+    const exists = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
+    if (!exists) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(2);
+    }
+
+    if (!opts.yes) {
+      console.log(`About to delete ${slug} and all related rows`);
+      console.log(`  (notes, facts, docs, relationships, audit runs — FK cascade)`);
+      const ok = await confirm('Type yes to delete');
+      if (!ok) {
+        console.log('Aborted.');
+        closeDb();
+        process.exit(2);
+      }
+    }
+
+    const result = deleteRepoBySlug(slug);
+    if (!result.deleted) {
+      // Race: the repo existed at the check above but was removed
+      // mid-action. Treat as not-found per the same exit-2 contract.
+      console.error(`Error: repo not found: ${slug}`);
+      closeDb();
+      process.exit(2);
+    }
+    console.log(`Deleted: ${slug} (${result.cascaded_rows} child rows cascaded)`);
+    closeDb();
+  });
+
+// ─── archive ─────────────────────────────────────────────────────────────────
+// F-BE-FT1 (Axis 3): flip lifecycle_status='archived' without deleting.
+// Preserves notes/findings — the 112 NULLed-path entries from the 2026-05-01
+// session should mostly land here, not in delete. Idempotent.
+program
+  .command('archive <slug>')
+  .description('Mark a repo archived (lifecycle_status=archived). Preserves notes/findings.')
+  .option('--reason <text>', 'Reason for archiving (recorded as a warning note)')
+  .action((slug: string, opts: { reason?: string }): void => {
+    validateSlug(slug, 'archive');
+    openDb(config().dbPath);
+
+    const db = getDb();
+    const row = db.prepare(
+      'SELECT id, lifecycle_status FROM repos WHERE slug = ?'
+    ).get(slug) as { id: number; lifecycle_status?: string | null } | undefined;
+    if (!row) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(2);
+    }
+
+    if (row.lifecycle_status === 'archived') {
+      console.log(`Already archived: ${slug}`);
+      closeDb();
+      return;
+    }
+
+    const result = archiveRepoBySlug(slug, { reason: opts.reason });
+    if (!result.archived) {
+      // Defensive: row existed above but UPDATE affected 0 rows. Treat as
+      // not-found per the same exit-2 contract.
+      console.error(`Error: repo not found: ${slug}`);
+      closeDb();
+      process.exit(2);
+    }
+
+    // Re-read deprecated_at so we display the canonical timestamp the DB
+    // wrote (datetime('now') in SQLite's UTC, not Node's ISO clock).
+    const after = db.prepare(
+      'SELECT deprecated_at FROM repos WHERE slug = ?'
+    ).get(slug) as { deprecated_at: string | null } | undefined;
+    const deprecatedAt = after?.deprecated_at ?? new Date().toISOString();
+    console.log(`Archived: ${slug} (deprecated_at ${deprecatedAt})`);
+
+    // F-BE-FT1: if --reason was supplied, persist it as a warning note so
+    // the rationale is queryable later via `rk show <slug>`. archiveRepoBySlug
+    // doesn't write notes itself — it just flips the status — so this is
+    // the canonical place to record the why.
+    if (opts.reason) {
+      upsertNote(row.id, 'warning', 'Archived', `Archived: ${opts.reason}`);
+    }
+    closeDb();
+  });
+
+// ─── verify-local ────────────────────────────────────────────────────────────
+// F-BE-FT1 (Axis 3 + Axis 5): per-rig local-path verification. Confirms
+// every repo's local_path actually exists on this rig and updates
+// repo_local_paths with a fresh timestamp. Replaces the manual
+// `for r in $(rk list --json); ls $r.local_path` workflow.
+program
+  .command('verify-local')
+  .description('Verify each repo local_path exists on the current rig')
+  .option('--rig <id>', 'Rig id (default: RK_RIG_ID env or hostname)')
+  .option('--strict', 'Exit non-zero if any drift detected', false)
+  .action((opts: { rig?: string; strict: boolean }): void => {
+    openDb(config().dbPath);
+    const rigId = resolveRigId(opts.rig);
+
+    // Confirm the rig is registered. Not strictly required for the DB
+    // agent's upsertRepoLocalPath to function, but nudges the user toward
+    // running init-rig once before the per-rig data starts piling up
+    // against an unregistered identifier.
+    let rigs: ReturnType<typeof listRigs>;
+    try {
+      rigs = listRigs();
+    } catch {
+      rigs = [];
+    }
+    const known = rigs.some((r) => r.rig_id === rigId);
+    if (!known) {
+      console.log(`Note: rig "${rigId}" is not registered.`);
+      console.log(`Hint: rk init-rig --id ${rigId}  (registers this rig in the rigs table)`);
+    }
+
+    const repos = getAllReposForVerify();
+    let live = 0;
+    let drifted = 0;
+    let skipped = 0;
+    const drift: Array<{ slug: string; local_path: string }> = [];
+
+    for (const r of repos) {
+      if (!r.local_path) {
+        skipped += 1;
+        continue;
+      }
+      if (existsSync(r.local_path)) {
+        live += 1;
+        upsertRepoLocalPath({
+          repo_id: r.id,
+          rig_id: rigId,
+          local_path: r.local_path,
+        });
+      } else {
+        drifted += 1;
+        drift.push({ slug: r.slug, local_path: r.local_path });
+      }
+    }
+
+    console.log(
+      `Verified ${repos.length} repos on rig ${rigId}: ${live} paths live, ${drifted} drifted (local_path doesn't exist), ${skipped} skipped (NULL local_path).`
+    );
+    if (drift.length) {
+      console.log(`\nDrifted (${drift.length}):`);
+      for (const d of drift) {
+        console.log(`  ${d.slug}`);
+        console.log(`    ${d.local_path}`);
+      }
+    }
+
+    closeDb();
+    if (opts.strict && drifted > 0) {
+      process.exit(1);
+    }
+  });
+
+// F-BE-FT1: minimal projection over repos table for verify-local. We need
+// id + slug + local_path; getAllRepos() drops id and findRepos() forces a
+// LEFT JOIN to repo_tech which is wasteful here. Local helper keeps the
+// public API surface unchanged.
+function getAllReposForVerify(): Array<{ id: number; slug: string; local_path: string | null }> {
+  const db = getDb();
+  return db.prepare(
+    'SELECT id, slug, local_path FROM repos ORDER BY owner, name'
+  ).all() as Array<{ id: number; slug: string; local_path: string | null }>;
+}
+
+// ─── init-rig ────────────────────────────────────────────────────────────────
+// F-BE-FT1 (Axis 3): one-shot rig registration. Inserts/updates rigs row
+// with id + hostname + primary_root + last_seen_at. Idempotent.
+program
+  .command('init-rig')
+  .description('Register the current rig (or specified rig) in the rigs table')
+  .option('--id <id>', 'Rig id (default: RK_RIG_ID env or hostname)')
+  .option('--hostname <h>', 'Hostname (default: os.hostname())')
+  .option('--root <path>', 'Primary workspace root (default: cwd)')
+  .action((opts: { id?: string; hostname?: string; root?: string }): void => {
+    openDb(config().dbPath);
+    const rigId = resolveRigId(opts.id);
+    const host = (opts.hostname && opts.hostname.trim()) || hostname() || 'unknown';
+    const root = (opts.root && opts.root.trim()) || process.cwd();
+
+    upsertRig({
+      rig_id: rigId,
+      hostname: host,
+      primary_root: root,
+    });
+
+    console.log(`Registered rig: ${rigId} at ${host} (root: ${root})`);
+    closeDb();
+  });
+
+// ─── prune ───────────────────────────────────────────────────────────────────
+// F-BE-FT1 (Axis 3): hard-delete repos that have been archived longer than
+// --days. GitHub-404 probe deliberately deferred to Feature 2 — too much
+// network risk in this wave per kickoff scoping. Dry-run by default;
+// --apply gated behind a single confirmation listing all candidates.
+program
+  .command('prune')
+  .description('Hard-delete repos archived longer than --days')
+  .option('--dry-run', 'Show candidates without deleting (default)', false)
+  .option('--apply', 'Actually delete the archived candidates', false)
+  .option('--days <n>', 'Minimum days since archive', '30')
+  .action(async (opts: { dryRun: boolean; apply: boolean; days: string }): Promise<void> => {
+    const days = parsePositiveInt(opts.days, '--days');
+    openDb(config().dbPath);
+
+    const candidates = findStaleArchived(days);
+
+    if (!candidates.length) {
+      console.log(`Pruning candidates (archived > ${days} days): none.`);
+      closeDb();
+      return;
+    }
+
+    const slugs = candidates.map((c) => String(c.slug));
+
+    if (!opts.apply) {
+      // Default mode is dry-run. Listing alone is informational; user
+      // re-runs with --apply when ready.
+      console.log(`Pruning candidates (archived > ${days} days): ${candidates.length} repo(s).`);
+      for (const c of candidates) {
+        const since = c.deprecated_at ? ` (archived ${c.deprecated_at})` : '';
+        console.log(`  ${c.slug}${since}`);
+      }
+      console.log(`\nDry-run only. Re-run with --apply to delete.`);
+      closeDb();
+      return;
+    }
+
+    // --apply path: one confirmation for the whole batch.
+    console.log(`Pruning ${candidates.length} repo(s) archived > ${days} days:`);
+    for (const c of candidates) {
+      console.log(`  ${c.slug}`);
+    }
+    const ok = await confirm('Type yes to delete all listed candidates');
+    if (!ok) {
+      console.log('Aborted.');
+      closeDb();
+      process.exit(2);
+    }
+
+    let totalCascaded = 0;
+    let deletedCount = 0;
+    for (const slug of slugs) {
+      try {
+        const result = deleteRepoBySlug(slug);
+        if (result.deleted) {
+          deletedCount += 1;
+          totalCascaded += result.cascaded_rows;
+        }
+      } catch (e: unknown) {
+        console.error(`  Failed: ${slug} — ${(e as Error).message}`);
+      }
+    }
+
+    console.log(
+      `Pruned ${deletedCount} repo(s), ${totalCascaded} child rows cascaded.`
+    );
+    closeDb();
+  });
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function resolveRepoId(slug: string): number | null {
@@ -816,9 +1150,10 @@ games
 
 program.option('--debug', 'Show stack traces and verbose output', false);
 
-try {
-  program.parse();
-} catch (e: unknown) {
+// F-BE-FT1: parseAsync surfaces rejections from async action handlers
+// (delete, prune, sync, sync-dogfood). With parse(), an unhandled
+// rejection would historically log nothing and exit 0 — pre-v1.0.6 bug.
+program.parseAsync().catch((e: unknown) => {
   const err = e instanceof Error ? e : new Error(String(e));
   if (program.opts().debug) {
     console.error(err);
@@ -826,4 +1161,4 @@ try {
     console.error(`Error: ${err.message}`);
   }
   process.exit(2);
-}
+});
