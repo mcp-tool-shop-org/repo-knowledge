@@ -30,6 +30,7 @@ const MIGRATION_007 = resolveSql('migration-007-publish-state.sql');
 const MIGRATION_008 = resolveSql('migration-008-build-health.sql');
 const MIGRATION_009 = resolveSql('migration-009-build-health-extensions.sql');
 const MIGRATION_010 = resolveSql('migration-010-operational-runs.sql');
+const MIGRATION_011 = resolveSql('migration-011-cross-tool-vocab.sql');
 
 let _db: DatabaseType | null = null;
 let _dbPath: string | null = null;
@@ -55,6 +56,25 @@ function execMigrationIdempotent(db: DatabaseType, sql: string, label: string): 
       // (CREATE INDEX IF NOT EXISTS, INSERT OR REPLACE, etc.).
       return;
     }
+    throw new Error(`Migration ${label} failed: ${msg}`, { cause: e });
+  }
+}
+
+/**
+ * Strict migration runner — does NOT swallow "duplicate column name."
+ *
+ * Used for migrations that DROP+RECREATE a table (e.g. migration-011's
+ * CHECK-constraint extension via the SQLite "create new → copy → rename"
+ * pattern). The idempotent runner above tolerates partial state by
+ * swallowing duplicate-column errors; a recreate-table migration must
+ * either fully apply or fully reject — the migration is gated at the
+ * call site by a meta marker so it is invoked only when needed.
+ */
+function execMigrationStrict(db: DatabaseType, sql: string, label: string): void {
+  try {
+    db.exec(sql);
+  } catch (e: unknown) {
+    const msg = (e as Error)?.message ?? String(e);
     throw new Error(`Migration ${label} failed: ${msg}`, { cause: e });
   }
 }
@@ -238,6 +258,66 @@ export function openDb(dbPath: string): DatabaseType {
     const migration = readFileSync(MIGRATION_010, 'utf-8');
     execMigrationIdempotent(_db, migration, '010 (operational runs)');
     console.log('Applied migration 010: operational runs (db_health_runs + sync_runs)');
+  }
+
+  // Migration 011 — cross-tool vocabulary (FT-5). Gated on schema_version:
+  // only runs if current version < 11. Uses execMigrationStrict because
+  // the CHECK-constraint extension is done via the SQLite-recommended
+  // "create new table → INSERT...SELECT → DROP → RENAME" pattern, which
+  // must either fully apply or fully reject — there is no
+  // partially-applied state the idempotent runner could safely tolerate.
+  //
+  // Adds: two new relation_type values ('wraps',
+  // 'collaborated_in_mission') extending the migration-001 CHECK enum;
+  // repos.forge_vault_path column for game repos that point at their
+  // forge-vault wing.
+  //
+  // Defensive guards:
+  //   * check the cross_tool_vocab_added meta marker before running the
+  //     SQL so a manual operator backfill that bumped schema_version
+  //     directly without running the SQL doesn't double-apply.
+  //   * detect minimal-v1 schema fixtures that lack repo_relationships
+  //     (e.g. migration-sequence test). We apply only the additive
+  //     forge_vault_path ADD COLUMN + version bump in that case; the
+  //     CHECK-extension is a no-op when the table itself doesn't exist
+  //     yet, so a future schema.sql will need to ship the extended enum
+  //     directly. The current src/db/schema.sql already does, so any
+  //     fresh openDb against missing-file produces the new enum from
+  //     the start.
+  const version10 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
+  if (parseInt(version10) < 11) {
+    const marker = _db.prepare("SELECT value FROM meta WHERE key = 'cross_tool_vocab_added'").get() as { value: string } | undefined;
+    if (!marker) {
+      const hasRelTable = _db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='repo_relationships'"
+      ).get();
+      if (hasRelTable) {
+        const migration = readFileSync(MIGRATION_011, 'utf-8');
+        execMigrationStrict(_db, migration, '011 (cross-tool vocabulary)');
+        console.log('Applied migration 011: cross-tool vocabulary (relation types + forge_vault_path)');
+      } else {
+        // Minimal-fixture path: no repo_relationships to extend, so
+        // only the additive forge_vault_path column + version bump are
+        // possible here. ADD COLUMN may collide with a pre-existing
+        // column from a partial run; tolerate the duplicate.
+        try {
+          _db.exec("ALTER TABLE repos ADD COLUMN forge_vault_path TEXT");
+        } catch (e: unknown) {
+          const msg = (e as Error)?.message ?? String(e);
+          if (!msg.includes('duplicate column name')) {
+            throw new Error(`Migration 011 (cross-tool vocabulary, minimal fixture path) failed: ${msg}`, { cause: e });
+          }
+        }
+        _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
+        _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('cross_tool_vocab_added', datetime('now'))").run();
+        console.log('Applied migration 011: cross-tool vocabulary (minimal-fixture path — forge_vault_path only)');
+      }
+    } else {
+      // Meta marker present but version not yet stamped — bump version
+      // and move on. This handles a hypothetical race where the SQL
+      // partially ran (marker inserted before the version stamp).
+      _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
+    }
   }
 
   return _db;
@@ -1994,4 +2074,43 @@ export function listSyncRuns(limit: number = 20): SyncRunRow[] {
      ORDER BY started_at DESC, id DESC
      LIMIT ?
   `).all(limit) as SyncRunRow[];
+}
+
+// ─── FT-5: cross-tool vocabulary + forge-vault path ─────────────────────────
+
+/**
+ * Set the `forge_vault_path` on a repo by slug. Game repos point at their
+ * forge-vault wing (offline narrative / asset registry that lives outside
+ * the repo itself); non-game repos leave it NULL.
+ *
+ * Pass null to explicitly clear a previously-set path. Returns
+ * { updated: false } if the slug doesn't exist.
+ *
+ * The column is plain TEXT — we do not validate that the path actually
+ * exists on the rig running the call (forge-vaults can be on shared
+ * storage that only one rig mounts).
+ */
+export function setRepoForgeVaultPath(
+  slug: string,
+  forgeVaultPath: string | null
+): { updated: boolean } {
+  const db = getDb();
+  const r = db.prepare(
+    'UPDATE repos SET forge_vault_path = ? WHERE slug = ?'
+  ).run(forgeVaultPath, slug);
+  return { updated: r.changes > 0 };
+}
+
+/**
+ * Get the forge_vault_path for a repo by slug. Returns null if the slug
+ * doesn't exist OR if the column is NULL. Callers that need to
+ * distinguish those two cases should use getRepo() instead — getRepo's
+ * full row includes the column verbatim.
+ */
+export function getRepoForgeVaultPath(slug: string): string | null {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT forge_vault_path FROM repos WHERE slug = ?'
+  ).get(slug) as { forge_vault_path: string | null } | undefined;
+  return row?.forge_vault_path ?? null;
 }

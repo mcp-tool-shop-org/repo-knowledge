@@ -64,7 +64,11 @@ import { rebuildIndex, searchRepos } from './search/fts.js';
 import { seedControls } from './audit/controls.js';
 import { importAudit } from './audit/import.js';
 import { getAuditPosture, getPortfolioPosture, findByAuditStatus, getOpenFindings } from './audit/queries.js';
-import { resolveConfig } from './config.js';
+import {
+  resolveConfig,
+  // FT-5: owners-in-config subcommands (atomic file write).
+  listOwners, addOwner, removeOwner,
+} from './config.js';
 import { syncDogfood } from './sync/dogfood.js';
 import { suggestByRepo, suggestBySurface } from './sync/dogfood-suggest.js';
 import { parseWorklist } from './games/parser.js';
@@ -161,22 +165,88 @@ program
   });
 
 // ─── sync ────────────────────────────────────────────────────────────────────
+//
+// F-BE-FT5: when --owners / --local are omitted, resolveConfig falls back
+// to rk.config.json (file-supplied owners + localDirs). Earlier flow
+// passed empty defaults through and clobbered the file values via
+// `{ ...config, ...overrides }` — FT-5 fix in config.ts skips undefined
+// overrides so this CLI does not need to thread defaults manually.
+//
+// --local-depth caps the recursive .git scan inside scanDirectory; the
+// default of 4 covers the common F:/AI / E:/AI workspace tree without
+// blowing through node_modules-level pathology (denylist also prunes
+// build/dep dirs).
 program
   .command('sync')
   .description('Full sync: GitHub orgs + local repos + FTS index')
-  .option('--owners <owners>', 'Comma-separated GitHub owners', '')
-  .option('--local <dirs>', 'Comma-separated local directories', '.')
+  .option('--owners <owners>', 'Comma-separated GitHub owners (defaults to rk.config.json owners)')
+  .option('--local <dirs>', 'Comma-separated local directories (defaults to rk.config.json localDirs)')
+  .option('--local-depth <n>', 'Max recursion depth for --local scan (default: 4)', (v) => parsePositiveInt(v, '--local-depth'), 4)
   .option('--releases', 'Also sync releases (slower)', false)
   .option('--forks', 'Include forked repos', false)
-  .action(async (opts: { owners: string; local: string; releases: boolean; forks: boolean }): Promise<void> => {
+  .action(async (opts: { owners?: string; local?: string; localDepth: number; releases: boolean; forks: boolean }): Promise<void> => {
     openDb(config().dbPath);
     await fullSync({
       owners: opts.owners ? opts.owners.split(',') : undefined,
       localDirs: opts.local ? opts.local.split(',') : undefined,
+      localDepth: opts.localDepth,
       includeReleases: opts.releases,
       includeForks: opts.forks,
     });
     closeDb();
+  });
+
+// ─── owners ──────────────────────────────────────────────────────────────────
+//
+// F-BE-FT5 (Axis 2): manage the rk.config.json owners list in-place.
+// Atomic write (write-to-tmp, then rename) prevents corruption on crash.
+// `rk owners list` prints one owner per line for shell-piping.
+const owners = program
+  .command('owners')
+  .description('Manage the rk.config.json owners list (list / add / remove)');
+
+owners
+  .command('list')
+  .description('List GitHub owners currently in rk.config.json')
+  .action((): void => {
+    const all = listOwners();
+    if (all.length === 0) {
+      console.log('(no owners configured — edit rk.config.json or run `rk owners add <owner>`)');
+      return;
+    }
+    for (const o of all) console.log(o);
+  });
+
+owners
+  .command('add <owner>')
+  .description('Add a GitHub owner to rk.config.json (atomic write)')
+  .action((owner: string): void => {
+    if (!/^[A-Za-z0-9_.-]+$/.test(owner)) {
+      console.error(`Error: invalid owner "${owner}".`);
+      console.error('Expected: GitHub owner / org name (A-Z, a-z, 0-9, ".", "-", "_").');
+      process.exit(2);
+    }
+    const result = addOwner(owner);
+    if (!result.added) {
+      console.log(`Already present: ${owner}`);
+      return;
+    }
+    console.log(`Added: ${owner}`);
+    console.log(`Owners now: ${result.owners.join(', ')}`);
+  });
+
+owners
+  .command('remove <owner>')
+  .description('Remove a GitHub owner from rk.config.json (atomic write)')
+  .action((owner: string): void => {
+    const result = removeOwner(owner);
+    if (!result.removed) {
+      console.error(`Error: owner not found in rk.config.json: ${owner}`);
+      console.error('Run: rk owners list  (to see configured owners)');
+      process.exit(2);
+    }
+    console.log(`Removed: ${owner}`);
+    console.log(`Owners now: ${result.owners.length === 0 ? '(none)' : result.owners.join(', ')}`);
   });
 
 // ─── scan ────────────────────────────────────────────────────────────────────

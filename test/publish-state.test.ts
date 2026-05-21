@@ -299,15 +299,16 @@ describe('migration-007 idempotency (F-TS-FT2)', () => {
     openDb(dbPath);
     const db = getDb();
     const v1 = (db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    // Head version is '10' after FT-4 added migration-010 operational
-    // hygiene run tables. Pinning the literal here keeps idempotency-
-    // on-top semantics tested against the current head.
-    expect(v1).toBe('10');
+    // Head version is '11' after FT-5 added migration-011 cross-tool
+    // vocabulary on top of FT-4's operational hygiene run tables.
+    // Pinning the literal here keeps idempotency-on-top semantics
+    // tested against the current head.
+    expect(v1).toBe('11');
 
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v2).toBe('10');
+    expect(v2).toBe('11');
   });
 });
 

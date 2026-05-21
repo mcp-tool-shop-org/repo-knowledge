@@ -3,12 +3,12 @@
  *
  * Writes a minimal v1 schema to a temp DB and opens it via openDb().
  * Asserts that:
- *   - schema_version reaches '10' (current head — was '4' through Stage A,
+ *   - schema_version reaches '11' (current head — was '4' through Stage A,
  *     bumped by migration-006 in FT-1 for lifecycle + cross-rig paths,
  *     migration-007 in FT-2 for publish state, migration-008 in FT-3
  *     for build/dep/CI health, migration-009 in FT-3.5 for build-health
- *     extensions, and migration-010 in FT-4 for operational hygiene
- *     run tables)
+ *     extensions, migration-010 in FT-4 for operational hygiene run
+ *     tables, and migration-011 in FT-5 for cross-tool vocabulary)
  *   - audit_runs / audit_controls / audit_findings tables exist
  *   - idx_findings_canonical (from migration 004) exists
  *   - migration-006 added repos.lifecycle_status column, rigs table,
@@ -22,9 +22,11 @@
  * extended the ladder with migration-006 (additive, bumps to '6'); FT-2
  * added migration-007 (additive, bumps to '7'); FT-3 added migration-008
  * (additive, bumps to '8'); FT-3.5 added migration-009 (additive, bumps
- * to '9'); FT-4 added migration-010 (additive, bumps to '10'). The
- * FTS-trigger migration (005) is independent and intentionally does NOT
- * bump the linear version (uses its own meta marker fts_triggers_added).
+ * to '9'); FT-4 added migration-010 (additive, bumps to '10'); FT-5 added
+ * migration-011 (CHECK-constraint extension via create-new-table pattern,
+ * bumps to '11'). The FTS-trigger migration (005) is independent and
+ * intentionally does NOT bump the linear version (uses its own meta
+ * marker fts_triggers_added).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
@@ -87,7 +89,7 @@ function writeMinimalV1Schema(path: string): void {
 }
 
 describe('Migration sequence (F-TS-007)', () => {
-  it('migrates v1 → v10 on first openDb', () => {
+  it('migrates v1 → v11 on first openDb', () => {
     writeMinimalV1Schema(dbPath);
 
     // Pre-condition: version is '1'
@@ -101,11 +103,11 @@ describe('Migration sequence (F-TS-007)', () => {
     openDb(dbPath);
     const db = getDb();
 
-    // Post-condition: version is '10' (current head after FT-4's
-    // migration-010 added operational hygiene run tables on top of the
-    // FT-3.5 build-health extensions head at '9').
+    // Post-condition: version is '11' (current head after FT-5's
+    // migration-011 extended the relation_type CHECK enum + added
+    // repos.forge_vault_path on top of the FT-4 head at '10').
     const v = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
-    expect(v.value).toBe('10');
+    expect(v.value).toBe('11');
   });
 
   it('creates audit tables on migration', () => {
@@ -158,7 +160,7 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(colNames).toContain('pass_rate');
   });
 
-  it('is idempotent — opening an already-v10 DB does not regress', () => {
+  it('is idempotent — opening an already-v11 DB does not regress', () => {
     writeMinimalV1Schema(dbPath);
     openDb(dbPath);
     const v1 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
@@ -167,18 +169,18 @@ describe('Migration sequence (F-TS-007)', () => {
     // Second open: already at head, should not re-run anything destructive
     openDb(dbPath);
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('10');
-    expect(v2).toBe('10');
+    expect(v1).toBe('11');
+    expect(v2).toBe('11');
   });
 
   it('opening a brand-new (no-file) DB produces head schema directly', () => {
     // No pre-existing file — openDb should detect missing repos table,
     // load schema.sql, then run migrations 002+ to bring schema_version
-    // to '10' (the FT-4 head — migration-010 operational hygiene runs).
+    // to '11' (the FT-5 head — migration-011 cross-tool vocabulary).
     const freshPath = join(tmpDir, 'fresh.db');
     openDb(freshPath);
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('10');
+    expect(v).toBe('11');
 
     const tables = getDb().prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = 'audit_runs'"
@@ -229,14 +231,14 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(idx!.sql).toMatch(/repo_local_paths/);
   });
 
-  it('migration-006 is idempotent — re-opening v10 DB does not error', () => {
-    // Bring up to v10, close, open again. No throw, version unchanged.
+  it('migration-006 is idempotent — re-opening v11 DB does not error', () => {
+    // Bring up to v11, close, open again. No throw, version unchanged.
     writeMinimalV1Schema(dbPath);
     openDb(dbPath);
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('10');
+    expect(v).toBe('11');
   });
 
   it('migration-007 adds repos.npm_package_name / pypi_package_name / publisher_method columns', () => {

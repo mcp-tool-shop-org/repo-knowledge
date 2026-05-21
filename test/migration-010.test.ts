@@ -29,12 +29,12 @@ afterEach(() => {
 });
 
 describe('migration-010 (FT-4 operational hygiene)', () => {
-  it('opening a fresh DB lands at schema_version=10', () => {
+  it('opening a fresh DB lands at schema_version=11 (current head)', () => {
     openDb(dbPath);
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('10');
+    expect(v).toBe('11');
   });
 
   it('creates db_health_runs table with expected columns', () => {
@@ -123,7 +123,7 @@ describe('migration-010 (FT-4 operational hygiene)', () => {
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('10');
+    expect(v).toBe('11');
   });
 
   it('the new tables have no FK to repos — they survive repo deletion', () => {

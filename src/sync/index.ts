@@ -58,6 +58,13 @@ export interface SyncConfig {
   dbPath?: string;
   owners?: string[];
   localDirs?: string[];
+  /**
+   * FT-5: max recursion depth for `scanDirectory` when looking for git
+   * repos beneath a localDir. Default 4 — covers the common F:/AI or
+   * E:/AI workspace tree without pathological deep-tree blowup. Pass
+   * 0 to disable recursion entirely (the legacy pre-FT-5 behavior).
+   */
+  localDepth?: number;
   includeReleases?: boolean;
   includeForks?: boolean;
 }
@@ -113,9 +120,13 @@ export async function fullSync(config: SyncConfig = {}): Promise<FullSyncResult>
 
     console.log('\n=== Local Scan ===');
     const localTotal: ScanResult = { scanned: 0, skipped: 0, errors: [] };
+    // FT-5: localDepth=4 default propagates into scanDirectory's
+    // recursive .git probe. Operator can override to 0 (legacy
+    // single-level) or higher for deeper workspace trees.
+    const localDepth = config.localDepth ?? 4;
     for (const dir of localDirs) {
       console.log(`Scanning ${dir}...`);
-      const result = scanDirectory(dir);
+      const result = scanDirectory(dir, { maxDepth: localDepth });
       localTotal.scanned += result.scanned;
       localTotal.skipped += result.skipped;
       localTotal.errors.push(...result.errors);

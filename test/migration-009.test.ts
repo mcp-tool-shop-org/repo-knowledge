@@ -26,16 +26,16 @@ afterEach(() => {
 });
 
 describe('migration-009 (FT-3.5 build-health extensions)', () => {
-  it('opening a fresh DB lands at schema_version=10 (current head)', () => {
-    // Fresh openDb runs the whole migration ladder; current head is '10'
-    // post-FT-4. This test asserts the FT-3.5 v9 structures are present
+  it('opening a fresh DB lands at schema_version=11 (current head)', () => {
+    // Fresh openDb runs the whole migration ladder; current head is '11'
+    // post-FT-5. This test asserts the FT-3.5 v9 structures are present
     // (in the subsequent it()s) — the schema_version assertion just pins
     // the ladder is fully applied.
     openDb(dbPath);
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('10');
+    expect(v).toBe('11');
   });
 
   it('adds critical_cve_ids / high_cve_ids / audit_omit_dev to repo_dep_audit_state', () => {
@@ -127,14 +127,14 @@ describe('migration-009 (FT-3.5 build-health extensions)', () => {
     }).toThrow();
   });
 
-  it('re-opening a v10 DB is a no-op (idempotent)', () => {
+  it('re-opening a v11 DB is a no-op (idempotent)', () => {
     openDb(dbPath);
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('10');
+    expect(v).toBe('11');
   });
 
   it('cascades repo_dep_audit_history rows when the parent repo is deleted', () => {

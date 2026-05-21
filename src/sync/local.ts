@@ -386,30 +386,114 @@ export function ingestLocalRepo(repoPath: string): IngestResult {
 }
 
 /**
- * Scan all directories under a parent that look like git repos.
+ * FT-5: literal denylist of directory names that should NEVER be
+ * descended into during the recursive .git probe. Mostly build / dep
+ * output that can dwarf the actual repo tree (node_modules can hold
+ * thousands of nested package directories, vendor / target similarly).
+ *
+ * Anything starting with "." is ALSO skipped (handled in the scanner
+ * loop) — that covers .git, .next, .astro, etc. The denylist here is
+ * for non-dot names that still need pruning.
  */
-export function scanDirectory(parentDir: string): ScanResult {
+const LOCAL_SCAN_DENYLIST = new Set<string>([
+  'node_modules',
+  'dist',
+  'build',
+  'target',     // Rust + Java
+  'vendor',     // Go, PHP, Ruby
+  'out',        // some bundlers
+  '__pycache__',
+  '.venv',      // python venv (dot-prefixed but listed for clarity)
+  '.next',
+  '.astro',
+  '.svelte-kit',
+  '.turbo',
+  '.cache',
+  '.nuxt',
+  '.parcel-cache',
+  '.pnpm-store',
+  'coverage',
+]);
+
+export interface ScanDirectoryOptions {
+  /**
+   * Maximum recursion depth. 0 = legacy single-level (immediate
+   * children of parentDir only); 1 = one nested level; default 4
+   * covers the common F:/AI workspace tree without pathology.
+   */
+  maxDepth?: number;
+}
+
+/**
+ * Scan all directories under a parent that look like git repos.
+ *
+ * FT-5: recurses to `maxDepth` levels (default 4). Any subdirectory
+ * containing a `.git` directory is treated as a repo candidate and
+ * ingested; the scanner does NOT descend INTO a repo's children (an
+ * outer wrapper repo's vendored sub-repos are intentionally not
+ * double-counted — the wrapper is the unit of knowledge).
+ *
+ * Skips the LOCAL_SCAN_DENYLIST + any dot-prefixed directory.
+ */
+export function scanDirectory(
+  parentDir: string,
+  opts: ScanDirectoryOptions = {}
+): ScanResult {
+  const maxDepth = Math.max(0, opts.maxDepth ?? 0);
   const results: ScanResult = { scanned: 0, skipped: 0, errors: [] };
 
-  for (const entry of readdirSync(parentDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
-
-    const repoPath = join(parentDir, entry.name);
-    const isGit = existsSync(join(repoPath, '.git'));
-    if (!isGit) {
-      results.skipped++;
-      continue;
+  function walk(dir: string, depth: number): void {
+    // readdirSync overload disambiguation: `{ withFileTypes: true }`
+    // yields Dirent[], but the inferred return type can collapse to a
+    // wider Buffer-variant when we keep `let` typing — declare the
+    // narrowed shape explicitly.
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true }) as import('node:fs').Dirent[];
+    } catch (e: unknown) {
+      // Best-effort: a permission error or vanished directory is
+      // recorded but doesn't halt the walk.
+      results.errors.push(`${dir}: ${(e as Error).message}`);
+      return;
     }
 
-    try {
-      ingestLocalRepo(repoPath);
-      results.scanned++;
-      process.stdout.write('.');
-    } catch (e: any) {
-      results.errors.push(`${entry.name}: ${e.message}`);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      // Dot-prefixed: covers .git, .next, .astro, .venv, etc.
+      if (entry.name.startsWith('.')) continue;
+      // Literal denylist for non-dot build/dep dirs.
+      if (LOCAL_SCAN_DENYLIST.has(entry.name)) continue;
+
+      const repoPath = join(dir, entry.name);
+      const isGit = existsSync(join(repoPath, '.git'));
+
+      if (isGit) {
+        try {
+          ingestLocalRepo(repoPath);
+          results.scanned++;
+          process.stdout.write('.');
+        } catch (e: unknown) {
+          results.errors.push(`${entry.name}: ${(e as Error).message}`);
+        }
+        // Intentional: do NOT recurse INTO a git repo. A repo's children
+        // are part of that repo's tree (or vendored sub-repos that the
+        // wrapper has chosen to embed). Double-counting them blows up
+        // the scan count and yields confusing duplicate rows.
+        continue;
+      }
+
+      // Non-repo directory — recurse if we still have depth budget.
+      if (depth < maxDepth) {
+        walk(repoPath, depth + 1);
+      } else {
+        // We chose not to descend further; count as skipped so the
+        // operator sees the scan's reach.
+        results.skipped++;
+      }
     }
   }
+
+  walk(parentDir, 0);
   console.log();
 
   return results;

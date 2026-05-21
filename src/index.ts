@@ -6,7 +6,12 @@
  */
 
 // Config
-export { resolveConfig } from './config.js';
+export {
+  resolveConfig,
+  // FT-5: owners-in-config helpers (atomic write, in-place edit).
+  readRkConfigFile, writeRkConfigFile,
+  listOwners, addOwner, removeOwner,
+} from './config.js';
 export type { RkConfig } from './config.js';
 
 // Shared enum tuples — single source of truth for CLI + MCP validators.
@@ -23,6 +28,12 @@ export const NOTE_TYPES = [
 export const RELATION_TYPES = [
   'depends_on', 'related_to', 'supersedes',
   'shares_domain_with', 'shares_package_with', 'companion_to',
+  // FT-5: cross-tool vocabulary
+  // 'wraps' — A is a higher-level wrapper around B (e.g. an MCP server
+  //   that wraps a CLI tool).
+  // 'collaborated_in_mission' — A and B worked together inside a Role
+  //   OS mission (cross-tool cooperation evidence).
+  'wraps', 'collaborated_in_mission',
 ] as const;
 
 export type NoteType = (typeof NOTE_TYPES)[number];
@@ -62,6 +73,10 @@ export {
   // sync surface its missing observability.
   insertDbHealthRun, listDbHealthRuns, getLatestDbHealthRun,
   insertSyncRun, completeSyncRun, listSyncRuns,
+  // FT-5: cross-tool vocabulary + forge-vault path (migration-011).
+  // setRepoForgeVaultPath / getRepoForgeVaultPath surface the new column
+  // for game repos pointing at their forge-vault wing.
+  setRepoForgeVaultPath, getRepoForgeVaultPath,
 } from './db/init.js';
 export type {
   RigRow, RepoLocalPathRow,

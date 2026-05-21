@@ -2,7 +2,13 @@
  * GitHub sync — pulls repo metadata, topics, releases, and languages via gh CLI.
  */
 import { execFileSync } from 'child_process';
-import { upsertRepo, upsertRelease, setTopics, upsertFact, getDb } from '../db/init.js';
+import {
+  upsertRepo, upsertRelease, setTopics, upsertFact, getDb,
+  // FT-5: 404 → lifecycle_status='archived' + warning note. Uses the
+  // existing FT-1 archiver helper so the lifecycle column + deprecated_at
+  // are bumped in one place.
+  archiveRepoBySlug, upsertNote,
+} from '../db/init.js';
 
 /**
  * Validate a GitHub owner or repository name shape.
@@ -202,14 +208,85 @@ export function fetchReleases(owner: string, name: string): ReleaseInfo[] {
 }
 
 /**
+ * FT-5: snapshot the set of (owner, name) slugs for previously-active
+ * repos under the given owner. Used to compute the "vanished from
+ * GitHub" diff after the sync: previously-active minus seen-this-sync
+ * is the candidate-archived set.
+ *
+ * We deliberately scope by owner, not by the whole DB, because a sync
+ * targeting one org should never archive repos the OPERATOR didn't ask
+ * to sync. Joining across orgs would risk archiving a competitor's
+ * mirror just because we didn't fetch their org this round.
+ *
+ * Returns a Map<slug, repo_id> so the post-sync archiver doesn't have
+ * to re-query.
+ */
+function snapshotActiveSlugsByOwner(owner: string): Map<string, number> {
+  const db = getDb();
+  // Guard against fixtures that lack the lifecycle_status column (e.g.
+  // pre-migration-006 schemas in tests). We probe for the column and
+  // fall back to status='active' when missing. The COALESCE keeps the
+  // post-migration path identical: lifecycle_status='active' selects
+  // exactly the same rows.
+  const cols = db.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
+  const hasLifecycle = cols.some(c => c.name === 'lifecycle_status');
+  const sql = hasLifecycle
+    ? `SELECT id, slug FROM repos WHERE owner = ? AND coalesce(lifecycle_status, 'active') = 'active'`
+    : `SELECT id, slug FROM repos WHERE owner = ? AND coalesce(status, 'active') = 'active'`;
+  const rows = db.prepare(sql).all(owner) as { id: number; slug: string }[];
+  const m = new Map<string, number>();
+  for (const r of rows) m.set(r.slug, r.id);
+  return m;
+}
+
+/**
+ * FT-5: archive a vanished repo + add a warning note explaining why.
+ *
+ * Soft-archive (lifecycle_status='archived' via archiveRepoBySlug) so
+ * the operator can re-discover the row + decide whether to run `rk
+ * delete <slug>` for the hard cleanup. The note is the audit trail —
+ * it surfaces in `rk show <slug>` and in FTS so the operator can find
+ * "what disappeared from GitHub" weeks later.
+ */
+function archiveVanishedRepo(slug: string, repoId: number, owner: string, name: string): void {
+  archiveRepoBySlug(slug, { reason: 'gh-404-during-sync' });
+  const now = new Date().toISOString();
+  const note = `GitHub returned 404 at ${now}; repo may be deleted, private, or renamed. Investigate or run \`rk delete ${slug}\` to remove.`;
+  upsertNote(
+    repoId,
+    'warning',
+    `GitHub 404 — ${owner}/${name}`,
+    note,
+    'sync-github'
+  );
+}
+
+/**
  * Sync all repos for given owners into the database.
+ *
+ * FT-5: when a previously-active repo is not present in this sync's
+ * fetch results (GitHub returned 404 for it, or the org no longer lists
+ * it), we mark `lifecycle_status='archived'` and add a warning note.
+ *
+ * Defense against false positives: we only archive when the owner's
+ * fetch produced AT LEAST ONE successful repo entry. If the entire
+ * owner-level fetch failed (rate limit, network blip, auth missing),
+ * fetchGitHubRepos returns []; we treat that as "no signal" rather
+ * than "everything vanished." This is the load-bearing distinction
+ * between a single repo 404 (real signal) and a whole-org fetch failure
+ * (operational noise).
  */
 export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitHubSyncResult {
   const results: GitHubSyncResult = { synced: 0, skipped: 0, errors: [] };
 
   for (const owner of owners) {
     console.log(`Syncing ${owner}...`);
+    // FT-5: snapshot BEFORE we fetch so we know what was active going
+    // in. Whatever's not in the fetch results is a vanished candidate.
+    const priorActive = snapshotActiveSlugsByOwner(owner);
+
     const repos = fetchGitHubRepos(owner, opts);
+    const seenSlugs = new Set<string>();
 
     for (const repo of repos) {
       try {
@@ -254,6 +331,7 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
         });
         tx();
 
+        seenSlugs.add(`${repo.owner}/${repo.name}`);
         results.synced++;
         process.stdout.write('.');
       } catch (e: any) {
@@ -261,6 +339,24 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
       }
     }
     console.log();
+
+    // FT-5: vanished-repo archival. Only fires when this owner-fetch
+    // produced at least one result — empty fetch = ambient failure,
+    // not signal.
+    if (repos.length > 0) {
+      for (const [slug, repoId] of priorActive.entries()) {
+        if (seenSlugs.has(slug)) continue;
+        // The slug was active before this sync but not in this sync's
+        // GitHub results — treat as vanished.
+        const [vOwner, vName] = slug.split('/', 2);
+        try {
+          archiveVanishedRepo(slug, repoId, vOwner ?? owner, vName ?? slug);
+          console.log(`  archived (gh-404): ${slug}`);
+        } catch (e: unknown) {
+          results.errors.push(`archive ${slug}: ${(e as Error).message}`);
+        }
+      }
+    }
   }
 
   return results;
