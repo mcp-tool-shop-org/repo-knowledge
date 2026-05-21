@@ -3,15 +3,30 @@
  */
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const SCHEMA_PATH = join(import.meta.dirname, 'schema.sql');
-const MIGRATION_002 = join(import.meta.dirname, 'migration-002-audit.sql');
-const MIGRATION_003 = join(import.meta.dirname, 'migration-003-metrics-v2.sql');
-const MIGRATION_004 = join(import.meta.dirname, 'migration-004-findings-idempotent.sql');
-const MIGRATION_005 = join(import.meta.dirname, 'migration-005-fts-triggers.sql');
-const MIGRATION_006 = join(import.meta.dirname, 'migration-006-lifecycle-paths.sql');
+// Resolve a SQL asset by name across both layouts:
+//   - dev (tsx / vitest): this module lives at src/db/, SQL siblings are right here
+//   - prod (tsup bundle): cli.js lives at dist/, SQL is one level deeper at dist/db/
+// import.meta.dirname is computed at module load time per layout. We probe the
+// direct sibling first and fall back to the dist/db/ subfolder before giving up.
+function resolveSql(name: string): string {
+  const here = import.meta.dirname;
+  const sibling = join(here, name);
+  if (existsSync(sibling)) return sibling;
+  const nested = join(here, 'db', name);
+  if (existsSync(nested)) return nested;
+  throw new Error(`SQL asset not found: ${name} (looked in ${here} and ${join(here, 'db')})`);
+}
+
+const SCHEMA_PATH = resolveSql('schema.sql');
+const MIGRATION_002 = resolveSql('migration-002-audit.sql');
+const MIGRATION_003 = resolveSql('migration-003-metrics-v2.sql');
+const MIGRATION_004 = resolveSql('migration-004-findings-idempotent.sql');
+const MIGRATION_005 = resolveSql('migration-005-fts-triggers.sql');
+const MIGRATION_006 = resolveSql('migration-006-lifecycle-paths.sql');
+const MIGRATION_007 = resolveSql('migration-007-publish-state.sql');
 
 let _db: DatabaseType | null = null;
 let _dbPath: string | null = null;
@@ -163,6 +178,17 @@ export function openDb(dbPath: string): DatabaseType {
     }
 
     console.log('Applied migration 006: lifecycle status + cross-rig paths');
+  }
+
+  // Migration 007 — publish state (npm/pypi package bindings + version
+  // registry). Gated on schema_version: only runs if current version < 7.
+  // Additive (ALTER TABLE ADD COLUMN, CREATE TABLE/INDEX IF NOT EXISTS)
+  // and bumps schema_version to '7' at the end.
+  const version6 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
+  if (parseInt(version6) < 7) {
+    const migration = readFileSync(MIGRATION_007, 'utf-8');
+    execMigrationIdempotent(_db, migration, '007 (publish state)');
+    console.log('Applied migration 007: publish state (package bindings + version registry)');
   }
 
   return _db;
@@ -865,4 +891,209 @@ export function findStaleArchived(days: number): Record<string, unknown>[] {
        AND deprecated_at < date('now', '-' || ? || ' days')
      ORDER BY deprecated_at ASC
   `).all(days) as Record<string, unknown>[];
+}
+
+// ─── FT-2: publish state ────────────────────────────────────────────────────
+
+/**
+ * Closed enum of valid `publisher_method` values for repos. Enforced at
+ * the application layer (the SQLite column has no CHECK constraint
+ * because of the same ADD COLUMN limitation as lifecycle_status).
+ *
+ * Values:
+ *   - 'pypi_trusted'        — PyPI trusted publisher (OIDC, no token)
+ *   - 'pypi_token'          — legacy PyPI API token
+ *   - 'npm_token'           — npm classic token
+ *   - 'npm_trusted'         — npm trusted publisher (OIDC + provenance)
+ *   - 'github_release_only' — releases via gh release create, no registry
+ *   - 'none'                — nothing published anywhere
+ */
+export const PUBLISHER_METHODS = [
+  'pypi_trusted',
+  'pypi_token',
+  'npm_token',
+  'npm_trusted',
+  'github_release_only',
+  'none',
+] as const;
+export type PublisherMethod = typeof PUBLISHER_METHODS[number];
+
+/**
+ * Valid channel values for `repo_published_versions.channel`. Enforced at
+ * the application layer when callers go through upsertPublishedVersion.
+ * The DB does NOT constrain this — direct INSERTs from tests / sync code
+ * can use other strings, but the type system steers normal use here.
+ */
+export const PUBLISHED_VERSION_CHANNELS = [
+  'npm',
+  'pypi',
+  'github_release',
+  'vsce',
+] as const;
+export type PublishedVersionChannel = typeof PUBLISHED_VERSION_CHANNELS[number];
+
+export interface PublishedVersionRow {
+  id: number;
+  repo_id: number;
+  channel: string;
+  version: string;
+  published_at: string | null;
+  source: string | null;
+  synced_at: string;
+}
+
+export interface PublishedVersionUpsert {
+  repo_id: number | bigint;
+  channel: string;
+  version: string;
+  published_at?: string | null;
+  source?: string | null;
+}
+
+/**
+ * Insert-or-update a (repo_id, channel, version) row. On conflict the
+ * row keeps its existing `published_at` if the new value is null —
+ * registries sometimes drop the timestamp on re-query, and we don't
+ * want a re-sync to erase a known-good timestamp. `synced_at` always
+ * refreshes to the current time (the whole point of the upsert is "we
+ * just saw this version on this channel").
+ *
+ * `source` is overwritten when provided so a later, more authoritative
+ * sync can replace an earlier ad-hoc source label.
+ */
+export function upsertPublishedVersion(args: PublishedVersionUpsert): void {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO repo_published_versions
+      (repo_id, channel, version, published_at, source, synced_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(repo_id, channel, version) DO UPDATE SET
+      published_at = coalesce(excluded.published_at, published_at),
+      source       = coalesce(excluded.source, source),
+      synced_at    = datetime('now')
+  `).run(
+    args.repo_id,
+    args.channel,
+    args.version,
+    n(args.published_at),
+    n(args.source)
+  );
+}
+
+/**
+ * Return the most-recently-synced version for a given (repo, channel).
+ *
+ * "Most recently synced" is usually the latest published version — npm /
+ * pypi list versions newest-first, and a fresh sync overwrites
+ * synced_at. We deliberately order by synced_at (not published_at)
+ * because some channels report null published_at, and ordering by
+ * published_at would push those rows to the tail unhelpfully.
+ *
+ * Returns null if no row exists.
+ */
+export function getLatestPublishedVersion(
+  repo_id: number | bigint,
+  channel: string
+): PublishedVersionRow | null {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT * FROM repo_published_versions
+     WHERE repo_id = ? AND channel = ?
+     ORDER BY synced_at DESC
+     LIMIT 1
+  `).get(repo_id, channel) as PublishedVersionRow | undefined;
+  return row ?? null;
+}
+
+/**
+ * List every published-version row for a repo, across channels.
+ * Sorted by (channel, synced_at DESC) so callers can group by channel
+ * and see the most-recent entries first within each group.
+ */
+export function listPublishedVersions(
+  repo_id: number | bigint
+): PublishedVersionRow[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM repo_published_versions
+     WHERE repo_id = ?
+     ORDER BY channel ASC, synced_at DESC
+  `).all(repo_id) as PublishedVersionRow[];
+}
+
+/**
+ * Set package-name bindings and publisher_method on a repo by slug.
+ *
+ * All three fields are optional — pass only what you want to set.
+ * undefined leaves the existing value intact; null explicitly clears it
+ * (use `npm: null` to unbind a previously-set name). This mirrors the
+ * coalesce(?, existing) pattern from upsertRepo but accepts an explicit
+ * clear via null.
+ *
+ * Validates publisher_method against PUBLISHER_METHODS — throws on
+ * out-of-enum values rather than silently writing garbage. Returns
+ * { updated: false } if the slug doesn't exist.
+ */
+export function setRepoPackageNames(
+  slug: string,
+  names: {
+    npm?: string | null;
+    pypi?: string | null;
+    publisher_method?: PublisherMethod | null;
+  }
+): { updated: boolean } {
+  if (
+    names.publisher_method !== undefined &&
+    names.publisher_method !== null &&
+    !PUBLISHER_METHODS.includes(names.publisher_method)
+  ) {
+    throw new Error(
+      `Invalid publisher_method: ${JSON.stringify(names.publisher_method)} — must be one of ${PUBLISHER_METHODS.join(', ')}`
+    );
+  }
+
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
+  if (!existing) return { updated: false };
+
+  // Build the SET clause dynamically so undefined leaves columns intact.
+  // null is treated as an explicit clear.
+  const sets: string[] = [];
+  const params: (string | null)[] = [];
+  if (names.npm !== undefined) {
+    sets.push('npm_package_name = ?');
+    params.push(names.npm);
+  }
+  if (names.pypi !== undefined) {
+    sets.push('pypi_package_name = ?');
+    params.push(names.pypi);
+  }
+  if (names.publisher_method !== undefined) {
+    sets.push('publisher_method = ?');
+    params.push(names.publisher_method);
+  }
+
+  if (sets.length === 0) return { updated: false };
+
+  params.push(slug);
+  const r = db.prepare(
+    `UPDATE repos SET ${sets.join(', ')} WHERE slug = ?`
+  ).run(...params);
+  return { updated: r.changes > 0 };
+}
+
+/**
+ * Reverse lookup: every repo bound to a given npm package name. Most
+ * registries have a one-to-one binding, but a monorepo migration can
+ * temporarily yield two repos pointing at the same name, so the return
+ * is always an array.
+ *
+ * Returns all columns from repos (Record<string, unknown> — same shape
+ * as findRepos). Empty array when no match.
+ */
+export function getReposByNpmPackage(npm_name: string): Record<string, unknown>[] {
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM repos WHERE npm_package_name = ? ORDER BY slug'
+  ).all(npm_name) as Record<string, unknown>[];
 }

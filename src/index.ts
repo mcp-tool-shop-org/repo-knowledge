@@ -40,8 +40,24 @@ export {
   upsertRig, getRig, listRigs,
   upsertRepoLocalPath, getRepoLocalPaths,
   deleteRepoBySlug, archiveRepoBySlug, setReplacedBy, findStaleArchived,
+  // F-BE-FT2: publish-state helpers (migration-007). Surface bindings +
+  // version registry so MCP, sync workers, and CLI all read the same
+  // shape from one place.
+  upsertPublishedVersion, getLatestPublishedVersion, listPublishedVersions,
+  setRepoPackageNames, getReposByNpmPackage,
+  PUBLISHER_METHODS, PUBLISHED_VERSION_CHANNELS,
 } from './db/init.js';
-export type { RigRow, RepoLocalPathRow } from './db/init.js';
+export type {
+  RigRow, RepoLocalPathRow,
+  PublishedVersionRow, PublishedVersionUpsert,
+  PublisherMethod, PublishedVersionChannel,
+} from './db/init.js';
+
+// Sync (publish state)
+export {
+  syncNpmVersion, syncPyPIVersion, syncGitHubReleases, syncPublishStateForRepo,
+} from './sync/publish.js';
+export type { PublishedVersionRecord, RepoBindingRow, PublishSyncSummary } from './sync/publish.js';
 
 // Search
 export { rebuildIndex, search, searchRepos } from './search/fts.js';

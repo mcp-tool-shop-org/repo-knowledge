@@ -9,6 +9,10 @@
 - `rk verify-local [--rig <id>] [--strict]` — verify each repo's `local_path` exists on the current rig and update `repo_local_paths` with a fresh timestamp. Rig defaults to `RK_RIG_ID` env or `os.hostname()`. `--strict` exits non-zero if any drift detected.
 - `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` — one-shot registration of the current rig in the `rigs` table. Idempotent; safe to re-run.
 - `rk prune [--dry-run] [--apply] [--days <N>]` — hard-delete repos archived longer than N days (default 30). Dry-run by default; `--apply` requires a single batch confirmation listing all candidates. GitHub-404 probe deferred to Feature 2.
+- `rk versions <slug>` — cross-channel published-version dashboard (npm / pypi / github_release / vsce). `--refresh` syncs from registries first (network); `--channel <name>` filters to one channel.
+- `rk drift <slug>` — compare source-of-truth version (local `package.json` / `pyproject.toml`) against the latest registry version recorded in `repo_published_versions`. `--strict` exits non-zero if any drift detected.
+- `rk bind-package <slug> [--npm <name>] [--pypi <name>] [--publisher-method <method>]` — manual binding of npm / PyPI package names and publisher method. Validates `--publisher-method` against the enum (`pypi_trusted` | `pypi_token` | `npm_token` | `npm_trusted` | `github_release_only` | `none`); exits 2 on bad enum.
+- migration-007: `repos.npm_package_name`, `repos.pypi_package_name`, `repos.publisher_method` columns; new `repo_published_versions` table with composite index `idx_published_versions_repo_channel`.
 
 ### Changed
 

@@ -38,7 +38,14 @@ import {
   upsertRig, listRigs,
   upsertRepoLocalPath,
   deleteRepoBySlug, archiveRepoBySlug, findStaleArchived,
+  // F-BE-FT2: publish state — bindings + version registry (migration-007).
+  // PUBLISHER_METHODS validates --publisher-method input before reaching
+  // setRepoPackageNames (which throws on bad enum); duplicating the guard
+  // at the CLI layer surfaces a friendlier exit-2 error than a raw throw.
+  setRepoPackageNames, listPublishedVersions, getLatestPublishedVersion,
+  PUBLISHER_METHODS, PUBLISHED_VERSION_CHANNELS,
 } from './db/init.js';
+import { syncPublishStateForRepo } from './sync/publish.js';
 import { fullSync } from './sync/index.js';
 import { ingestLocalRepo } from './sync/local.js';
 import { rebuildIndex, searchRepos } from './search/fts.js';
@@ -814,6 +821,333 @@ program
     console.log(
       `Pruned ${deletedCount} repo(s), ${totalCascaded} child rows cascaded.`
     );
+    closeDb();
+  });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PUBLISH-STATE SUBCOMMANDS (F-BE-FT2 — Axis 3 + Axis 5 Feature 2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// F-BE-FT2: resolve a repo by slug for the publish-state commands. Reuses
+// the same exact-then-partial resolution that show/related use, but
+// returns the full repo row (not just an id) because drift + versions
+// both need owner/name + bindings + local_path.
+function resolveRepoRow(slug: string): Record<string, any> | null {
+  const db = getDb();
+  let row = db.prepare('SELECT * FROM repos WHERE slug = ?').get(slug) as Record<string, any> | undefined;
+  if (row) return row;
+  // Partial match — same shape as resolveRepoId's fallback
+  row = db.prepare(
+    'SELECT * FROM repos WHERE slug LIKE ? OR name = ? ORDER BY slug LIMIT 1'
+  ).get(`%${slug}%`, slug) as Record<string, any> | undefined;
+  return row ?? null;
+}
+
+// ─── versions ────────────────────────────────────────────────────────────────
+// F-BE-FT2: cross-channel published-version dashboard. Reads from
+// repo_published_versions; --refresh calls syncPublishStateForRepo first.
+program
+  .command('versions <slug>')
+  .description('Show the cross-channel published-version dashboard for one repo')
+  .option('--refresh', 'Sync from registries before rendering (network)', false)
+  .option('--channel <name>', `Filter to one channel: ${PUBLISHED_VERSION_CHANNELS.join('|')}`)
+  .action(async (slug: string, opts: { refresh: boolean; channel?: string }): Promise<void> => {
+    if (opts.channel && !(PUBLISHED_VERSION_CHANNELS as readonly string[]).includes(opts.channel)) {
+      console.error(`Error: invalid channel "${opts.channel}".`);
+      console.error(`Allowed: ${PUBLISHED_VERSION_CHANNELS.join(', ')}`);
+      process.exit(2);
+    }
+    openDb(config().dbPath);
+    const repo = resolveRepoRow(slug);
+    if (!repo) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
+
+    if (opts.refresh) {
+      console.log(`Refreshing publish state for ${repo.slug}...`);
+      const summary = await syncPublishStateForRepo(repo.id, {
+        owner: repo.owner,
+        name: repo.name,
+        npm_package_name: repo.npm_package_name,
+        pypi_package_name: repo.pypi_package_name,
+      });
+      console.log(`  Synced ${summary.updated} row(s)${summary.errors.length ? `, ${summary.errors.length} error(s)` : ''}`);
+      if (summary.errors.length > 0) {
+        for (const err of summary.errors) console.log(`    ${err}`);
+      }
+    }
+
+    const rows = listPublishedVersions(repo.id);
+    const filtered = opts.channel ? rows.filter(r => r.channel === opts.channel) : rows;
+
+    if (filtered.length === 0) {
+      // F-BE-humanization: when the DB is empty, point the user at the
+      // remedy. The hint is intentionally specific — "use --refresh" is
+      // more actionable than "no data found."
+      console.log(`No published versions recorded${opts.channel ? ` on channel ${opts.channel}` : ''}.`);
+      console.log(`Run with --refresh to sync from registries.`);
+      closeDb();
+      return;
+    }
+
+    // Group by channel for the dashboard table. Within each group sort
+    // newest-first by synced_at — same order listPublishedVersions
+    // returns within a channel.
+    const byChannel: Record<string, typeof filtered> = {};
+    for (const r of filtered) {
+      if (!byChannel[r.channel]) byChannel[r.channel] = [];
+      byChannel[r.channel].push(r);
+    }
+
+    console.log(`\nPublished versions for ${repo.slug}:\n`);
+    for (const [channel, channelRows] of Object.entries(byChannel)) {
+      console.log(`─── ${channel} (${channelRows.length}) ───`);
+      for (const row of channelRows) {
+        const publishedAt = row.published_at ? row.published_at.slice(0, 10) : 'unknown';
+        const syncedAt = row.synced_at ? row.synced_at.slice(0, 19) : 'unknown';
+        console.log(`  ${row.version}  published=${publishedAt}  synced=${syncedAt}`);
+      }
+      console.log('');
+    }
+
+    closeDb();
+  });
+
+// ─── drift ───────────────────────────────────────────────────────────────────
+// F-BE-FT2: compare source-of-truth version (local package.json /
+// pyproject.toml) against the latest registry version recorded in
+// repo_published_versions. --strict turns drift into a non-zero exit
+// so CI can gate on it.
+program
+  .command('drift <slug>')
+  .description('Compare source-of-truth version (package.json / pyproject.toml) vs registry latest')
+  .option('--strict', 'Exit non-zero if any drift detected', false)
+  .action((slug: string, opts: { strict: boolean }): void => {
+    openDb(config().dbPath);
+    const repo = resolveRepoRow(slug);
+    if (!repo) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
+
+    // We need a local checkout to read package.json / pyproject.toml.
+    // If local_path is unset or missing, we can still compare bindings
+    // vs registry — but the "source of truth" side is empty, so drift
+    // detection is a no-op.
+    const localPath: string | null = repo.local_path ?? null;
+
+    interface DriftReport {
+      channel: string;
+      source: string | null;
+      registry: string | null;
+      drift: boolean | 'skip';
+      note?: string;
+    }
+    const reports: DriftReport[] = [];
+
+    // npm side
+    if (repo.npm_package_name) {
+      let sourceVersion: string | null = null;
+      let note: string | undefined;
+      if (localPath && existsSync(localPath)) {
+        const pkgPath = join(localPath, 'package.json');
+        if (existsSync(pkgPath)) {
+          try {
+            const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: string };
+            sourceVersion = pkg.version ?? null;
+          } catch (e: unknown) {
+            note = `package.json parse failed: ${(e as Error).message}`;
+          }
+        } else {
+          note = 'package.json not found at local_path';
+        }
+      } else {
+        note = 'local_path not set or not present on this rig';
+      }
+
+      const latest = getLatestPublishedVersion(repo.id, 'npm');
+      const registryVersion = latest?.version ?? null;
+
+      if (sourceVersion && registryVersion) {
+        reports.push({
+          channel: 'npm',
+          source: sourceVersion,
+          registry: registryVersion,
+          drift: sourceVersion !== registryVersion,
+        });
+      } else {
+        reports.push({
+          channel: 'npm',
+          source: sourceVersion,
+          registry: registryVersion,
+          drift: 'skip',
+          note: note ?? (sourceVersion ? 'no registry version recorded' : 'no source version'),
+        });
+      }
+    }
+
+    // pypi side
+    if (repo.pypi_package_name) {
+      let sourceVersion: string | null = null;
+      let note: string | undefined;
+      if (localPath && existsSync(localPath)) {
+        const pyprojectPath = join(localPath, 'pyproject.toml');
+        if (existsSync(pyprojectPath)) {
+          try {
+            const content = readFileSync(pyprojectPath, 'utf-8');
+            // F-BE-FT2: minimal pyproject [project] version extractor.
+            // Avoids pulling in a full TOML parser for one field. Match
+            // `version = "X.Y.Z"` inside a `[project]` table; tolerate
+            // single or double quotes. If the layout is exotic we just
+            // miss — drift then becomes "skip" with a note.
+            const projectSection = content.match(/\[project\][^[]*/);
+            if (projectSection) {
+              const m = projectSection[0].match(/^\s*version\s*=\s*["']([^"']+)["']/m);
+              if (m) sourceVersion = m[1];
+            }
+            if (!sourceVersion) {
+              note = 'no [project] version found in pyproject.toml';
+            }
+          } catch (e: unknown) {
+            note = `pyproject.toml parse failed: ${(e as Error).message}`;
+          }
+        } else {
+          note = 'pyproject.toml not found at local_path';
+        }
+      } else {
+        note = 'local_path not set or not present on this rig';
+      }
+
+      const latest = getLatestPublishedVersion(repo.id, 'pypi');
+      const registryVersion = latest?.version ?? null;
+
+      if (sourceVersion && registryVersion) {
+        reports.push({
+          channel: 'pypi',
+          source: sourceVersion,
+          registry: registryVersion,
+          drift: sourceVersion !== registryVersion,
+        });
+      } else {
+        reports.push({
+          channel: 'pypi',
+          source: sourceVersion,
+          registry: registryVersion,
+          drift: 'skip',
+          note: note ?? (sourceVersion ? 'no registry version recorded' : 'no source version'),
+        });
+      }
+    }
+
+    if (reports.length === 0) {
+      console.log(`No drift channels to check for ${repo.slug}.`);
+      console.log(`Hint: rk bind-package ${repo.slug} --npm <name>   (binds an npm package)`);
+      console.log(`   or: rk bind-package ${repo.slug} --pypi <name> (binds a PyPI package)`);
+      closeDb();
+      return;
+    }
+
+    let driftCount = 0;
+    console.log(`\nDrift report for ${repo.slug}:\n`);
+    for (const r of reports) {
+      const source = r.source ?? '(none)';
+      const registry = r.registry ?? '(none)';
+      if (r.drift === 'skip') {
+        console.log(`  ${r.channel}: source=${source} registry=${registry} [skip${r.note ? `: ${r.note}` : ''}]`);
+      } else if (r.drift) {
+        driftCount += 1;
+        console.log(`  ${r.channel}: source=${source} registry=${registry} [drift: yes]`);
+      } else {
+        console.log(`  ${r.channel}: source=${source} registry=${registry} [drift: no]`);
+      }
+    }
+
+    if (driftCount === 0) {
+      console.log(`\nno drift across ${reports.length} channel(s).`);
+    } else {
+      console.log(`\ndrift detected on ${driftCount} of ${reports.length} channel(s).`);
+    }
+
+    closeDb();
+    if (opts.strict && driftCount > 0) {
+      process.exit(1);
+    }
+  });
+
+// ─── bind-package ────────────────────────────────────────────────────────────
+// F-BE-FT2: manual binding setter. Wraps setRepoPackageNames with
+// publisher-method enum validation surfaced at the CLI layer (the helper
+// throws on bad enum, but a CLI exit-2 with the allowed list is friendlier
+// than a raw thrown error).
+program
+  .command('bind-package <slug>')
+  .description('Bind npm / PyPI package names + publisher_method on a repo')
+  .option('--npm <name>', 'npm package name (e.g. @mcptoolshop/repo-knowledge)')
+  .option('--pypi <name>', 'PyPI distribution name')
+  .option(
+    '--publisher-method <method>',
+    `Publisher method: ${PUBLISHER_METHODS.join('|')}`
+  )
+  .action((slug: string, opts: { npm?: string; pypi?: string; publisherMethod?: string }): void => {
+    if (
+      opts.publisherMethod !== undefined &&
+      !(PUBLISHER_METHODS as readonly string[]).includes(opts.publisherMethod)
+    ) {
+      console.error(`Error: invalid publisher-method "${opts.publisherMethod}".`);
+      console.error(`Allowed: ${PUBLISHER_METHODS.join(', ')}`);
+      console.error(`Example: rk bind-package ${slug} --publisher-method npm_trusted`);
+      process.exit(2);
+    }
+
+    if (
+      opts.npm === undefined &&
+      opts.pypi === undefined &&
+      opts.publisherMethod === undefined
+    ) {
+      console.error(`Error: specify at least one of --npm, --pypi, --publisher-method.`);
+      console.error(`Example: rk bind-package ${slug} --npm @scope/${slug.split('/').pop()}`);
+      process.exit(2);
+    }
+
+    openDb(config().dbPath);
+    const repo = resolveRepoRow(slug);
+    if (!repo) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
+
+    try {
+      const result = setRepoPackageNames(repo.slug, {
+        npm: opts.npm,
+        pypi: opts.pypi,
+        publisher_method: opts.publisherMethod as Parameters<typeof setRepoPackageNames>[1]['publisher_method'],
+      });
+      if (!result.updated) {
+        // Defensive: row existed above but UPDATE affected 0 rows.
+        console.error(`Error: failed to update bindings for ${repo.slug}`);
+        closeDb();
+        process.exit(1);
+      }
+    } catch (e: unknown) {
+      // setRepoPackageNames throws on bad enum, but we already validated.
+      // Any other error here is real — surface it.
+      console.error(`Error: ${(e as Error).message}`);
+      closeDb();
+      process.exit(1);
+    }
+
+    const parts: string[] = [];
+    if (opts.npm !== undefined) parts.push(`npm=${opts.npm === null || opts.npm === '' ? '(cleared)' : opts.npm}`);
+    if (opts.pypi !== undefined) parts.push(`pypi=${opts.pypi === null || opts.pypi === '' ? '(cleared)' : opts.pypi}`);
+    if (opts.publisherMethod !== undefined) parts.push(`publisher_method=${opts.publisherMethod}`);
+    console.log(`Bound ${repo.slug}: ${parts.join(' ')}`);
     closeDb();
   });
 

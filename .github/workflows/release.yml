@@ -46,9 +46,24 @@ jobs:
       - name: Generate SBOM
         run: npm run sbom
 
-      - name: Publish to npm with provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Node 22 bundles npm 10.9 which can sign Sigstore provenance but
+      # cannot negotiate the OIDC auth path — publish returns a misleading
+      # 404 "not in this registry". Sandbox-install npm@latest and prepend
+      # to PATH so the publish step uses npm >=11.5. In-place
+      # `npm install -g npm@latest` races on Node 22's arborist rebuild,
+      # hence the sandbox dir. See feedback_npm_115_required_for_oidc.md.
+      - name: Install npm >=11.5 in sandbox for OIDC trusted publishing
+        run: |
+          SANDBOX="$HOME/.npm-cli-sandbox"
+          mkdir -p "$SANDBOX"
+          pushd "$SANDBOX" >/dev/null
+          echo '{"name":"npm-cli-sandbox","version":"0.0.0","private":true}' > package.json
+          npm install --no-save --no-audit --no-fund --silent npm@latest
+          popd >/dev/null
+          echo "$SANDBOX/node_modules/.bin" >> "$GITHUB_PATH"
+          "$SANDBOX/node_modules/.bin/npm" --version
+
+      - name: Publish to npm with provenance (OIDC Trusted Publisher)
         run: npm publish --provenance --access public
 
       - name: Upload SBOM to GitHub release

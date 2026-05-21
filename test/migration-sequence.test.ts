@@ -3,18 +3,23 @@
  *
  * Writes a minimal v1 schema to a temp DB and opens it via openDb().
  * Asserts that:
- *   - schema_version reaches '6' (current head — was '4' through Stage A,
- *     bumped by migration-006 in FT-1 for lifecycle + cross-rig paths)
+ *   - schema_version reaches '7' (current head — was '4' through Stage A,
+ *     bumped by migration-006 in FT-1 for lifecycle + cross-rig paths,
+ *     then migration-007 in FT-2 for publish state)
  *   - audit_runs / audit_controls / audit_findings tables exist
  *   - idx_findings_canonical (from migration 004) exists
  *   - migration-006 added repos.lifecycle_status column, rigs table,
  *     repo_local_paths table, and idx_repo_local_paths_repo index
+ *   - migration-007 added repos.npm_package_name / pypi_package_name /
+ *     publisher_method columns, repo_published_versions table, and the
+ *     idx_published_versions_repo_channel composite index
  *   - the per-migration version bumps run in order (no skips)
  *
  * History: F-DB-001 unified version bumping so v1 → '4' after openDb. FT-1
- * extended the ladder with migration-006 (additive, bumps to '6'); the
- * FTS-trigger migration (005) is independent and intentionally does NOT
- * bump the linear version (uses its own meta marker fts_triggers_added).
+ * extended the ladder with migration-006 (additive, bumps to '6'); FT-2
+ * added migration-007 (additive, bumps to '7'). The FTS-trigger
+ * migration (005) is independent and intentionally does NOT bump the
+ * linear version (uses its own meta marker fts_triggers_added).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
@@ -77,7 +82,7 @@ function writeMinimalV1Schema(path: string): void {
 }
 
 describe('Migration sequence (F-TS-007)', () => {
-  it('migrates v1 → v6 on first openDb', () => {
+  it('migrates v1 → v7 on first openDb', () => {
     writeMinimalV1Schema(dbPath);
 
     // Pre-condition: version is '1'
@@ -91,10 +96,10 @@ describe('Migration sequence (F-TS-007)', () => {
     openDb(dbPath);
     const db = getDb();
 
-    // Post-condition: version is '6' (current head after FT-1's
-    // migration-006 added lifecycle + cross-rig paths).
+    // Post-condition: version is '7' (current head after FT-2's
+    // migration-007 added publish state on top of FT-1's lifecycle paths).
     const v = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
-    expect(v.value).toBe('6');
+    expect(v.value).toBe('7');
   });
 
   it('creates audit tables on migration', () => {
@@ -147,7 +152,7 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(colNames).toContain('pass_rate');
   });
 
-  it('is idempotent — opening an already-v6 DB does not regress', () => {
+  it('is idempotent — opening an already-v7 DB does not regress', () => {
     writeMinimalV1Schema(dbPath);
     openDb(dbPath);
     const v1 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
@@ -156,18 +161,18 @@ describe('Migration sequence (F-TS-007)', () => {
     // Second open: already at head, should not re-run anything destructive
     openDb(dbPath);
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('6');
-    expect(v2).toBe('6');
+    expect(v1).toBe('7');
+    expect(v2).toBe('7');
   });
 
   it('opening a brand-new (no-file) DB produces head schema directly', () => {
     // No pre-existing file — openDb should detect missing repos table,
     // load schema.sql, then run migrations 002+ to bring schema_version
-    // to '6' (the FT-1 head).
+    // to '7' (the FT-2 head).
     const freshPath = join(tmpDir, 'fresh.db');
     openDb(freshPath);
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('6');
+    expect(v).toBe('7');
 
     const tables = getDb().prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = 'audit_runs'"
@@ -218,13 +223,50 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(idx!.sql).toMatch(/repo_local_paths/);
   });
 
-  it('migration-006 is idempotent — re-opening v6 DB does not error', () => {
-    // Bring up to v6, close, open again. No throw, version unchanged.
+  it('migration-006 is idempotent — re-opening v7 DB does not error', () => {
+    // Bring up to v7, close, open again. No throw, version unchanged.
     writeMinimalV1Schema(dbPath);
     openDb(dbPath);
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('6');
+    expect(v).toBe('7');
+  });
+
+  it('migration-007 adds repos.npm_package_name / pypi_package_name / publisher_method columns', () => {
+    writeMinimalV1Schema(dbPath);
+    openDb(dbPath);
+    const db = getDb();
+
+    const cols = db.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
+    const colNames = cols.map(c => c.name);
+    expect(colNames).toContain('npm_package_name');
+    expect(colNames).toContain('pypi_package_name');
+    expect(colNames).toContain('publisher_method');
+  });
+
+  it('migration-007 creates the repo_published_versions table', () => {
+    writeMinimalV1Schema(dbPath);
+    openDb(dbPath);
+    const db = getDb();
+
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+    ).all() as { name: string }[];
+    const names = tables.map(t => t.name);
+    expect(names).toContain('repo_published_versions');
+  });
+
+  it('migration-007 creates idx_published_versions_repo_channel composite index', () => {
+    writeMinimalV1Schema(dbPath);
+    openDb(dbPath);
+    const db = getDb();
+
+    const idx = db.prepare(
+      "SELECT name, sql FROM sqlite_master WHERE type='index' AND name = 'idx_published_versions_repo_channel'"
+    ).get() as { name: string; sql: string } | undefined;
+    expect(idx).toBeDefined();
+    expect(idx!.sql).toMatch(/repo_published_versions/);
+    expect(idx!.sql).toMatch(/channel/);
   });
 });

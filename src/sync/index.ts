@@ -10,6 +10,21 @@ import { openDb, getStats } from '../db/init.js';
 import type { DbStats } from '../db/init.js';
 import { resolveConfig } from '../config.js';
 
+// FT-2: re-export the publish-state sync entry point so callers (CLI,
+// MCP) can import the whole sync surface from one place. The legacy
+// fullSync orchestrator deliberately does NOT call syncPublishStateForRepo
+// — version-channel sync is an opt-in, per-repo operation surfaced via
+// `rk versions <slug> --refresh` rather than a bulk scan, because npm
+// view + the PyPI JSON API + gh release list are slow and rate-limited
+// enough that running them across every repo on every full sync would
+// be hostile to the registries.
+export { syncPublishStateForRepo } from './publish.js';
+export type {
+  PublishedVersionRecord,
+  PublishSyncSummary,
+  RepoBindingRow,
+} from './publish.js';
+
 export interface SyncConfig {
   dbPath?: string;
   owners?: string[];
