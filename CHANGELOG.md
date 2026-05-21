@@ -1,6 +1,24 @@
 # Changelog
 
-## [Unreleased]
+## [2.0.0] - 2026-05-21
+
+Dogfood-swarm release. Schema head advanced **v4 → v11** across 7 additive migrations; 14 new CLI commands; new MCP-discoverable `rk health` surface grounded in 24 cited 2022–2026 findings (study-swarm dispatched 2026-05-20). Tests **74 → 370**. No breaking changes — every callsite from v1.0.5 continues to work; the major bump reflects schema shape rather than API removal.
+
+### Migration from v1.x
+
+- **Drop-in**: existing databases auto-migrate on first `openDb`. Migrations 006–011 are gated on `schema_version` and apply in order; partial-schema fixtures (e.g. v1 baseline created before audit tables) are handled via defensive table-presence guards.
+- **New commands** are additive — none replace existing surfaces.
+- **MCP server** loads from the same `./mcp` export path (no consumer change).
+- **Release pipeline**: `release.yml` switched to OIDC Trusted Publisher (no `NPM_TOKEN` required at publish time; npm package settings must have Trusted Publisher configured for `mcp-tool-shop-org/repo-knowledge/.github/workflows/release.yml`).
+
+### Hardening highlights (Stage A+B+C — included in 2.0.0)
+
+- Fix: `program.parseAsync()` instead of `program.parse()` so async-action rejections surface (was the ROADMAP-flagged silent-exit-0 regression).
+- Fix: `migration-002` schema_version now stamps `'2'` (was `'3'`), unbreaking the version state machine.
+- Fix: `sync/github.ts` uses `execFileSync` argv form — closes command-injection vector through the `--owners` flag.
+- Fix: `scripts/postbuild.js` dynamically globs SQL files — `migration-004` and later were silently missing from the npm tarball.
+- Fix: `src/db/init.ts` resolves SQL assets across all bundled layouts (dev / dist/cli.js / dist/mcp/server.js).
+- Migration-005 — FTS5 triggers keep `repo_search` in sync without manual rebuilds.
 
 ### Added (FT-5 — cross-tool vocabulary + sync gap closure, 2026-05-21)
 

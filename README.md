@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="README.ja.md">日本語</a> | <a href="README.zh.md">中文</a> | <a href="README.es.md">Español</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.it.md">Italiano</a> | <a href="README.pt-BR.md">Português (BR)</a>
+  <a href="README.ja.md">日本語</a> | <a href="README.zh.md">中文</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.it.md">Italiano</a> | <a href="README.pt-BR.md">Português (BR)</a>
 </p>
 
 <p align="center">
@@ -84,6 +84,44 @@ rk audit seed-controls
 | `rk stats` | Show database statistics |
 | `rk reindex` | Rebuild the FTS index |
 | `rk sync-dogfood` | Sync dogfood evidence from dogfood-lab/testing-os into repo facts |
+| `rk suggest-dogfood --repo <slug>` | Suggest known dogfood findings for a repo or surface |
+
+### Lifecycle Commands (v2.0.0)
+
+| Command | Description |
+|---------|-------------|
+| `rk delete <slug> [--yes]` | Cascade-delete a repo and all child rows |
+| `rk archive <slug> [--reason <text>]` | Flip `lifecycle_status` to `archived` (preserves notes/findings) |
+| `rk verify-local [--rig <id>] [--strict]` | Verify `local_path` exists per rig; updates `repo_local_paths` |
+| `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` | Register the current rig |
+| `rk prune [--dry-run] [--apply] [--days <N>]` | Hard-delete repos archived longer than N days (default 30) |
+
+### Publish-State Commands (v2.0.0)
+
+| Command | Description |
+|---------|-------------|
+| `rk versions <slug> [--refresh] [--channel <name>]` | Cross-channel published-version dashboard (npm/pypi/github_release) |
+| `rk drift <slug> [--strict]` | Compare source-of-truth version vs latest registry |
+| `rk bind-package <slug> [--npm <name>] [--pypi <name>] [--publisher-method <method>]` | Manual binding setter |
+
+### Health Commands (v2.0.0 — research-grounded)
+
+| Command | Description |
+|---------|-------------|
+| `rk health` (default = feed) | Change feed: deltas since last sync, KEV intersection, CI streak breaks, action-pin drift |
+| `rk health doctor <slug>` | Single-repo deep-dive (dep audit, workflow actions, CI signal, toolchain) |
+| `rk health table [--json\|--text]` | Portfolio health table; JSON is the load-bearing contract |
+
+### Operational Commands (v2.0.0)
+
+| Command | Description |
+|---------|-------------|
+| `rk fsck [--strict] [--json]` | DB integrity check; writes audit row to `db_health_runs` |
+| `rk diff <slug> [--since <date>] [--until <date>] [--json]` | Entry change history for one repo |
+| `rk runs [--db-health\|--sync] [--limit <N>] [--json]` | List recent `db_health_runs` / `sync_runs` entries |
+| `rk owners list` | List configured GitHub owners |
+| `rk owners add <owner>` | Append to `rk.config.json` owners |
+| `rk owners remove <owner>` | Remove from `rk.config.json` owners |
 
 ### Audit Commands
 
