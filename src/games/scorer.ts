@@ -68,9 +68,16 @@ export function scoreGame(rows: WorklistRow[]): GameSummary {
         p.totalPoints += POINTS.PERFECT_PUSH;
         break;
       }
+      // F-AG-010: blocked and skipped roll into separate counters so
+      // the leaderboard can show "what the player chose not to fix"
+      // (blocked = constraint outside their control; skipped = chose
+      // to drop) as distinct categories. PlayerScore.reposSkipped is
+      // already in the type — this just wires the case label to it.
       case 'blocked':
-      case 'skipped':
         p.reposBlocked++;
+        break;
+      case 'skipped':
+        p.reposSkipped++;
         break;
       case 'no_action':
         p.reposDone++;

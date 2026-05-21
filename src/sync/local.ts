@@ -79,11 +79,19 @@ function getGitRemote(repoPath: string): string | null {
 
 /**
  * Extract owner/name from a GitHub remote URL.
+ *
+ * F-DB-014: anchored pattern that
+ *   - matches both SSH (git@github.com:owner/name) and HTTPS (https://github.com/owner/name)
+ *   - allows `.` inside the owner segment (some org names contain dots)
+ *   - strips an optional trailing `.git` suffix explicitly
+ *   - rejects look-alike hosts (notgithub.com) by requiring the character
+ *     preceding "github.com" to be start-of-string, `@`, or `/`
+ *   - anchors at end-of-string with an optional trailing slash so partial
+ *     matches like `https://example.com/github.com/x/y/z` can't slip through
  */
 function parseRemote(url: string | null): { owner: string; name: string } | null {
   if (!url) return null;
-  // SSH: git@github.com:owner/name.git
-  const m = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+  const m = url.match(/(?:^|[@/])github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i);
   if (m) return { owner: m[1], name: m[2] };
   return null;
 }
@@ -108,7 +116,10 @@ export function scanLocalRepo(repoPath: string): ScannedRepo {
     owner: repoOwner,
     name: repoName,
     local_path: repoPath,
-    github_url: remote?.includes('github.com') ? `https://github.com/${repoOwner}/${repoName}` : null,
+    // F-DB-014 paired check: only synthesize a github_url when parseRemote
+    // actually matched. A bare `remote?.includes('github.com')` substring
+    // check accepts look-alikes like `notgithub.com` and emits a bogus URL.
+    github_url: parsed ? `https://github.com/${parsed.owner}/${parsed.name}` : null,
     tech,
     docs,
   };

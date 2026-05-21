@@ -89,6 +89,12 @@ describe('upsertFact', () => {
     const repo = getRepo('o/r');
     const reactFact = repo!.facts.find((f: any) => f.key === 'react');
     expect(reactFact.value).toBe('v18');
+    // F-TS-015: explicitly pin upsert (not insert) semantics — exactly one
+    // row exists for (fact_type, key) after two writes. A regression that
+    // dropped the ON CONFLICT clause would produce two rows; without this
+    // assertion the test would still find the latest value via .find() and
+    // silently pass.
+    expect(repo!.facts.filter((f: any) => f.key === 'react')).toHaveLength(1);
   });
 });
 

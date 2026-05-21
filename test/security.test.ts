@@ -82,11 +82,28 @@ describe('SQL injection resistance', () => {
 });
 
 describe('malformed input handling', () => {
-  it('handles empty strings in required fields', () => {
+  // ─── F-TS-014: empty-owner / empty-name contract ────────────────────────
+  // Contract: upsertRepo accepts empty strings for owner and name verbatim
+  // and stores them as the empty string. The resulting slug is literally
+  // `/` (empty + `/` + empty).
+  //
+  // Rationale: db/init.ts:upsertRepo does NOT validate owner/name shape.
+  // Callers are responsible for sanitizing before insert — most callers go
+  // through scanLocalRepo / fetchOwnerRepos which always produce non-empty
+  // values. The DB layer is intentionally permissive so the same code path
+  // serves test fixtures, ad-hoc imports, and bulk migrations.
+  //
+  // If a future change adds NOT-NULL+CHECK constraints on owner/name, THIS
+  // is the test that catches the contract break — flip the assertion shape
+  // and the rest of the suite stays green.
+  it('accepts empty owner/name verbatim (intentional — caller responsibility)', () => {
     const id = upsertRepo({ owner: '', name: '' });
     expect(id).toBeGreaterThan(0);
     const repo = getRepo('/');
     expect(repo).not.toBeNull();
+    expect(repo!.owner).toBe('');
+    expect(repo!.name).toBe('');
+    expect(repo!.slug).toBe('/');
   });
 
   it('handles extremely long strings', () => {

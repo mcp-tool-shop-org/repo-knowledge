@@ -126,8 +126,15 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
 
     return results;
   } catch {
-    // If FTS query syntax fails, try a simpler approach
-    const simpleTerm = query.replace(/[^\w\s]/g, '');
+    // If FTS query syntax fails, try a simpler approach.
+    //
+    // F-AG-007: `/[^\w\s]/g` is ASCII-only — `\w` matches [A-Za-z0-9_]
+    // and nothing else, so non-ASCII letters (CJK, accented Latin,
+    // Cyrillic, etc.) were silently stripped to the empty string and
+    // the fallback returned []. Use the Unicode property escapes
+    // \p{L} (letters of any script) + \p{N} (numbers) so non-ASCII
+    // content survives and can drive a useful second-pass FTS query.
+    const simpleTerm = query.replace(/[^\p{L}\p{N}\s]/gu, '');
     if (!simpleTerm.trim()) return [];
 
     return db.prepare(`

@@ -62,6 +62,11 @@ export interface AuditFinding {
   slug?: string;
 }
 
+// F-AG-013: AuditMetrics no longer carries the `[key: string]: any` index
+// signature — that signature was hiding type drift between the SELECT *
+// shape and the typed accessor. Wider DB-row reads cast to
+// `Record<string, unknown>` at the SELECT * site so the typed metric
+// fields stay nominal.
 export interface AuditMetrics {
   audit_run_id: number;
   critical_count: number;
@@ -80,8 +85,14 @@ export interface AuditMetrics {
   controls_warned: number;
   controls_skipped: number;
   controls_total: number;
-  [key: string]: any;
 }
+
+/**
+ * Wider DB-row type for SELECT * audit_metrics reads — used in places
+ * where new columns may be present that aren't yet in AuditMetrics
+ * (migrations land columns before TS types catch up).
+ */
+type AuditMetricsRow = AuditMetrics & Record<string, unknown>;
 
 export interface AuditArtifact {
   id: number;
@@ -141,12 +152,21 @@ export interface FindingSeverityFilter {
   limit?: number;
 }
 
+// F-AG-018: each per-field diff is null when EITHER side's metric is
+// null. Coercing null → 0 silently invents "improvement" signals
+// (`0.92 - null` collapses to 0.92, falsely reporting a pass-rate jump
+// when actually the baseline never measured it). With null preserved,
+// downstream rendering can render "n/a" instead of a hallucinated number.
+//
+// `improved` is also widened: when EITHER side is missing the critical
+// or high counts we report improved=false (not enough evidence) rather
+// than silently calling it an improvement.
 export interface RunComparison {
-  critical: number;
-  high: number;
-  medium: number;
-  pass_rate: number;
-  controls_passed: number;
+  critical: number | null;
+  high: number | null;
+  medium: number | null;
+  pass_rate: number | null;
+  controls_passed: number | null;
   improved: boolean;
 }
 
@@ -183,7 +203,7 @@ export function getLatestAudit(repoId: number | bigint): AuditRun | null {
       created_at DESC
   `).all(run.id) as AuditFinding[];
 
-  run.metrics = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(run.id) as AuditMetrics | undefined ?? null;
+  run.metrics = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(run.id) as AuditMetricsRow | undefined ?? null;
   run.artifacts = db.prepare('SELECT * FROM audit_artifacts WHERE audit_run_id = ?').all(run.id) as AuditArtifact[];
 
   return run;
@@ -217,7 +237,7 @@ export function getAuditPosture(repoId: number | bigint): AuditPosture | null {
     WHERE cr.audit_run_id = ? AND cr.result = 'fail'
   `).all(run.id) as { domain: string }[]).map(r => r.domain);
 
-  const metrics = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(run.id) as AuditMetrics | undefined;
+  const metrics = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(run.id) as AuditMetricsRow | undefined;
 
   return {
     last_audited: run.started_at,
@@ -349,6 +369,13 @@ export function getOpenFindings(filters: FindingSeverityFilter = {}): AuditFindi
   }
 
   const limit = filters.limit || 50;
+  // F-AG-017: push the limit value into `params` rather than passing it
+  // as a trailing positional argument to .all(). better-sqlite3's .all()
+  // signature is `.all(...params)`; passing the limit AFTER the spread
+  // works when params is empty but mis-binds when params already has
+  // entries (e.g. `severity = ? LIMIT ?` with severity filter active
+  // bound severity to position 1 and limit to position 2 by accident).
+  params.push(limit);
 
   return db.prepare(`
     SELECT af.*, r.slug
@@ -359,7 +386,7 @@ export function getOpenFindings(filters: FindingSeverityFilter = {}): AuditFindi
       CASE af.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
       af.created_at DESC
     LIMIT ?
-  `).all(...params, limit) as AuditFinding[];
+  `).all(...params) as AuditFinding[];
 }
 
 /**
@@ -378,22 +405,45 @@ export function getExceptions(repoId: number | bigint): Record<string, any>[] {
 
 /**
  * Compare two audit runs (trend).
+ *
+ * F-AG-018: per-field diff returns null when either side's metric is null.
+ * The OLD shape coerced null → 0, so a baseline that never measured
+ * pass_rate appeared to "improve" from 0 → 0.92 when run2 finally did
+ * measure it. With null preserved, downstream rendering can distinguish
+ * "regression" from "first measurement."
+ *
+ * `improved` is conservative: it requires non-null values on BOTH sides
+ * for the critical + high counters before claiming an improvement.
+ * When either is missing, improved=false because we lack the evidence.
  */
 export function compareRuns(runId1: number | bigint, runId2: number | bigint): RunComparison | null {
   const db = getDb();
 
-  const metrics1 = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(runId1) as AuditMetrics | undefined;
-  const metrics2 = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(runId2) as AuditMetrics | undefined;
+  const metrics1 = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(runId1) as AuditMetricsRow | undefined;
+  const metrics2 = db.prepare('SELECT * FROM audit_metrics WHERE audit_run_id = ?').get(runId2) as AuditMetricsRow | undefined;
 
   if (!metrics1 || !metrics2) return null;
 
+  const diff = (a: unknown, b: unknown): number | null => {
+    if (a == null || b == null) return null;
+    const an = Number(a), bn = Number(b);
+    if (!Number.isFinite(an) || !Number.isFinite(bn)) return null;
+    return bn - an;
+  };
+
+  const c1 = metrics1.critical_count, c2 = metrics2.critical_count;
+  const h1 = metrics1.high_count, h2 = metrics2.high_count;
+  const baselineComplete =
+    c1 != null && c2 != null && h1 != null && h2 != null;
+
   return {
-    critical: (metrics2.critical_count || 0) - (metrics1.critical_count || 0),
-    high: (metrics2.high_count || 0) - (metrics1.high_count || 0),
-    medium: (metrics2.medium_count || 0) - (metrics1.medium_count || 0),
-    pass_rate: (metrics2.pass_rate || 0) - (metrics1.pass_rate || 0),
-    controls_passed: (metrics2.controls_passed || 0) - (metrics1.controls_passed || 0),
-    improved: (metrics2.critical_count || 0) <= (metrics1.critical_count || 0) &&
-              (metrics2.high_count || 0) <= (metrics1.high_count || 0),
+    critical: diff(c1, c2),
+    high: diff(h1, h2),
+    medium: diff(metrics1.medium_count, metrics2.medium_count),
+    pass_rate: diff(metrics1.pass_rate, metrics2.pass_rate),
+    controls_passed: diff(metrics1.controls_passed, metrics2.controls_passed),
+    improved: baselineComplete &&
+              (c2 as number) <= (c1 as number) &&
+              (h2 as number) <= (h1 as number),
   };
 }

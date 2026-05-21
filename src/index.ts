@@ -9,6 +9,25 @@
 export { resolveConfig } from './config.js';
 export type { RkConfig } from './config.js';
 
+// Shared enum tuples — single source of truth for CLI + MCP validators.
+// Mirror the CHECK constraints in src/db/schema.sql for repo_notes.note_type
+// and repo_relationships.relation_type. Declared here (not re-exported from
+// cli.js) because importing cli.js would trigger commander.parseAsync at
+// module load when index.js is used as a library.
+export const NOTE_TYPES = [
+  'thesis', 'architecture', 'warning', 'next_step',
+  'drift_risk', 'release_summary', 'convention',
+  'pain_point', 'command', 'general',
+] as const;
+
+export const RELATION_TYPES = [
+  'depends_on', 'related_to', 'supersedes',
+  'shares_domain_with', 'shares_package_with', 'companion_to',
+] as const;
+
+export type NoteType = (typeof NOTE_TYPES)[number];
+export type RelationType = (typeof RELATION_TYPES)[number];
+
 // Database
 export {
   openDb, closeDb, getDb,

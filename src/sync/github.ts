@@ -1,8 +1,32 @@
 /**
  * GitHub sync — pulls repo metadata, topics, releases, and languages via gh CLI.
  */
-import { execSync } from 'child_process';
-import { upsertRepo, upsertRelease, setTopics, upsertFact } from '../db/init.js';
+import { execFileSync } from 'child_process';
+import { upsertRepo, upsertRelease, setTopics, upsertFact, getDb } from '../db/init.js';
+
+/**
+ * Validate a GitHub owner or repository name shape.
+ *
+ * GitHub usernames + org names + repo names allow alphanumerics, hyphens,
+ * underscores, and dots. We reject anything else BEFORE it reaches the
+ * `gh` CLI's argv — execFileSync already prevents shell-substitution
+ * injection because no shell is spawned, but a malformed name (e.g.
+ * containing whitespace or `;`) can still produce surprising gh errors
+ * that look like the tool failed when really the input was wrong.
+ *
+ * Reject empty strings up-front: gh accepts them but produces unhelpful
+ * "No such repo" output that masks the real cause.
+ */
+function validateGhIdentifier(value: string, kind: 'owner' | 'name'): void {
+  if (!value || typeof value !== 'string') {
+    throw new Error(`GitHub ${kind} is required (got: ${JSON.stringify(value)})`);
+  }
+  if (!/^[A-Za-z0-9_.-]+$/.test(value)) {
+    throw new Error(
+      `Invalid GitHub ${kind}: ${JSON.stringify(value)} — only A-Z, a-z, 0-9, ".", "-", "_" allowed`
+    );
+  }
+}
 
 export interface GitHubRepo {
   owner: string;
@@ -57,19 +81,50 @@ export function fetchGitHubRepos(owner: string, opts: GitHubSyncOptions = {}): G
 
 /**
  * Simple fallback using gh repo list.
+ *
+ * F-DB-003: switched from execSync (which interpolates argv into a shell
+ * command string) to execFileSync (which passes argv directly to the
+ * spawned process with no shell). Combined with validateGhIdentifier on
+ * the owner, this closes the command-injection surface even if a caller
+ * passes an attacker-controlled owner string.
  */
 function fetchGitHubReposSimple(owner: string, limit: number): GitHubRepo[] {
-  const cmd = `gh repo list ${owner} --limit ${limit} --json name,owner,description,url,isArchived,isPrivate,isFork,defaultBranchRef,stargazerCount,forkCount,createdAt,updatedAt,pushedAt,primaryLanguage,repositoryTopics,licenseInfo`;
+  validateGhIdentifier(owner, 'owner');
+
+  const args = [
+    'repo', 'list', owner,
+    '--limit', String(limit),
+    '--json', 'name,owner,description,url,isArchived,isPrivate,isFork,defaultBranchRef,stargazerCount,forkCount,createdAt,updatedAt,pushedAt,primaryLanguage,repositoryTopics,licenseInfo',
+  ];
 
   let result: string;
   try {
-    result = execSync(cmd, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 60000 });
+    result = execFileSync('gh', args, {
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 60000,
+    });
   } catch (e: any) {
     console.error(`Failed to fetch repos for ${owner}: ${e.message}`);
     return [];
   }
 
-  const repos = JSON.parse(result) as any[];
+  // F-DB-017: gh can return malformed JSON if the network blips or the
+  // CLI errored partway. Guard the parse so we degrade to "no repos" with
+  // a clear stderr message instead of crashing the sync.
+  let repos: any[];
+  try {
+    const parsed = JSON.parse(result);
+    if (!Array.isArray(parsed)) {
+      console.error(`Failed to parse repos for ${owner}: expected array, got ${typeof parsed}`);
+      return [];
+    }
+    repos = parsed;
+  } catch (e: any) {
+    console.error(`Failed to parse repos JSON for ${owner}: ${e.message}`);
+    return [];
+  }
+
   return repos.map(r => ({
     owner: r.owner?.login || owner,
     name: r.name,
@@ -94,25 +149,54 @@ function fetchGitHubReposSimple(owner: string, limit: number): GitHubRepo[] {
 
 /**
  * Fetch releases for a specific repo.
+ *
+ * F-DB-003: same command-injection-avoidance fix as fetchGitHubReposSimple.
+ * The owner + name are now passed as discrete argv entries; the API path
+ * is built locally AFTER validation so a malicious owner can't escape into
+ * `--header` or other gh flags.
+ *
+ * F-DB-018: parse releases line by line with per-line try/catch so a
+ * single malformed JSON line doesn't drop the entire release history.
+ * The outer catch now warns to stderr instead of silently returning [].
  */
 export function fetchReleases(owner: string, name: string): ReleaseInfo[] {
   try {
-    const cmd = `gh api repos/${owner}/${name}/releases --jq '.[] | {tag_name, name, body, prerelease, published_at}'`;
-    const result = execSync(cmd, { encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024, timeout: 30000 });
+    validateGhIdentifier(owner, 'owner');
+    validateGhIdentifier(name, 'name');
+
+    const apiPath = `repos/${owner}/${name}/releases`;
+    const args = [
+      'api', apiPath,
+      '--jq', '.[] | {tag_name, name, body, prerelease, published_at}',
+    ];
+    const result = execFileSync('gh', args, {
+      encoding: 'utf-8',
+      maxBuffer: 5 * 1024 * 1024,
+      timeout: 30000,
+    });
     if (!result.trim()) return [];
 
-    // gh --jq outputs one JSON object per line
-    return result.trim().split('\n').map(line => {
-      const r = JSON.parse(line);
-      return {
-        tag: r.tag_name,
-        title: r.name,
-        body: r.body,
-        prerelease: r.prerelease,
-        published_at: r.published_at,
-      };
-    });
-  } catch {
+    // gh --jq outputs one JSON object per line. Per-line try/catch so a
+    // single malformed line doesn't drop the whole release list.
+    const releases: ReleaseInfo[] = [];
+    for (const line of result.trim().split('\n')) {
+      try {
+        const r = JSON.parse(line);
+        releases.push({
+          tag: r.tag_name,
+          title: r.name,
+          body: r.body,
+          prerelease: r.prerelease,
+          published_at: r.published_at,
+        });
+      } catch (e: any) {
+        console.error(`Skipped malformed release JSON line for ${owner}/${name}: ${e.message}`);
+        continue;
+      }
+    }
+    return releases;
+  } catch (e: any) {
+    console.error(`Failed to fetch releases for ${owner}/${name}: ${e.message}`);
     return [];
   }
 }
@@ -134,30 +218,41 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
           continue;
         }
 
-        const repoId = upsertRepo(repo);
+        // F-DB-011: wrap the per-repo write block in a transaction so
+        // a partial failure (e.g. a single topic violating a constraint)
+        // does not leave half-written state. Also yields 10-100x bulk
+        // insert speedup on large topic / release lists.
+        //
+        // Releases are fetched OUTSIDE the transaction because they hit
+        // the network; we don't want network latency to hold a write
+        // lock open on the SQLite file.
+        const releases = opts.includeReleases ? fetchReleases(repo.owner, repo.name) : [];
 
-        // Topics
-        if (repo.topics?.length) {
-          setTopics(repoId, repo.topics, 'github');
-        }
+        const db = getDb();
+        const tx = db.transaction(() => {
+          const repoId = upsertRepo(repo);
 
-        // Language facts
-        if (repo.primary_language) {
-          upsertFact(repoId, 'language', 'primary', repo.primary_language, 'detected');
-        }
-        if (repo.languages) {
-          for (const [lang, bytes] of Object.entries(repo.languages)) {
-            upsertFact(repoId, 'language', lang, String(bytes), 'detected');
+          // Topics
+          if (repo.topics?.length) {
+            setTopics(repoId, repo.topics, 'github');
           }
-        }
 
-        // Releases (optional, slower)
-        if (opts.includeReleases) {
-          const releases = fetchReleases(repo.owner, repo.name);
+          // Language facts
+          if (repo.primary_language) {
+            upsertFact(repoId, 'language', 'primary', repo.primary_language, 'detected');
+          }
+          if (repo.languages) {
+            for (const [lang, bytes] of Object.entries(repo.languages)) {
+              upsertFact(repoId, 'language', lang, String(bytes), 'detected');
+            }
+          }
+
+          // Releases (optional, slower — fetched above outside the tx).
           for (const rel of releases) {
             upsertRelease(repoId, rel);
           }
-        }
+        });
+        tx();
 
         results.synced++;
         process.stdout.write('.');

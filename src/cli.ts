@@ -39,16 +39,52 @@ import { suggestByRepo, suggestBySurface } from './sync/dogfood-suggest.js';
 import { parseWorklist } from './games/parser.js';
 import { scoreGame } from './games/scorer.js';
 import { renderReport, renderJSON, renderMarkdown } from './games/render.js';
+// F-BE-022 / F-BE-011 / F-BE-021: shared enum tuples for note + relation
+// types — single source of truth in index.ts (CLI validators + MCP Zod
+// enums sync by inspection). Mirrors CHECK constraints in src/db/schema.sql.
+import { NOTE_TYPES, RELATION_TYPES } from './index.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
 
-const config = resolveConfig();
+// F-BE-014: lazy config getter so `rk --help` / `rk --version` don't crash
+// when rk.config.json is malformed or missing. Command actions call config()
+// to materialize the resolved config on demand.
+let _configCache: ReturnType<typeof resolveConfig> | undefined;
+function config(): ReturnType<typeof resolveConfig> {
+  if (!_configCache) _configCache = resolveConfig();
+  return _configCache;
+}
+
+// F-BE-008: parse positive integer with surface-naming error. Exits 2 with a
+// helpful message if the value is non-numeric, NaN, infinite, or < 1. Used
+// for --limit and similar numeric options where bad input would silently
+// degrade (parseInt('foo') → NaN → undefined SQL bind → no results).
+function parsePositiveInt(value: string, label: string): number {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 1) {
+    console.error(`Invalid ${label}: ${value}`);
+    console.error(`Expected a positive integer (e.g., --limit 10).`);
+    process.exit(2);
+  }
+  return n;
+}
+
+// F-BE-007: register a single beforeExit hook so any code path that throws
+// or short-circuits without explicit closeDb() still releases the WAL/-shm
+// files. closeDb() is idempotent so multiple calls (action handler + this
+// hook) are safe.
+process.on('beforeExit', () => {
+  try { closeDb(); } catch { /* idempotent best-effort */ }
+});
 
 program
   .name('rk')
   .description('Repo Knowledge System — know your repos')
-  .version(version);
+  .version(version)
+  // F-BE-humanization: nudge users toward --help after misuse (unknown
+  // command, missing required option, etc.). Cheaper than rereading docs.
+  .showHelpAfterError('(add --help for additional information)');
 
 // ─── init ────────────────────────────────────────────────────────────────────
 program
@@ -102,7 +138,7 @@ program
   .option('--releases', 'Also sync releases (slower)', false)
   .option('--forks', 'Include forked repos', false)
   .action(async (opts: { owners: string; local: string; releases: boolean; forks: boolean }): Promise<void> => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     await fullSync({
       owners: opts.owners ? opts.owners.split(',') : undefined,
       localDirs: opts.local ? opts.local.split(',') : undefined,
@@ -117,7 +153,7 @@ program
   .command('scan <path>')
   .description('Scan a single local repo directory')
   .action((path: string): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const result = ingestLocalRepo(path);
     console.log(`Scanned: ${result.name} (${result.docs} docs indexed)`);
     rebuildIndex();
@@ -130,7 +166,7 @@ program
   .description('Sync dogfood evidence from dogfood-lab/testing-os into repo_facts (one-way read)')
   .option('--local <path>', 'Local testing-os checkout path (default: fetch from GitHub)')
   .action(async (opts: { local?: string }): Promise<void> => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const result = await syncDogfood({
       localPath: opts.local || undefined,
     });
@@ -156,11 +192,22 @@ program
   .option('--repo <slug>', 'Repo slug (e.g., mcp-tool-shop-org/shipcheck)')
   .option('--surface <surface>', 'Product surface (e.g., cli, mcp-server, desktop)')
   .action((opts: { repo?: string; surface?: string }): void => {
-    if (!opts.repo && !opts.surface) {
-      console.error('Specify --repo <slug> or --surface <surface>');
+    // F-BE-016: reject ambiguous invocation (both flags set) BEFORE opening
+    // the DB. The action only routes to one branch, so silently picking one
+    // would hide a user mistake.
+    if (opts.repo && opts.surface) {
+      console.error('Error: specify only one of --repo or --surface, not both.');
+      console.error('Example: rk suggest-dogfood --repo mcp-tool-shop-org/shipcheck');
+      console.error('   or:   rk suggest-dogfood --surface cli');
       process.exit(2);
     }
-    openDb(config.dbPath);
+    if (!opts.repo && !opts.surface) {
+      console.error('Error: specify --repo <slug> or --surface <surface>.');
+      console.error('Example: rk suggest-dogfood --repo mcp-tool-shop-org/shipcheck');
+      console.error('   or:   rk suggest-dogfood --surface cli');
+      process.exit(2);
+    }
+    openDb(config().dbPath);
     const result = opts.repo ? suggestByRepo(opts.repo) : suggestBySurface(opts.surface!);
 
     if (result.findings.length === 0 && result.patterns.length === 0 &&
@@ -216,7 +263,7 @@ program
   .command('show <slug>')
   .description('Show full repo knowledge (owner/name or partial name)')
   .action((slug: string): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     // Try exact match first, then partial
     let repo = getRepo(slug);
     if (!repo) {
@@ -226,7 +273,9 @@ program
     }
 
     if (!repo) {
-      console.error(`Repo not found: ${slug}`);
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      console.error(`Or:  rk find ${slug}  (to fuzzy-search content)`);
       closeDb();
       process.exit(1);
     }
@@ -246,7 +295,7 @@ program
   .option('--shape <shape>', 'Filter by app shape')
   .option('--owner <owner>', 'Filter by owner')
   .action((opts: Record<string, string>): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const filters: Record<string, string> = { ...opts };
     if (filters.shape) { filters.app_shape = filters.shape; delete filters.shape; }
     const repos = findRepos(filters);
@@ -274,9 +323,10 @@ program
   .description('Search across all indexed content')
   .option('-n, --limit <n>', 'Max results', '10')
   .action((queryParts: string[], opts: { limit: string }): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const query = queryParts.join(' ');
-    const results = searchRepos(query, { limit: parseInt(opts.limit) });
+    const limit = parsePositiveInt(opts.limit, '--limit');
+    const results = searchRepos(query, { limit });
 
     if (!results.length) {
       console.log(`No results for: ${query}`);
@@ -300,10 +350,11 @@ program
   .command('related <slug>')
   .description('Show repos related to a given repo')
   .action((slug: string): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const repoId = resolveRepoId(slug);
     if (!repoId) {
-      console.error(`Repo not found: ${slug}`);
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
       closeDb();
       process.exit(1);
     }
@@ -328,14 +379,30 @@ program
 program
   .command('note <slug>')
   .description('Add a note to a repo')
-  .requiredOption('-t, --type <type>', 'Note type: thesis|architecture|warning|next_step|drift_risk|release_summary|convention|pain_point|command|general')
+  // F-BE-011: --type is validated against NOTE_TYPES in the action body
+  // below. The underlying CHECK constraint in repo_notes would reject
+  // invalid values anyway; the action-body guard surfaces a friendlier
+  // error than a raw SQLITE_CONSTRAINT.
+  .requiredOption(
+    '-t, --type <type>',
+    `Note type: ${NOTE_TYPES.join('|')}`,
+  )
   .requiredOption('-c, --content <content>', 'Note content')
   .option('--title <title>', 'Optional note title')
   .action((slug: string, opts: { type: string; content: string; title?: string }): void => {
-    openDb(config.dbPath);
+    // F-BE-011: validate the enum before opening the DB.
+    if (!(NOTE_TYPES as readonly string[]).includes(opts.type)) {
+      console.error(`Error: invalid note type "${opts.type}".`);
+      console.error(`Allowed: ${NOTE_TYPES.join(', ')}`);
+      console.error(`Example: rk note <slug> --type thesis --content "..."`);
+      process.exit(2);
+    }
+    openDb(config().dbPath);
     const repoId = resolveRepoId(slug);
     if (!repoId) {
-      console.error(`Repo not found: ${slug}`);
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      console.error(`Or:  rk sync  (to fetch new repos from configured owners)`);
       closeDb();
       process.exit(1);
     }
@@ -349,14 +416,32 @@ program
 // ─── relate ──────────────────────────────────────────────────────────────────
 program
   .command('relate <from> <type> <to>')
-  .description('Add a relationship between repos')
+  .description(`Add a relationship between repos. <type>: ${RELATION_TYPES.join('|')}`)
   .option('--note <note>', 'Optional relationship note')
   .action((from: string, type: string, to: string, opts: { note?: string }): void => {
-    openDb(config.dbPath);
+    // F-BE-021: validate <type> positional against RELATION_TYPES before
+    // touching the DB — same rationale as the note --type guard.
+    if (!(RELATION_TYPES as readonly string[]).includes(type)) {
+      console.error(`Error: invalid relation type "${type}".`);
+      console.error(`Allowed: ${RELATION_TYPES.join(', ')}`);
+      console.error(`Example: rk relate from-slug depends_on to-slug`);
+      process.exit(2);
+    }
+    openDb(config().dbPath);
     const fromId = resolveRepoId(from);
     const toId = resolveRepoId(to);
-    if (!fromId) { console.error(`Repo not found: ${from}`); closeDb(); process.exit(1); }
-    if (!toId) { console.error(`Repo not found: ${to}`); closeDb(); process.exit(1); }
+    if (!fromId) {
+      console.error(`Error: repo not found: ${from}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
+    if (!toId) {
+      console.error(`Error: repo not found: ${to}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
 
     addRelationship(fromId, type, toId, opts.note);
     console.log(`Relationship added: ${from} ${type} ${to}`);
@@ -368,7 +453,7 @@ program
   .command('stats')
   .description('Show database statistics')
   .action((): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const stats = getStats();
     console.log('\nRepo Knowledge Stats:');
     console.log(`  Repos:         ${stats.repos}`);
@@ -392,7 +477,7 @@ program
   .command('reindex')
   .description('Rebuild the full-text search index')
   .action((): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const count = rebuildIndex();
     console.log(`Indexed ${count} entries`);
     closeDb();
@@ -511,7 +596,7 @@ audit
   .command('seed-controls')
   .description('Seed/update the canonical control catalog')
   .action((): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const count = seedControls(getDb());
     console.log(`Seeded ${count} canonical controls`);
     closeDb();
@@ -522,7 +607,7 @@ audit
   .command('import <dir>')
   .description('Import audit results from a directory with JSON contract files')
   .action((dir: string): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     try {
       const result = importAudit(dir);
       console.log(`Imported audit run #${result.runId}:`);
@@ -530,7 +615,9 @@ audit
       console.log(`  Findings: ${result.findings}`);
       console.log(`  Artifacts: ${result.artifacts}`);
     } catch (e: unknown) {
-      console.error(`Import failed: ${(e as Error).message}`);
+      console.error(`Error: audit import failed: ${(e as Error).message}`);
+      console.error(`Hint: verify <dir> contains run.json, controls.json, findings.json, metrics.json`);
+      console.error(`Example: rk audit import ./audits/2026-05-20-shipcheck`);
       process.exit(1);
     }
     closeDb();
@@ -541,10 +628,15 @@ audit
   .command('posture [slug]')
   .description('Show audit posture for one repo or the full portfolio')
   .action((slug?: string): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     if (slug) {
       const repoId = resolveRepoId(slug);
-      if (!repoId) { console.error(`Repo not found: ${slug}`); closeDb(); process.exit(1); }
+      if (!repoId) {
+        console.error(`Error: repo not found: ${slug}`);
+        console.error(`Run: rk list  (to see all indexed repos)`);
+        closeDb();
+        process.exit(1);
+      }
       const posture = getAuditPosture(repoId);
       if (!posture) { console.log(`${slug}: not yet audited`); closeDb(); return; }
       console.log(`\n${slug} — ${posture.overall_posture.toUpperCase()}`);
@@ -590,11 +682,11 @@ audit
   .option('-d, --domain <domain>', 'Filter by domain')
   .option('-n, --limit <n>', 'Max results', '50')
   .action((opts: { severity?: string; domain?: string; limit: string }): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const findings = getOpenFindings({
       severity: opts.severity,
       domain: opts.domain,
-      limit: parseInt(opts.limit),
+      limit: parsePositiveInt(opts.limit, '--limit'),
     });
 
     if (!findings.length) {
@@ -618,7 +710,7 @@ audit
   .description('List canonical controls')
   .option('-d, --domain <domain>', 'Filter by domain')
   .action((opts: { domain?: string }): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const db = getDb();
     let controls: Array<Record<string, any>>;
     if (opts.domain) {
@@ -650,7 +742,7 @@ audit
   .command('unaudited')
   .description('List repos with no audit runs')
   .action((): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const repos = findByAuditStatus({ unaudited: true });
     console.log(`\n${repos.length} unaudited repos:\n`);
     for (const r of repos) {
@@ -666,7 +758,7 @@ audit
   .command('failing <domain>')
   .description('List repos failing a specific audit domain')
   .action((domain: string): void => {
-    openDb(config.dbPath);
+    openDb(config().dbPath);
     const repos = findByAuditStatus({ domain_failing: domain });
     if (!repos.length) {
       console.log(`No repos failing domain: ${domain}`);

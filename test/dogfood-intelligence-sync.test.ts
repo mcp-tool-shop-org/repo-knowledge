@@ -251,6 +251,15 @@ describe('suggest-dogfood retrieval', () => {
 
     const result = suggestBySurface('mcp-server');
     expect(result.findings.length).toBeGreaterThanOrEqual(1);
+
+    // F-TS-019: pin specific finding_ids so we prove the surface filter
+    // actually filters. The previous assertion only counted >=1, which would
+    // pass even if the filter returned EVERY finding regardless of surface.
+    // The mcp-server surface contributes dfind-mcp-interface and excludes
+    // dfind-cli-entrypoint (which belongs to the cli surface).
+    const ids = result.findings.map(f => f.finding_id);
+    expect(ids).toContain('dfind-mcp-interface');
+    expect(ids).not.toContain('dfind-cli-entrypoint');
   });
 
   it('returns empty for unknown repo', () => {

@@ -9,11 +9,18 @@
 
 import type { WorklistRow, RowStatus, Findings } from './types.js';
 
+// F-AG-005: noAction is a strict SUPERSET of done (its prefix matches the
+// done pattern), so it MUST be checked BEFORE done. JavaScript object
+// property iteration follows insertion order, which is what parseStatus
+// relies on — reordering this map changes which pattern wins for the
+// `[x] done by <player> <ts> | 0 findings` shape. With done first, every
+// no-action row would mis-classify as a regular done; the leaderboard
+// then credits findings work that didn't happen.
 const STATUS_PATTERNS: Record<string, RegExp> = {
+  noAction: /^\[x\]\s*done\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)\s*\|\s*0 findings/,
   done: /^\[x\]\s*done\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)/,
   blocked: /^\[x\]\s*BLOCKED\s+(?<player>\S+)\s+(?<timestamp>\S+)/,
   skipped: /^\[x\]\s*skipped\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)/,
-  noAction: /^\[x\]\s*done\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)\s*\|\s*0 findings/,
   claimed: /^\[~\]\s*claimed\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)/,
   open: /^\[ \]$/,
 };
@@ -48,15 +55,25 @@ export function parseWorklist(markdown: string): WorklistRow[] {
   return rows;
 }
 
+// F-AG-016: a slug looks like owner/repo with only word chars, dots,
+// hyphens, and underscores on either side. The previous "cell.includes('/')"
+// heuristic happily matched cells containing CI: green/whatever and any
+// stray prose with a slash, causing rows to capture the wrong slug (and
+// later iterations OVERWRITING a correct slug when another slash-bearing
+// cell came along). First valid wins via the explicit break.
+const SLUG_PATTERN = /^[\w.-]+\/[\w.-]+$/;
+
 function parseRow(statusCell: string, cells: string[]): WorklistRow | null {
-  // Find the slug — it's the cell that looks like owner/repo
+  // Find the slug — it's the cell that matches owner/repo exactly.
   let slug: string | null = null;
   let findingsStr: string | null = null;
   let passRateStr: string | null = null;
 
   for (const cell of cells) {
-    if (cell.includes('/') && !cell.startsWith('[') && !cell.includes('posture')) {
+    if (slug === null && SLUG_PATTERN.test(cell)) {
       slug = cell;
+      // First valid slug wins — break out of the slug search but
+      // continue scanning for findings + pass-rate cells.
     }
     const fm = cell.match(FINDINGS_PATTERN);
     if (fm) findingsStr = cell;
@@ -106,8 +123,12 @@ function parseStatus(cell: string): RowStatus {
     return { state: 'open', player: null, timestamp: null };
   }
 
-  // Fallback for any [x] pattern we didn't match specifically
-  const fallback = cell.match(/^\[x\].*?(?<player>claude-opus-4|opus-\d|opus-main|claude-opus)\s+(?<timestamp>\S+)/);
+  // F-AG-006: previous fallback hard-coded specific player handles
+  // (claude-opus-4 | opus-N | opus-main | claude-opus), which made
+  // unknown players invisible to the leaderboard. Replace with a
+  // generic shape that accepts any conventional player handle and
+  // surfaces it as state='done' if it leaks through specific patterns.
+  const fallback = cell.match(/^\[x\]\s*done\s+by\s+(?<player>[\w.-]+)\s+(?<timestamp>\S+)/i);
   if (fallback?.groups) {
     return { state: 'done', player: fallback.groups.player, timestamp: fallback.groups.timestamp };
   }

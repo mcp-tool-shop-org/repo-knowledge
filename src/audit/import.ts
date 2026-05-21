@@ -12,11 +12,53 @@
  * Raw artifacts stay on disk; only references enter the DB.
  */
 import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve, sep } from 'path';
 import { createHash } from 'crypto';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import { getDb, getRepoIdBySlug } from '../db/init.js';
 import { rebuildIndex } from '../search/fts.js';
+
+/**
+ * F-AG-019: filename-named JSON read helper. Centralises the
+ * try/catch shape that previously appeared inline at every JSON
+ * loading site. Naming the file in the thrown error means a malformed
+ * controls.json doesn't surface as "Unexpected token" with no
+ * context — the operator sees `Failed to read /path/to/controls.json: ...`.
+ */
+function readJson(p: string): unknown {
+  let raw: string;
+  try {
+    raw = readFileSync(p, 'utf-8');
+  } catch (e: unknown) {
+    throw new Error(`Failed to read ${p}: ${(e as Error).message}`, { cause: e });
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e: unknown) {
+    throw new Error(`Failed to parse ${p}: ${(e as Error).message}`, { cause: e });
+  }
+}
+
+/**
+ * F-AG-008: pass_rate normalisation at the boundary.
+ *
+ * Some audit producers emit pass_rate as a percent (0-100), others as a
+ * fraction (0-1). Normalise to a fraction in [0, 1] before insert and
+ * throw on out-of-range values rather than silently storing garbage.
+ *
+ * Exported so cli.ts and tests can reuse the same boundary contract.
+ */
+export function normalizePassRate(input: number | null | undefined): number | null {
+  if (input == null) return null;
+  if (!Number.isFinite(input)) {
+    throw new Error(`Invalid pass_rate: ${input} — must be a finite number`);
+  }
+  const passRate = input > 1 ? input / 100 : input;
+  if (passRate < 0 || passRate > 1) {
+    throw new Error(`Invalid pass_rate: ${input} — out of range (must be 0-1 fraction or 0-100 percent)`);
+  }
+  return passRate;
+}
 
 // ─── Input interfaces ────────────────────────────────────────────────────────
 
@@ -143,28 +185,26 @@ const VALID_CONFIDENCES = ['high', 'medium', 'low'];
 
 function validate(value: string | undefined, allowed: string[], field: string): void {
   if (value && !allowed.includes(value)) {
+    // Stage C humanization: show both the bad value and the allowed list
+    // so the operator doesn't have to grep the source to find the enum.
     throw new Error(`Invalid ${field}: "${value}". Must be one of: ${allowed.join(', ')}`);
   }
 }
 
-// ─── Import a complete audit run ─────────────────────────────────────────────
-
 /**
- * Import a full audit from a directory containing the JSON contract files.
+ * F-AG-004: shared input validator for both directory + inline import paths.
+ *
+ * Both `importAudit` and `importAuditInline` accept the same {run,
+ * controls, findings} shape, and the same CHECK constraints in
+ * migration-002-audit.sql apply to both. Centralizing the validation
+ * means we cannot drift between the two entry points — adding a new
+ * status enum here covers both.
  */
-export function importAudit(auditDir: string, _artifactsRoot?: string): ImportResult {
-  const db = getDb();
-
-  // Load and validate run.json
-  const runPath = join(auditDir, 'run.json');
-  if (!existsSync(runPath)) throw new Error(`Missing run.json in ${auditDir}`);
-  const run: AuditRunInput = JSON.parse(readFileSync(runPath, 'utf-8'));
-
-  // Resolve repo
-  const repoId = getRepoIdBySlug(run.slug);
-  if (!repoId) throw new Error(`Repo not found: ${run.slug}. Run 'rk sync' first.`);
-
-  // Normalize aliases: status → overall_status, posture → overall_posture
+function validateInputs(
+  run: AuditRunInput,
+  controls?: ControlResultInput[],
+  findings?: FindingInput[],
+): { overallStatus: string; overallPosture: string } {
   const overallStatus = run.overall_status || run.status || 'incomplete';
   const overallPosture = run.overall_posture || run.posture || 'unknown';
 
@@ -172,106 +212,232 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
   validate(overallPosture, VALID_POSTURES, 'overall_posture');
   validate(run.scope_level, VALID_SCOPES, 'scope_level');
 
-  // Insert audit run
-  const runResult = db.prepare(`
-    INSERT INTO audit_runs (
-      repo_id, audit_version, commit_sha, branch, tag, auditor,
-      scope_level, overall_status, overall_posture, domains_checked,
-      summary, blocking_release, started_at, completed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    repoId,
-    run.audit_version || '1',
-    run.commit_sha || null,
-    run.branch || null,
-    run.tag || null,
-    run.auditor || 'claude',
-    run.scope_level || 'core',
-    overallStatus,
-    overallPosture,
-    run.domains_checked ? JSON.stringify(run.domains_checked) : null,
-    run.summary || null,
-    run.blocking_release ? 1 : 0,
-    run.started_at || new Date().toISOString(),
-    run.completed_at || null
-  );
-  const runId = runResult.lastInsertRowid;
+  if (controls?.length) {
+    for (let i = 0; i < controls.length; i++) {
+      const c = controls[i];
+      if (!c || !c.control_id) {
+        throw new Error(`controls[${i}] missing required field: control_id`);
+      }
+      validate(c.result, VALID_RESULTS, `controls[${i}] (${c.control_id}) result`);
+    }
+  }
+
+  if (findings?.length) {
+    for (let i = 0; i < findings.length; i++) {
+      const f = findings[i];
+      if (!f || !f.title) {
+        throw new Error(`findings[${i}] missing required field: title`);
+      }
+      validate(f.severity, VALID_SEVERITIES, `findings[${i}] ("${f.title}") severity`);
+      validate(f.status, VALID_FINDING_STATUSES, `findings[${i}] ("${f.title}") status`);
+      validate(f.confidence, VALID_CONFIDENCES, `findings[${i}] ("${f.title}") confidence`);
+    }
+  }
+
+  return { overallStatus, overallPosture };
+}
+
+// ─── Import a complete audit run ─────────────────────────────────────────────
+
+/**
+ * Import a full audit from a directory containing the JSON contract files.
+ *
+ * F-AG-003: the entire write block runs inside a SINGLE db.transaction so
+ * the import is atomic — a partial failure (e.g. a corrupted findings.json
+ * after run.json + controls.json already loaded) rolls back cleanly
+ * rather than leaving an audit_runs row with no controls or metrics
+ * attached. Pre-load + validate JSON OUTSIDE the transaction; rebuildIndex
+ * also runs AFTER commit (it manipulates an FTS5 virtual table that
+ * doesn't compose well inside a higher-level write tx).
+ */
+export function importAudit(auditDir: string, _artifactsRoot?: string): ImportResult {
+  const db = getDb();
+  const resolvedAuditDir = resolve(auditDir);
+
+  // F-AG-020: pre-load + validate every JSON file BEFORE we touch the DB.
+  // This way a corrupt metrics.json doesn't leave a run + controls row
+  // already written; either the whole import lands or none of it does.
+  const runPath = join(auditDir, 'run.json');
+  if (!existsSync(runPath)) throw new Error(`Missing run.json in ${auditDir}`);
+  const run = readJson(runPath) as AuditRunInput;
+
+  const controlsPath = join(auditDir, 'controls.json');
+  let controls: ControlResultInput[] | undefined;
+  if (existsSync(controlsPath)) {
+    const raw = readJson(controlsPath);
+    if (!Array.isArray(raw)) {
+      throw new Error(`${controlsPath}: expected array of control results, got ${typeof raw}`);
+    }
+    raw.forEach((c, i) => {
+      if (!c || typeof c !== 'object' || !(c as any).control_id) {
+        throw new Error(`${controlsPath}[${i}]: missing required field control_id`);
+      }
+    });
+    controls = raw as ControlResultInput[];
+  }
+
+  const findingsPath = join(auditDir, 'findings.json');
+  let findings: FindingInput[] | undefined;
+  if (existsSync(findingsPath)) {
+    const raw = readJson(findingsPath);
+    if (!Array.isArray(raw)) {
+      throw new Error(`${findingsPath}: expected array of findings, got ${typeof raw}`);
+    }
+    raw.forEach((f, i) => {
+      if (!f || typeof f !== 'object' || !(f as any).title || !(f as any).severity || !(f as any).domain) {
+        throw new Error(`${findingsPath}[${i}]: missing required field (title, severity, or domain)`);
+      }
+    });
+    findings = raw as FindingInput[];
+  }
+
+  const metricsPath = join(auditDir, 'metrics.json');
+  let metrics: MetricsInput | undefined;
+  if (existsSync(metricsPath)) {
+    metrics = readJson(metricsPath) as MetricsInput;
+  }
+
+  const artifactsPath = join(auditDir, 'artifacts.json');
+  let artifacts: ArtifactInput[] | undefined;
+  if (existsSync(artifactsPath)) {
+    const raw = readJson(artifactsPath);
+    if (!Array.isArray(raw)) {
+      throw new Error(`${artifactsPath}: expected array of artifacts, got ${typeof raw}`);
+    }
+    raw.forEach((a, i) => {
+      if (!a || typeof a !== 'object' || !(a as any).path || !(a as any).artifact_type) {
+        throw new Error(`${artifactsPath}[${i}]: missing required field (path or artifact_type)`);
+      }
+      // F-AG-001: reject artifact paths that escape the audit directory.
+      // The path is later joined to auditDir and read as a file — a path
+      // like `../../etc/passwd` or `/etc/passwd` would otherwise let an
+      // attacker-controlled audit manifest exfiltrate arbitrary files
+      // via the checksum/size logic below.
+      const apath = (a as any).path as string;
+      if (typeof apath !== 'string') {
+        throw new Error(`${artifactsPath}[${i}]: path must be a string`);
+      }
+      // Reject absolute paths up-front (cross-platform: starts with `/`
+      // on POSIX, drive letter on Windows). `path.resolve` would collapse
+      // them and bypass the dir-prefix check.
+      if (/^[A-Za-z]:[\\/]/.test(apath) || apath.startsWith('/') || apath.startsWith('\\')) {
+        throw new Error(`${artifactsPath}[${i}]: absolute artifact paths not allowed: ${apath}`);
+      }
+      const resolved = resolve(resolvedAuditDir, apath);
+      if (!resolved.startsWith(resolvedAuditDir + sep) && resolved !== resolvedAuditDir) {
+        throw new Error(`Artifact path escapes audit dir: ${apath}`);
+      }
+    });
+    artifacts = raw as ArtifactInput[];
+  }
+
+  // Resolve repo
+  const repoId = getRepoIdBySlug(run.slug);
+  if (!repoId) throw new Error(`Repo not found: ${run.slug}. Run 'rk sync' first.`);
+
+  // F-AG-004: shared validation contract — same enum rules cover both
+  // controls + findings on inline and directory paths.
+  const { overallStatus, overallPosture } = validateInputs(run, controls, findings);
 
   let controlCount = 0;
   let findingCount = 0;
   let artifactCount = 0;
+  let runId: number | bigint = 0;
 
-  // Import controls.json
-  const controlsPath = join(auditDir, 'controls.json');
-  if (existsSync(controlsPath)) {
-    const controls: ControlResultInput[] = JSON.parse(readFileSync(controlsPath, 'utf-8'));
-    const insControl = db.prepare(`
-      INSERT OR REPLACE INTO audit_control_results
-        (audit_run_id, control_id, result, notes, evidence_ref, tool_source, measured_value)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+  // F-AG-003: single outer transaction wrapping every write. Atomic
+  // import — either every table lands consistent or nothing does.
+  const tx = db.transaction(() => {
+    const runResult = db.prepare(`
+      INSERT INTO audit_runs (
+        repo_id, audit_version, commit_sha, branch, tag, auditor,
+        scope_level, overall_status, overall_posture, domains_checked,
+        summary, blocking_release, started_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      repoId,
+      run.audit_version || '1',
+      run.commit_sha || null,
+      run.branch || null,
+      run.tag || null,
+      run.auditor || 'claude',
+      run.scope_level || 'core',
+      overallStatus,
+      overallPosture,
+      run.domains_checked ? JSON.stringify(run.domains_checked) : null,
+      run.summary || null,
+      run.blocking_release ? 1 : 0,
+      run.started_at || new Date().toISOString(),
+      run.completed_at || null
+    );
+    runId = runResult.lastInsertRowid;
 
-    const tx = db.transaction(() => {
+    if (controls) {
+      const insControl = db.prepare(`
+        INSERT OR REPLACE INTO audit_control_results
+          (audit_run_id, control_id, result, notes, evidence_ref, tool_source, measured_value)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
       for (const c of controls) {
-        validate(c.result, VALID_RESULTS, `control ${c.control_id} result`);
         insControl.run(runId, c.control_id, c.result, c.notes || null,
           c.evidence_ref || null, c.tool_source || null, c.measured_value || null);
         controlCount++;
       }
-    });
-    tx();
-  }
+    }
 
-  // Import findings.json
-  const findingsPath = join(auditDir, 'findings.json');
-  if (existsSync(findingsPath)) {
-    const findings: FindingInput[] = JSON.parse(readFileSync(findingsPath, 'utf-8'));
-    const insFinding = db.prepare(`
-      INSERT OR REPLACE INTO audit_findings (
-        audit_run_id, repo_id, domain, control_id, title, description,
-        severity, confidence, status, location, tool_source,
-        evidence_ref, remediation, cve_id, cvss_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const tx = db.transaction(() => {
+    if (findings) {
+      // F-AG-002: switch from INSERT OR REPLACE to ON CONFLICT…DO UPDATE
+      // so the existing row id is preserved when a finding gets re-imported.
+      // INSERT OR REPLACE deletes the row and reinserts a new one with a
+      // fresh autoincrement id; any FK references (audit_exceptions.finding_id,
+      // dashboards keyed by id) would silently break.
+      // Canonical identity = (audit_run_id, domain, title, severity) — same
+      // as idx_findings_canonical in migration 004.
+      const insFinding = db.prepare(`
+        INSERT INTO audit_findings (
+          audit_run_id, repo_id, domain, control_id, title, description,
+          severity, confidence, status, location, tool_source,
+          evidence_ref, remediation, cve_id, cvss_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(audit_run_id, domain, title, severity) DO UPDATE SET
+          control_id = excluded.control_id,
+          description = excluded.description,
+          confidence = excluded.confidence,
+          status = excluded.status,
+          location = excluded.location,
+          tool_source = excluded.tool_source,
+          evidence_ref = excluded.evidence_ref,
+          remediation = excluded.remediation,
+          cve_id = excluded.cve_id,
+          cvss_score = excluded.cvss_score
+      `);
       for (const f of findings) {
-        validate(f.severity, VALID_SEVERITIES, `finding "${f.title}" severity`);
-        validate(f.status, VALID_FINDING_STATUSES, `finding "${f.title}" status`);
-        validate(f.confidence, VALID_CONFIDENCES, `finding "${f.title}" confidence`);
         insFinding.run(
           runId, repoId, f.domain, f.control_id || null, f.title,
           f.description || null, f.severity, f.confidence || 'high',
           f.status || 'open', f.location || null, f.tool_source || null,
+          // F-AG-011: ?? preserves "explicit 0" / "explicit empty string"
+          // values that || would collapse to null. cvss_score==0 is a
+          // semantically meaningful "info-only" rating.
           f.evidence_ref || null, f.remediation || null,
-          f.cve_id || null, f.cvss_score || null
+          f.cve_id || null, f.cvss_score ?? null
         );
         findingCount++;
       }
-    });
-    tx();
-  }
+    }
 
-  // Import metrics.json
-  const metricsPath = join(auditDir, 'metrics.json');
-  if (existsSync(metricsPath)) {
-    const m: MetricsInput = JSON.parse(readFileSync(metricsPath, 'utf-8'));
-    insertMetrics(db, runId, m);
-  }
+    if (metrics) {
+      insertMetrics(db, runId, metrics);
+    }
 
-  // Import artifacts.json (references only — files stay on disk)
-  const artifactsPath = join(auditDir, 'artifacts.json');
-  if (existsSync(artifactsPath)) {
-    const artifacts: ArtifactInput[] = JSON.parse(readFileSync(artifactsPath, 'utf-8'));
-    const insArtifact = db.prepare(`
-      INSERT INTO audit_artifacts
-        (audit_run_id, artifact_type, path, checksum, generated_by, format, size_bytes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const tx = db.transaction(() => {
+    if (artifacts) {
+      const insArtifact = db.prepare(`
+        INSERT INTO audit_artifacts
+          (audit_run_id, artifact_type, path, checksum, generated_by, format, size_bytes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
       for (const a of artifacts) {
-        // Compute checksum if file exists and no checksum provided
+        // Compute checksum if file exists and no checksum provided.
+        // Path-escape check already happened in pre-validation above.
         let checksum = a.checksum || null;
         let sizeBytes = a.size_bytes || null;
         const fullPath = join(auditDir, a.path);
@@ -287,11 +453,13 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
         );
         artifactCount++;
       }
-    });
-    tx();
-  }
+    }
+  });
+  tx();
 
-  // Rebuild FTS5 index so newly imported audit content is immediately searchable
+  // Rebuild FTS5 index AFTER commit — FTS5 virtual-table writes don't
+  // compose cleanly inside a higher-level transaction that also writes
+  // to the source tables.
   rebuildIndex();
 
   return { runId, controls: controlCount, findings: findingCount, artifacts: artifactCount };
@@ -367,12 +535,19 @@ function insertMetrics(db: DatabaseType, runId: number | bigint, m: MetricsInput
     m.iac_present ? 1 : 0,
     m.deploy_present ? 1 : 0,
     m.integrations_count ?? null,
-    m.pass_rate ?? null
+    // F-AG-008: normalize at the boundary so a producer emitting
+    // pass_rate=95 (percent) and another emitting 0.95 (fraction)
+    // both land as 0.95 in the DB. Out-of-range values throw.
+    normalizePassRate(m.pass_rate)
   );
 }
 
 /**
  * Import a single audit from inline JSON objects (for MCP / programmatic use).
+ *
+ * Shares the same validation contract + ON CONFLICT semantics as the
+ * directory-import path — F-AG-004 dedupes the enum checks; F-AG-002
+ * preserves finding row ids on re-import.
  */
 export function importAuditInline({ run, controls, findings, metrics, artifacts: _artifacts }: AuditInlineInput): ImportResult {
   const db = getDb();
@@ -380,74 +555,80 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
   const repoId = getRepoIdBySlug(run.slug);
   if (!repoId) throw new Error(`Repo not found: ${run.slug}`);
 
-  const overallStatus = run.overall_status || run.status || 'incomplete';
-  const overallPosture = run.overall_posture || run.posture || 'unknown';
-
-  validate(overallStatus, VALID_STATUSES, 'overall_status');
-  validate(overallPosture, VALID_POSTURES, 'overall_posture');
-
-  const runResult = db.prepare(`
-    INSERT INTO audit_runs (
-      repo_id, audit_version, commit_sha, branch, tag, auditor,
-      scope_level, overall_status, overall_posture, domains_checked,
-      summary, blocking_release, started_at, completed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    repoId, run.audit_version || '1', run.commit_sha || null,
-    run.branch || null, run.tag || null, run.auditor || 'claude',
-    run.scope_level || 'core', overallStatus, overallPosture,
-    run.domains_checked ? JSON.stringify(run.domains_checked) : null,
-    run.summary || null, run.blocking_release ? 1 : 0,
-    run.started_at || new Date().toISOString(), run.completed_at || null
-  );
-  const runId = runResult.lastInsertRowid;
+  const { overallStatus, overallPosture } = validateInputs(run, controls, findings);
 
   let controlCount = 0, findingCount = 0;
+  let runId: number | bigint = 0;
 
-  if (controls?.length) {
-    const ins = db.prepare(`
-      INSERT OR REPLACE INTO audit_control_results
-        (audit_run_id, control_id, result, notes, evidence_ref, tool_source, measured_value)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const tx = db.transaction(() => {
+  const tx = db.transaction(() => {
+    const runResult = db.prepare(`
+      INSERT INTO audit_runs (
+        repo_id, audit_version, commit_sha, branch, tag, auditor,
+        scope_level, overall_status, overall_posture, domains_checked,
+        summary, blocking_release, started_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      repoId, run.audit_version || '1', run.commit_sha || null,
+      run.branch || null, run.tag || null, run.auditor || 'claude',
+      run.scope_level || 'core', overallStatus, overallPosture,
+      run.domains_checked ? JSON.stringify(run.domains_checked) : null,
+      run.summary || null, run.blocking_release ? 1 : 0,
+      run.started_at || new Date().toISOString(), run.completed_at || null
+    );
+    runId = runResult.lastInsertRowid;
+
+    if (controls?.length) {
+      const ins = db.prepare(`
+        INSERT OR REPLACE INTO audit_control_results
+          (audit_run_id, control_id, result, notes, evidence_ref, tool_source, measured_value)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
       for (const c of controls) {
         ins.run(runId, c.control_id, c.result, c.notes || null,
           c.evidence_ref || null, c.tool_source || null, c.measured_value || null);
         controlCount++;
       }
-    });
-    tx();
-  }
+    }
 
-  if (findings?.length) {
-    const ins = db.prepare(`
-      INSERT OR REPLACE INTO audit_findings (
-        audit_run_id, repo_id, domain, control_id, title, description,
-        severity, confidence, status, location, tool_source,
-        evidence_ref, remediation, cve_id, cvss_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const tx = db.transaction(() => {
+    if (findings?.length) {
+      const ins = db.prepare(`
+        INSERT INTO audit_findings (
+          audit_run_id, repo_id, domain, control_id, title, description,
+          severity, confidence, status, location, tool_source,
+          evidence_ref, remediation, cve_id, cvss_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(audit_run_id, domain, title, severity) DO UPDATE SET
+          control_id = excluded.control_id,
+          description = excluded.description,
+          confidence = excluded.confidence,
+          status = excluded.status,
+          location = excluded.location,
+          tool_source = excluded.tool_source,
+          evidence_ref = excluded.evidence_ref,
+          remediation = excluded.remediation,
+          cve_id = excluded.cve_id,
+          cvss_score = excluded.cvss_score
+      `);
       for (const f of findings) {
         ins.run(
           runId, repoId, f.domain, f.control_id || null, f.title,
           f.description || null, f.severity, f.confidence || 'high',
           f.status || 'open', f.location || null, f.tool_source || null,
+          // F-AG-011: ?? preserves 0
           f.evidence_ref || null, f.remediation || null,
-          f.cve_id || null, f.cvss_score || null
+          f.cve_id || null, f.cvss_score ?? null
         );
         findingCount++;
       }
-    });
-    tx();
-  }
+    }
 
-  if (metrics) {
-    insertMetrics(db, runId, metrics);
-  }
+    if (metrics) {
+      insertMetrics(db, runId, metrics);
+    }
+  });
+  tx();
 
-  // Rebuild FTS5 index so newly imported audit content is immediately searchable
+  // Rebuild FTS5 index AFTER commit
   rebuildIndex();
 
   return { runId, controls: controlCount, findings: findingCount };

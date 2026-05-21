@@ -178,12 +178,34 @@ export function seedControls(db: DatabaseType): number {
 
 /**
  * Get controls applicable to a given app shape.
+ *
+ * F-AG-012: a malformed applicable_to JSON column (manual SQL edit, or
+ * a future seeding bug) would crash the whole query and hide every
+ * applicable control. Guard the parse and fall back to "applicable to
+ * all" — that matches the documented behaviour for `applicable_to IS
+ * NULL` and is the safer default than dropping the control from
+ * downstream audits.
  */
 export function getApplicableControls(db: DatabaseType, appShape: string): Record<string, any>[] {
   const all = db.prepare('SELECT * FROM audit_controls ORDER BY id').all() as Record<string, any>[];
   return all.filter(c => {
     if (!c.applicable_to) return true;
-    const shapes = JSON.parse(c.applicable_to);
+    let shapes: unknown;
+    try {
+      shapes = JSON.parse(c.applicable_to);
+    } catch (e: unknown) {
+      console.error(
+        `[audit] control ${c.id}: applicable_to is not valid JSON (${(e as Error).message}); ` +
+        `treating as applicable to all`,
+      );
+      return true;
+    }
+    if (!Array.isArray(shapes)) {
+      console.error(
+        `[audit] control ${c.id}: applicable_to is not an array; treating as applicable to all`,
+      );
+      return true;
+    }
     return shapes.includes(appShape);
   });
 }

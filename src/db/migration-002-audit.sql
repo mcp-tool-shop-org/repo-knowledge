@@ -210,5 +210,5 @@ CREATE INDEX IF NOT EXISTS idx_exceptions_repo ON audit_exceptions(repo_id);
 --------------------------------------------------------------------------------
 -- Update schema version
 --------------------------------------------------------------------------------
-INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '3');
+INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2');
 INSERT OR REPLACE INTO meta(key, value) VALUES ('audit_schema_added', datetime('now'));

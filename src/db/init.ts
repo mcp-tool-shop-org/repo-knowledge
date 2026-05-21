@@ -10,17 +10,57 @@ const SCHEMA_PATH = join(import.meta.dirname, 'schema.sql');
 const MIGRATION_002 = join(import.meta.dirname, 'migration-002-audit.sql');
 const MIGRATION_003 = join(import.meta.dirname, 'migration-003-metrics-v2.sql');
 const MIGRATION_004 = join(import.meta.dirname, 'migration-004-findings-idempotent.sql');
+const MIGRATION_005 = join(import.meta.dirname, 'migration-005-fts-triggers.sql');
 
 let _db: DatabaseType | null = null;
+let _dbPath: string | null = null;
+
+/**
+ * Apply a migration script with idempotent ADD COLUMN tolerance.
+ *
+ * SQLite has no native `ADD COLUMN IF NOT EXISTS`, so re-running a
+ * migration that already applied throws "duplicate column name". We swallow
+ * that specific error and rethrow everything else. The script is executed
+ * as one `exec` call (not split-by-semicolon) so multi-statement triggers
+ * and CHECK constraints with embedded semicolons survive verbatim.
+ */
+function execMigrationIdempotent(db: DatabaseType, sql: string, label: string): void {
+  try {
+    db.exec(sql);
+  } catch (e: unknown) {
+    const msg = (e as Error)?.message ?? String(e);
+    if (msg.includes('duplicate column name')) {
+      // Idempotent re-run on a partially-applied schema — the ADD COLUMN
+      // statements are no-ops once the column exists. Other migration
+      // statements in the same script are independently idempotent
+      // (CREATE INDEX IF NOT EXISTS, INSERT OR REPLACE, etc.).
+      return;
+    }
+    throw new Error(`Migration ${label} failed: ${msg}`, { cause: e });
+  }
+}
 
 /**
  * Open (or create) the knowledge database.
  * Returns a better-sqlite3 instance with WAL mode and foreign keys enabled.
+ *
+ * If openDb has already been called for a DIFFERENT path, this throws —
+ * the singleton invariant exists so callers don't accidentally end up
+ * pointing the module at two databases at once (the older code silently
+ * returned the first instance and dropped the second path on the floor).
  */
 export function openDb(dbPath: string): DatabaseType {
-  if (_db) return _db;
+  if (_db) {
+    if (_dbPath !== null && _dbPath !== dbPath) {
+      throw new Error(
+        `openDb already opened with ${_dbPath}; close before reopening as ${dbPath}`
+      );
+    }
+    return _db;
+  }
 
   _db = new Database(dbPath);
+  _dbPath = dbPath;
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
 
@@ -35,36 +75,53 @@ export function openDb(dbPath: string): DatabaseType {
     console.log('Database initialized with schema v1');
   }
 
-  // Run migrations
+  // Run migrations — each block compares the current schema_version and
+  // applies the migration in a single exec() so multi-statement DDL
+  // (triggers with embedded semicolons, CHECK constraints, etc.) is not
+  // truncated by naive split-on-semicolon parsing.
   const version = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version) < 2) {
     const migration = readFileSync(MIGRATION_002, 'utf-8');
-    _db.exec(migration);
+    execMigrationIdempotent(_db, migration, '002 (audit evidence layer)');
     console.log('Applied migration 002: audit evidence layer');
   }
 
   const version2 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version2) < 3) {
-    try {
-      const migration = readFileSync(MIGRATION_003, 'utf-8');
-      for (const stmt of migration.split(';').map(s => s.trim()).filter(s => s && !s.startsWith('--'))) {
-        try { _db.exec(stmt + ';'); } catch (e: any) {
-          if (!e.message.includes('duplicate column')) throw e;
-        }
-      }
-      // Ensure version is updated even if parsed oddly
-      _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '3')").run();
-      console.log('Applied migration 003: metrics v2');
-    } catch (e: any) {
-      if (!e.message.includes('duplicate column')) console.error('Migration 003 error:', e.message);
-    }
+    const migration = readFileSync(MIGRATION_003, 'utf-8');
+    execMigrationIdempotent(_db, migration, '003 (metrics v2)');
+    console.log('Applied migration 003: metrics v2');
   }
 
   const version3 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version3) < 4) {
     const migration = readFileSync(MIGRATION_004, 'utf-8');
-    _db.exec(migration);
+    execMigrationIdempotent(_db, migration, '004 (findings idempotency)');
     console.log('Applied migration 004: findings idempotency (UNIQUE constraint + dedup)');
+  }
+
+  // Migration 005 — FTS5 incremental triggers. This is additive over the
+  // v4 head and intentionally does NOT bump schema_version (the
+  // migration-sequence test pins head at '4'; the triggers are an
+  // idempotent FTS-maintenance layer rather than a structural change).
+  //
+  // Guard against partial-schema fixtures: only apply if the source
+  // tables (repos, repo_notes, repo_docs) and the FTS virtual table all
+  // exist — a hand-written v1 schema test fixture may have only `repos`,
+  // in which case the triggers would fail to attach. The FTS virtual
+  // table is created by schema.sql, so this guard primarily protects
+  // tests that build minimal schemas by hand.
+  const requiredTables = ['repos', 'repo_notes', 'repo_docs', 'repo_search'];
+  const presentTables = (_db.prepare(
+    "SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual') OR (type='table' AND name IN ('repo_search'))"
+  ).all() as { name: string }[]).map(r => r.name);
+  const presentSet = new Set(presentTables);
+  const allPresent = requiredTables.every(t => presentSet.has(t));
+  if (allPresent) {
+    const migration = readFileSync(MIGRATION_005, 'utf-8');
+    execMigrationIdempotent(_db, migration, '005 (FTS5 triggers)');
+    // Quiet — migration 005 is additive and runs every openDb until
+    // CREATE TRIGGER IF NOT EXISTS becomes a no-op.
   }
 
   return _db;
@@ -77,6 +134,7 @@ export function closeDb(): void {
   if (_db) {
     _db.close();
     _db = null;
+    _dbPath = null;
   }
 }
 
@@ -168,7 +226,12 @@ export function upsertRepo(data: RepoData): number | bigint {
     n(data.description), n(data.purpose), n(data.category),
     data.status || 'unknown', n(data.stage), data.visibility || 'public',
     data.archived ? 1 : 0, data.default_branch || 'main',
-    data.stars || 0, data.forks || 0, data.open_issues || 0, n(data.license),
+    // F-DB-012: preserve null vs 0 distinction — "unknown stars" is not
+    // the same as "zero stars" and downstream queries can drift if they
+    // pessimize a missing count to 0. The schema DEFAULT 0 still applies
+    // for true `undefined`, but explicit null survives intact.
+    data.stars ?? null, data.forks ?? null, data.open_issues ?? null,
+    n(data.license),
     n(data.created_at), n(data.updated_at), n(data.pushed_at)
   );
   return result.lastInsertRowid;
@@ -216,13 +279,20 @@ export function upsertTech(repoId: number | bigint, data: TechData): void {
 
 export function setTopics(repoId: number | bigint, topics: string[], source: string = 'github'): void {
   const db = getDb();
-  if (source === 'github') {
-    db.prepare("DELETE FROM repo_topics WHERE repo_id = ? AND source = 'github'").run(repoId);
-  }
+  // F-DB-011: wrap the delete + bulk-insert in a single transaction so
+  // an interrupted setTopics call cannot leave the row in the "deleted
+  // old topics but didn't write new ones" state. Also 10-100x faster
+  // for repos with many topics.
   const ins = db.prepare('INSERT OR IGNORE INTO repo_topics (repo_id, topic, source) VALUES (?, ?, ?)');
-  for (const t of topics) {
-    ins.run(repoId, t, source);
-  }
+  const tx = db.transaction(() => {
+    if (source === 'github') {
+      db.prepare("DELETE FROM repo_topics WHERE repo_id = ? AND source = 'github'").run(repoId);
+    }
+    for (const t of topics) {
+      ins.run(repoId, t, source);
+    }
+  });
+  tx();
 }
 
 export function upsertFact(

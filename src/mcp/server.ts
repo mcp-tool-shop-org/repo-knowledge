@@ -19,9 +19,10 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createRequire } from 'node:module';
 import { z } from 'zod';
 import {
-  openDb, getDb, getRepo, findRepos, getRelated,
+  openDb, closeDb, getDb, getRepo, findRepos, getRelated,
   getAllRepos, getStats, upsertNote,
   addRelationship as addRel,
 } from '../db/init.js';
@@ -37,13 +38,22 @@ import {
   findByAuditStatus, getOpenFindings,
 } from '../audit/queries.js';
 import { resolveConfig } from '../config.js';
+// F-BE-022 / F-BE-011 / F-BE-021: shared enum tuples — single source of
+// truth lives in src/index.ts; this import keeps server.ts's Zod enums
+// from drifting from the CLI + DB CHECK constraints.
+import { NOTE_TYPES, RELATION_TYPES } from '../index.js';
 
 // Resolve config at startup
 const config = resolveConfig();
 
+// F-BE-013: read version dynamically from package.json so server.getServerInfo()
+// stays in sync with releases instead of drifting against a hardcoded literal.
+const require = createRequire(import.meta.url);
+const { version: pkgVersion } = require('../../package.json') as { version: string };
+
 const server = new McpServer({
   name: 'repo-knowledge',
-  version: '1.0.1',
+  version: pkgVersion,
   description: 'Repo knowledge system — structured catalog with full-text search',
 });
 
@@ -70,7 +80,7 @@ server.tool(
     }
 
     if (!repo) {
-      return { content: [{ type: 'text' as const, text: `Repo not found: ${slug}` }] };
+      return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     }
 
     // Parse JSON fields for cleaner output
@@ -151,7 +161,7 @@ server.tool(
   async ({ slug }) => {
     const repoId = resolveId(slug);
     if (!repoId) {
-      return { content: [{ type: 'text' as const, text: `Repo not found: ${slug}` }] };
+      return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     }
     const related = getRelated(repoId);
     return {
@@ -267,7 +277,7 @@ server.tool(
       if (match) repo = getRepo(match.slug);
     }
     if (!repo) {
-      return { content: [{ type: 'text' as const, text: `Repo not found: ${slug}` }] };
+      return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     }
 
     const fws: string[] = repo.tech?.frameworks
@@ -301,18 +311,16 @@ server.tool(
   'Add a knowledge note to a repo. Use for thesis, architecture, warnings, next steps, etc.',
   {
     slug: z.string().describe('Repo slug or partial name'),
-    note_type: z.enum([
-      'thesis', 'architecture', 'warning', 'next_step',
-      'drift_risk', 'release_summary', 'convention',
-      'pain_point', 'command', 'general',
-    ]),
+    // F-BE-022: pull from shared tuple in ../index.js so DB CHECK constraint,
+    // CLI --type validator, and MCP Zod enum stay in lockstep.
+    note_type: z.enum(NOTE_TYPES as unknown as [string, ...string[]]),
     title: z.string().optional().describe('Short note title'),
     content: z.string().describe('Note content'),
   },
   async ({ slug, note_type, title, content }) => {
     const repoId = resolveId(slug);
     if (!repoId) {
-      return { content: [{ type: 'text' as const, text: `Repo not found: ${slug}` }] };
+      return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     }
     upsertNote(repoId, note_type, title || note_type, content);
     rebuildIndex();
@@ -328,18 +336,16 @@ server.tool(
   'Record a relationship between two repos.',
   {
     from_slug: z.string().describe('Source repo slug'),
-    relation_type: z.enum([
-      'depends_on', 'related_to', 'supersedes',
-      'shares_domain_with', 'shares_package_with', 'companion_to',
-    ]),
+    // F-BE-021: shared tuple from ../index.js — see note_type above.
+    relation_type: z.enum(RELATION_TYPES as unknown as [string, ...string[]]),
     to_slug: z.string().describe('Target repo slug'),
     note: z.string().optional().describe('Optional context about the relationship'),
   },
   async ({ from_slug, relation_type, to_slug, note }) => {
     const fromId = resolveId(from_slug);
     const toId = resolveId(to_slug);
-    if (!fromId) return { content: [{ type: 'text' as const, text: `Repo not found: ${from_slug}` }] };
-    if (!toId) return { content: [{ type: 'text' as const, text: `Repo not found: ${to_slug}` }] };
+    if (!fromId) return { content: [{ type: 'text' as const, text: notFoundMessage(from_slug) }] };
+    if (!toId) return { content: [{ type: 'text' as const, text: notFoundMessage(to_slug) }] };
 
     addRel(fromId, relation_type, toId, note);
     return {
@@ -420,7 +426,7 @@ server.tool(
   { slug: z.string().describe('Repo slug or partial name') },
   async ({ slug }) => {
     const repoId = resolveId(slug);
-    if (!repoId) return { content: [{ type: 'text' as const, text: `Repo not found: ${slug}` }] };
+    if (!repoId) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     const posture = getAuditPosture(repoId);
     if (!posture) return { content: [{ type: 'text' as const, text: `${slug}: not yet audited` }] };
     return { content: [{ type: 'text' as const, text: JSON.stringify({ slug, ...posture }, null, 2) }] };
@@ -485,7 +491,7 @@ server.tool(
   { slug: z.string().describe('Repo slug or partial name') },
   async ({ slug }) => {
     const repoId = resolveId(slug);
-    if (!repoId) return { content: [{ type: 'text' as const, text: `Repo not found: ${slug}` }] };
+    if (!repoId) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     const audit = getLatestAudit(repoId);
     if (!audit) return { content: [{ type: 'text' as const, text: `${slug}: not yet audited` }] };
 
@@ -647,6 +653,13 @@ server.tool(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// F-BE-humanization: friendly "repo not found" text that gives the calling
+// LLM an actionable next step. The MCP client (LLM) sees this verbatim and
+// can chain to find_repos or sync_repos automatically instead of giving up.
+function notFoundMessage(slug: string): string {
+  return `Repo "${slug}" not found. Use find_repos (with no filters to list all) to see indexed repos, or sync_repos to fetch new ones from configured owners.`;
+}
+
 function resolveId(slug: string): number | null {
   const db = getDb();
   let row = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
@@ -665,6 +678,19 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('repo-knowledge MCP server running on stdio');
+
+  // F-BE-009: graceful shutdown on SIGINT/SIGTERM. Without these handlers,
+  // SIGTERM (sent by host process supervisors and IDE MCP integrations on
+  // restart) leaves the SQLite WAL/-shm files locked, requiring manual
+  // cleanup. shutdown() is best-effort and exits 0 — non-zero would signal
+  // an abnormal termination the supervisor might retry.
+  const shutdown = (signal: NodeJS.Signals): void => {
+    process.stderr.write(`repo-knowledge MCP server received ${signal}, shutting down\n`);
+    try { closeDb(); } catch { /* idempotent best-effort */ }
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 main().catch((e: unknown) => {
