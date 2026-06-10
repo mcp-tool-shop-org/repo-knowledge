@@ -10,6 +10,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { upsertFact, getRepoIdBySlug, getDb } from '../db/init.js';
+import { syncSwarmControlPlane, type SwarmSyncResult } from './swarm.js';
 
 const DEFAULT_INDEX_URL =
   'https://raw.githubusercontent.com/dogfood-lab/testing-os/main/indexes/latest-by-repo.json';
@@ -36,6 +37,7 @@ export interface DogfoodSyncResult {
   facts_upserted: number;
   skipped: string[];
   intelligence?: IntelligenceSyncResult;
+  swarm?: SwarmSyncResult;
 }
 
 export interface IntelligenceSyncResult {
@@ -274,7 +276,19 @@ export async function syncDogfood(
     console.error('Intelligence sync skipped:', (e as Error).message);
   }
 
-  return { repos: repoCount, facts_upserted: factsUpserted, skipped, intelligence };
+  // --- Swarm control-plane sync ---
+  // Raw swarm audit findings from swarms/control-plane.db. Local-only:
+  // the control plane never leaves the dogfood-labs checkout.
+  let swarm: SwarmSyncResult | undefined;
+  if (options.localPath) {
+    try {
+      swarm = syncSwarmControlPlane(options.localPath) ?? undefined;
+    } catch (e: unknown) {
+      console.error('Swarm control-plane sync skipped:', (e as Error).message);
+    }
+  }
+
+  return { repos: repoCount, facts_upserted: factsUpserted, skipped, intelligence, swarm };
 }
 
 // --- Intelligence layer sync ---
@@ -319,6 +333,10 @@ async function loadIntelligenceExport(options: DogfoodSyncOptions): Promise<Inte
           cwd: options.localPath,
           encoding: 'utf-8',
           timeout: 30000,
+          // Capture the child's stderr instead of inheriting it — a crashing
+          // exporter would otherwise dump its full stack trace into our
+          // output before we get to print the one-line skip message.
+          stdio: ['ignore', 'pipe', 'pipe'],
         });
         return JSON.parse(output);
       } catch (e: unknown) {
@@ -326,10 +344,21 @@ async function loadIntelligenceExport(options: DogfoodSyncOptions): Promise<Inte
         // Most operator errors here are "CLI script not executable",
         // "intelligence DB not yet built", or "JSON parse failure" — all
         // of which read better with a hint than a 0-finding result.
+        // First line only: execFileSync appends the child's whole stderr
+        // to the message, and the stack trace adds nothing here.
+        const cause = (e as Error).message.split('\n')[0];
         console.error(
-          `[dogfood-sync] sync-export fallback failed (${cliPath}): ${(e as Error).message}`,
+          `[dogfood-sync] sync-export skipped (${cliPath}): ${cause}`,
         );
-        return null;
+        const stderr = (e as { stderr?: string }).stderr ?? '';
+        if (stderr.includes('ERR_MODULE_NOT_FOUND')) {
+          console.error(
+            `[dogfood-sync] hint: exporter dependencies missing — run \`npm ci\` in ${join(options.localPath, cliPath, '..')}`,
+          );
+        }
+        // Try the next layout candidate rather than giving up — the legacy
+        // layout may still work when the testing-os one is broken.
+        continue;
       }
     }
     return null;

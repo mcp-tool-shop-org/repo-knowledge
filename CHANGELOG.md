@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `src/sync/swarm.ts` — swarm control-plane sync. `rk sync-dogfood --local <path>` now also reads `swarms/control-plane.db` (the dogfood-labs swarm coordination DB, opened read-only) and mirrors the LATEST run per repo into `repo_facts`: one `dogfood.swarm.finding` fact per finding (severity, category, file/line, description, recommendation, status, run_id) plus eight `dogfood.swarm` rollup facts (`run:id/status/created_at/commit_sha`, `findings:total/open/fixed/open_by_severity`). Re-sync replaces a repo's swarm facts rather than accumulating stale ones. Raw swarm findings deliberately live in their own fact namespace — the curated intelligence layer (`dogfood.finding` / `dogfood.pattern` / …) stays accepted-artifacts-only. On rigs where the YAML intelligence store was never populated, this is the only dogfood intelligence source; before this change sync-dogfood reported zeros while hundreds of verified findings sat in the control plane.
+- CLI `sync-dogfood` output gains a `Swarm control-plane:` section (runs, findings + open count, facts upserted, skipped repos).
+
+### Fixed
+
+- `loadIntelligenceExport` — the `sync-export` child process's stderr is now captured instead of inherited, so a crashing legacy exporter (e.g. `ajv` not installed in `tools/findings`) degrades to a one-line `sync-export skipped (…)` message instead of dumping two full stack traces. An `ERR_MODULE_NOT_FOUND` failure adds a `run npm ci in <dir>` hint, and a failed layout candidate now falls through to the next one instead of aborting the intelligence sync.
+
 ## [2.0.0] - 2026-05-21
 
 Dogfood-swarm release. Schema head advanced **v4 → v11** across 7 additive migrations; 14 new CLI commands; new MCP-discoverable `rk health` surface grounded in 24 cited 2022–2026 findings (study-swarm dispatched 2026-05-20). Tests **74 → 370**. No breaking changes — every callsite from v1.0.5 continues to work; the major bump reflects schema shape rather than API removal.

@@ -283,6 +283,15 @@ program
       console.log(`    Findings: ${i.findings}, Patterns: ${i.patterns}, Recommendations: ${i.recommendations}, Doctrine: ${i.doctrine}`);
       console.log(`    Facts upserted: ${i.facts_upserted}`);
     }
+    if (result.swarm) {
+      const s = result.swarm;
+      console.log(`  Swarm control-plane:`);
+      console.log(`    Runs: ${s.runs}, Findings: ${s.findings} (${s.open_findings} open)`);
+      console.log(`    Facts upserted: ${s.facts_upserted}`);
+      if (s.skipped.length > 0) {
+        console.log(`    Skipped (not in DB): ${s.skipped.join(', ')}`);
+      }
+    }
     closeDb();
   });
 

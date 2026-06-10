@@ -188,6 +188,27 @@ describe('Intelligence sync', () => {
     expect(parsed.statement).toContain('runtime interface truth');
   });
 
+  it('degrades cleanly when the legacy exporter crashes', async () => {
+    const fixtureDir = join(tmpDir, 'dogfood-labs');
+    mkdirSync(fixtureDir);
+    createBaseFixtures(fixtureDir);
+    // Legacy layout whose exporter dies on startup (the ajv-not-installed
+    // shape from the field): sync must complete with zero intelligence,
+    // not propagate the child's crash.
+    mkdirSync(join(fixtureDir, 'tools', 'findings'), { recursive: true });
+    writeFileSync(
+      join(fixtureDir, 'tools', 'findings', 'cli.js'),
+      "process.stderr.write('Error [ERR_MODULE_NOT_FOUND]: Cannot find package boom');\nprocess.exit(1);\n",
+    );
+
+    const result = await syncDogfood({ localPath: fixtureDir });
+
+    expect(result.repos).toBe(2);
+    expect(result.intelligence).toBeDefined();
+    expect(result.intelligence!.findings).toBe(0);
+    expect(result.intelligence!.facts_upserted).toBe(0);
+  });
+
   it('gracefully handles missing intelligence export', async () => {
     const fixtureDir = join(tmpDir, 'dogfood-labs');
     mkdirSync(fixtureDir);
