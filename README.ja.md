@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/repo-knowledge/readme.png" alt="repo-knowledge" width="800" />
+  <img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/repo-knowledge/readme.png" alt="repo-knowledge" width="500" />
 </p>
 
 <p align="center">
@@ -19,9 +19,9 @@
 
 ---
 
-## なぜ
+## なぜか
 
-パッケージレジストリやGitHub APIは、リポジトリが「何であるか」を教えてくれます。しかし、それが「何のためにあるのか」、他のリポジトリとの関連性、アーキテクチャの設計思想、または直近のセキュリティ監査に合格したかどうかは教えてくれません。repo-knowledgeは、このギャップを埋めます。これは、設計思想、アーキテクチャ、監査証拠、関連性、そしてこれらすべてに対する全文検索機能を備えた、単一のローカルデータベースです。
+パッケージレジストリとGitHub APIは、あるリポジトリが何であるかを教えてくれます。それらが何を目的としているのか、他のリポジトリとどのように関連しているのか、そのアーキテクチャの基本理念は何なのか、または最後にセキュリティ監査に合格したかどうかは教えてくれません。repo-knowledgeは、そのギャップを埋めます。それは、基本理念、アーキテクチャ、監査証拠、関係性、およびそれらすべてに対する全文検索を含む、単一のローカルデータベースです。
 
 ## インストール
 
@@ -30,19 +30,19 @@ npm install -g @mcptoolshop/repo-knowledge
 ```
 
 **要件:**
-- Node.js 20以上
-- GitHubとの同期に必要な`gh` CLI（認証済み）
-- `better-sqlite3`用のC/C++ビルドツール。対応するプラットフォームでは、あらかじめコンパイルされたバイナリが自動的に使用されます。
+- Node.js 20+
+- GitHubとの同期のための`gh` CLI（認証済み）
+- `better-sqlite3`用のC/C++ビルドツール、またはサポートされているプラットフォームで事前にビルドされたバイナリが自動的に使用されます。
 
 ## セキュリティモデル
 
-**アクセスするデータ:** ローカルのSQLiteデータベース、`gh` CLIを介したGitHub APIのメタデータ（リポジトリ名、説明、トピック、スター数 - ソースコードの内容は含まれません）。
+**アクセスされるデータ:** ローカルSQLiteデータベース、`gh` CLIを介したGitHub APIメタデータ（リポジトリ名、説明、トピック、スター数 - ソースコードの内容は含まれません）。
 
-**アクセスしないデータ:** GitHubからソースコードは読み込まれません。認証情報は保存されません。外部サービスへのデータ送信もありません。
+**アクセスされないデータ:** GitHubからソースコードは読み込まれず、認証情報は保存されず、外部サービスにデータは送信されません。
 
-**権限:** GitHubとの同期には、`gh` CLIの認証が必要です。すべてのデータはローカルに保存されます。
+**権限:** GitHubとの同期には、認証された`gh` CLIが必要です。すべてのデータはローカルに保持されます。
 
-**テレメトリー、アナリティクス、および外部へのデータ送信はありません。**
+**テレメトリ、分析、または自動通信はありません。**
 
 ## クイックスタート
 
@@ -68,84 +68,96 @@ rk audit seed-controls
 
 ## CLIリファレンス
 
-### 主要なコマンド
+### コアコマンド
 
 | コマンド | 説明 |
 |---------|-------------|
-| `rk init` | 設定、データベースの初期化、および監査コントロールの初期設定を行います。 |
-| `rk sync` | 完全同期：GitHubの組織 + ローカルリポジトリ + 全文検索インデックス |
+| `rk init` | 構成、データベースを初期化し、監査コントロールのシードデータを設定します。 |
+| `rk sync` | 完全な同期：GitHub組織 + ローカルリポジトリ + FTSインデックス |
 | `rk scan <path>` | 単一のローカルリポジトリディレクトリをスキャンします。 |
 | `rk show <slug>` | 監査状況とともに、完全なリポジトリ情報を表示します。 |
-| `rk list` | すべてのリポジトリを一覧表示します（ステータス、言語、構造でフィルタリング可能）。 |
-| `rk find <query>` | すべてのインデックス化されたコンテンツに対する全文検索を行います。 |
-| `rk related <slug>` | 特定のレポジトリに関連するレポジトリを一覧表示します。 |
-| `rk note <slug>` | `--type`と`--content`（オプションで`--title`）を使用して、型付きのメモ（設計思想、アーキテクチャ、警告など）を追加します。 |
+| `rk list` | すべてのリポジトリをリスト（ステータス、言語、形状でフィルタリング可能） |
+| `rk find <query>` | インデックス化されたすべてのコンテンツに対する全文検索 |
+| `rk related <slug>` | 特定のレポジトリに関連するレポジトリを表示します。 |
+| `rk note <slug>` | `--type`と`--content`（オプションで`--title`）を使用して、型付きのメモ（基本理念、アーキテクチャ、警告など）を追加します。 |
 | `rk relate <from> <type> <to>` | リポジトリ間の関係を記録します（オプションで`--note`）。 |
-| `rk stats` | データベースの統計情報を表示します。 |
-| `rk reindex` | 全文検索インデックスを再構築します。 |
-| `rk sync-dogfood` | `dogfood-lab/testing-os`から「dogfood」の証拠をインポートし、リポジトリの情報を更新します。 |
-| `rk suggest-dogfood --repo <slug>` | リポジトリまたはサービスに対する既知の「dogfood」の問題を提案します。 |
+| `rk stats` | データベース統計を表示します。 |
+| `rk reindex` | FTSインデックスを再構築します。 |
+| `rk sync-dogfood` | dogfood-lab/testing-osからリポジトリの事実へと、ドッグフード証拠を同期します。 |
+| `rk suggest-dogfood --repo <slug>` | リポジトリまたはサーフェスに対して、既知のドッグフードの結果を提案します。 |
+
+> **`--json`は重要な場所で使用されます。** `list`、`find`、`show`、`related`、および`stats` - さらに5つの監査読み取り（`posture`、`findings`、`controls`、`unaudited`、`failing`）- すべてマシン可読の出力のために`--json`を受け入れます。JSONはコアコマンド全体の重要な要素です。それらのいずれかを直接`jq`にパイプしてください。
 
 ### ライフサイクルコマンド（v2.0.0）
 
 | コマンド | 説明 |
 |---------|-------------|
-| `rk delete <slug> [--yes]` | リポジトリとその子レコードをまとめて削除します。 |
-| `rk archive <slug> [--reason <text>]` | `lifecycle_status`を`archived`に変更します（メモ/検出結果は保持されます）。 |
-| `rk verify-local [--rig <id>] [--strict]` | `local_path`が各環境に存在するかどうかを確認し、`repo_local_paths`を更新します。 |
-| `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` | 現在の環境を登録します。 |
-| `rk prune [--dry-run] [--apply] [--days <N>]` | N日以上（デフォルトは30日）アーカイブされたリポジトリを完全に削除します。 |
+| `rk delete <slug> [--yes]` | リポジトリとそのすべての子行をカスケード削除します。 |
+| `rk archive <slug> [--reason <text>]` | `lifecycle_status`を`archived`に設定します（メモ/結果は保持されます）。 |
+| `rk verify-local [--rig <id>] [--strict]` | 各リグに対して`local_path`が存在することを確認し、`repo_local_paths`を更新します。 |
+| `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` | 現在のリグを登録します。 |
+| `rk prune [--dry-run] [--apply] [--days <N>]` | N日以上前にアーカイブされたリポジトリをハード削除します（デフォルトは30日）。 |
 
 ### 公開状態コマンド（v2.0.0）
 
 | コマンド | 説明 |
 |---------|-------------|
 | `rk versions <slug> [--refresh] [--channel <name>]` | クロスチャネルの公開バージョンダッシュボード（npm/pypi/github_release） |
-| `rk drift <slug> [--strict]` | 信頼できるソースのバージョンと、最新のレジストリのバージョンを比較します。 |
+| `rk drift <slug> [--strict]` | 信頼できるソースバージョンの最新のレジストリとの比較 |
 | `rk bind-package <slug> [--npm <name>] [--pypi <name>] [--publisher-method <method>]` | 手動バインディング設定ツール |
 
-### ヘルスチェックコマンド（v2.0.0 - リサーチベース）
+### ヘルスチェックコマンド（v2.0.0 - 研究に基づいています）
 
 | コマンド | 説明 |
 |---------|-------------|
-| `rk health`（デフォルト = フィード） | フィードの変更：最終同期からの差分、KEVの共通部分、CIの連続性の中断、アクションピンのずれ。 |
-| `rk health doctor <slug>` | 単一リポジトリの詳細分析（依存関係監査、ワークフローアクション、CI信号、ツールチェーン）。 |
-| `rk health table [--json\ | --text]` | ポートフォリオのヘルスチェックテーブル。JSONは、動作に必要な契約です。 |
+| `rk health`（デフォルト=フィード） | フィードを変更します：最後の同期からのデルタ、KEVの交差、CIストリークの中断、アクションピンのドリフト。 |
+| `rk health doctor <slug>` | 単一のリポジトリの詳細な調査（依存関係監査、ワークフローアクション、CIシグナル、ツールチェーン）。 |
+| `rk health table [--json\ | --text]` | ポートフォリオのヘルスチェックテーブル。JSONは重要な要素です。 |
 
 ### 運用コマンド（v2.0.0）
 
 | コマンド | 説明 |
 |---------|-------------|
-| `rk fsck [--strict] [--json]` | データベースの整合性チェック。監査レコードを`db_health_runs`に書き込みます。 |
-| `rk diff <slug> [--since <date>] [--until <date>] [--json]` | 1つのリポジトリのエントリの変更履歴を表示します。 |
-| `rk runs [--db-health\ | --sync] [--limit <N>] [--json]` | 最近の`db_health_runs` / `sync_runs`のエントリを一覧表示します。 |
-| `rk owners list` | 設定されているGitHubのオーナーを一覧表示します。 |
-| `rk owners add <owner>` | `rk.config.json`のオーナーに追加します。 |
-| `rk owners remove <owner>` | `rk.config.json`のオーナーから削除します。 |
+| `rk fsck [--strict] [--json]` | DB整合性チェック。監査行を`db_health_runs`に書き込みます。 |
+| `rk diff <slug> [--since <date>] [--until <date>] [--json]` | 1つのリポジトリのエントリ変更履歴 |
+| `rk runs [--db-health\ | --sync] [--limit <N>] [--json]` | 最近の`db_health_runs`/`sync_runs`エントリをリストします。 |
+| `rk owners list` | 構成されたGitHubオーナーをリストします。 |
+| `rk owners add <owner>` | `rk.config.json`にオーナーを追加します。 |
+| `rk owners remove <owner>` | `rk.config.json`からオーナーを削除します。 |
+
+### バックアップ、復元、および事前チェック（v2.1.0）
+
+| コマンド | 説明 |
+|---------|-------------|
+| `rk backup [--out <path>]` | 知識データベースのスナップショットを、`data/backups/`または`--out`の下の真空化されたコピー（`VACUUM INTO`）に保存します。 |
+| `rk restore <path> [--yes]` | スキーマ検証を行い、アトミックなスワップを実行し、確認ゲートを設定して（新しいスキーマのバックアップは拒否します）、スナップショットからデータベースを復元します。 |
+| `rk doctor [--json] [--strict]` | 環境事前チェック：構成、DB、スキーマバージョン、`gh`認証、現在のリグ、最近の同期/fsck実行。 |
+| `rk config [--json]` | フィールドごとのソースを表示して、解決された有効な構成を表示します。 |
+| `rk config validate [--json]` | `rk.config.json`を検証します。プレースホルダーのオーナー、無効な形状、または解決できないパスがある場合、ゼロ以外の値で終了します。 |
 
 ### 監査コマンド
 
 | コマンド | 説明 |
 |---------|-------------|
-| `rk audit seed-controls` | 80個のコントロールを含む標準カタログをシードまたは更新します。 |
-| `rk audit import <dir>` | JSON形式の監査結果をインポートします。 |
-| `rk audit posture [slug]` | 特定のレポジトリまたはポートフォリオ全体の監査状況を表示します。 |
-| `rk audit findings` | ポートフォリオ全体で未解決の問題を一覧表示します。 |
-| `rk audit controls` | ドメインごとの標準コントロールを一覧表示します。 |
-| `rk audit unaudited` | 監査が実行されていないレポジトリを一覧表示します。 |
-| `rk audit failing <domain>` | 特定の監査ドメインで失敗したレポジトリを一覧表示します。 |
+| `rk audit seed-controls` | 80個のコントロールからなる標準カタログをシード/更新します。 |
+| `rk audit import <dir>` | JSON契約ファイルから監査結果をインポートします。 |
+| `rk audit posture [slug]` | 1つまたはすべてのリポジトリの監査状況を表示します。 |
+| `rk audit findings` | ポートフォリオ内の未解決の問題をリストします。 |
+| `rk audit controls` | ドメインごとの標準コントロールをリストします。 |
+| `rk audit unaudited` | 監査実行がないリポジトリをリストします。 |
+| `rk audit failing <domain>` | 特定の監査ドメインで失敗しているリポジトリをリストします。 |
 
-### コマンド：ゲーム
+### ゲームコマンド
 
 | コマンド | 説明 |
 |---------|-------------|
-| `rk games score <worklist>` | REMEDIATION-WORKLIST.md のスコアを表示し、ランキングを表示します。 |
+| `rk games score <worklist>` | REMEDIATION-WORKLIST.mdのスコアを計算し、リーダーボードを表示します。 |
 
-## MCP サーバー
+## MCPサーバー
 
-MCP サーバーは、AI を活用したワークフローのための 19 のツールを提供します。 MCP クライアントの設定に追加してください。
+MCPサーバーは、AI統合ワークフローのための30個のツールを提供します。それをMCPクライアント構成に追加してください。
 
-**Claude Code (プロジェクト固有の `.claude.json`):**
+**Claude Code（プロジェクト固有の`.claude.json`）：**
 ```json
 {
   "mcpServers": {
@@ -158,7 +170,7 @@ MCP サーバーは、AI を活用したワークフローのための 19 のツ
 }
 ```
 
-**Claude Desktop (`claude_desktop_config.json`):**
+**Claude Desktop（`claude_desktop_config.json`）：**
 ```json
 {
   "mcpServers": {
@@ -170,49 +182,65 @@ MCP サーバーは、AI を活用したワークフローのための 19 のツ
 }
 ```
 
-サーバーは、起動時に作業ディレクトリにある `rk.config.json` を読み込みます。 サーバーが実行されているディレクトリに `rk.config.json` が存在することを確認してください。
+サーバーは、起動時に作業ディレクトリから`rk.config.json`を読み取ります。サーバーが実行されるディレクトリに`rk.config.json`が存在することを確認してください。
 
-### MCP ツール
+### MCPツール
 
-`get_repo` `find_repos` `search_repos` `related_repos` `repos_by_stack` `repos_needing_work` `repo_summary` `add_repo_note` `add_relationship` `knowledge_stats` `sync_repos` `sync_dogfood` `audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
+**知識と同期:**
+`get_repo`、`find_repos`、`search_repos`、`related_repos`、`repos_by_stack`、`repos_needing_work`、`repo_summary`、`add_repo_note`、`add_relationship`、`knowledge_stats`、`sync_repos`、`sync_dogfood`
+
+**監査:**
+`audit_posture`、`audit_portfolio`、`audit_findings`、`audit_detail`、`audit_submit`、`audit_controls_list`、`audit_unaudited`
+
+**ビルドの健全性**（DBのみ読み込み、ネットワーク更新なし）：
+`health_feed`、`health_doctor`、`health_portfolio`
+
+**運用上の衛生管理:**
+`db_fsck`、`repo_diff`、`ops_runs`
+
+**ライフサイクルと公開:**
+`archive_repo`、`delete_repo`、`repo_versions`
+
+**ドッグフードテストと監査演習:**
+`suggest_dogfood`、`audit_failing`
 
 ## 監査フレームワーク
 
-監査システムは、19 のドメインと 80 のコントロールで構成されています。
+監査システムは、80のコントロールを備えた19の領域をカバーします。
 
-| ドメイン | コントロール |
+| 領域 | コントロール |
 |--------|----------|
-| インベントリ | レポジトリのメタデータ、所有権、分類 |
-| コード品質 | Linting、フォーマット、複雑さ |
-| セキュリティ SAST | 静的解析、インジェクション、認証 |
-| 依存関係 SCA | 脆弱性スキャン、ライセンスの有効期限 |
-| ライセンス | ライセンスコンプライアンス、互換性 |
-| 機密情報 | 機密情報の検出、ローテーション |
-| 構成 IaC | インフラストラクチャ・アズ・コードの衛生 |
-| コンテナ | イメージのセキュリティ、スキャン |
-| 実行時 | エラー処理、耐障害性 |
+| インベントリ | リポジトリメタデータ、所有権、分類 |
+| コード品質 | リンティング、フォーマット、複雑性 |
+| セキュリティ（静的解析） | 静的分析、インジェクション、認証 |
+| 依存関係（ソフトウェア部品表） | 脆弱性スキャン、最新バージョンチェック |
+| ライセンス | ライセンス遵守、互換性 |
+| シークレット（機密情報） | シークレット検出、ローテーション |
+| 構成（IaC：Infrastructure as Code） | コードとしてのインフラストラクチャの衛生管理 |
+| コンテナ | イメージセキュリティ、スキャン |
+| 実行時 | エラー処理、回復力 |
 | パフォーマンス | プロファイリング、最適化 |
-| 可観測性 | ロギング、トレース、メトリクス |
-| テスト | カバレッジ、型、CI 統合 |
-| CI/CD | パイプラインのセキュリティ、ゲート |
-| デプロイ | リリースプロセス、ロールバック |
-| バックアップとディザスタリカバリ | バックアップ計画、復旧 |
+| 可観測性 | ロギング、トレーシング、メトリクス |
+| テスト | カバレッジ、型チェック、CI統合 |
+| CI/CD（継続的インテグレーション/継続的デリバリー） | パイプラインセキュリティ、ゲート |
+| デプロイメント | リリースプロセス、ロールバック |
+| バックアップと災害復旧 | バックアップ計画、リカバリ |
 | 監視 | アラート、稼働時間 |
-| コンプライアンスとプライバシー | データ処理、GDPR |
-| サプライチェーン | SBOM、トレーサビリティ |
-| 統合 | API コントラクト、バージョン管理 |
+| コンプライアンスとプライバシー | データ処理、GDPR（一般データ保護規則） |
+| サプライチェーン | SBOM（ソフトウェア部品表）、来歴情報 |
+| 統合 | APIコントラクト、バージョン管理 |
 
-各監査実行では、構造化された証拠が生成されます。これには、コントロールの結果（合格/不合格/警告/非該当）、深刻度と修正情報を含む問題、および集計されたメトリクスが含まれます。 監査状況は自動的に導出されます。**正常**、**注意が必要**、または**重大**。
+各監査実行では、構造化された証拠が生成されます。これには、コントロール結果（合格/不合格/警告/該当なし）、重大度と修正策を含む検出結果、および集計メトリクスが含まれます。状態は自動的に導き出されます：**正常**、**注意が必要**、または**クリティカル**。
 
 ## マルチエージェントオーケストレーション：Claude Games
 
-repo-knowledge には、大規模なポートフォリオ全体で複数の Claude を並行して実行するためのテンプレートが含まれています。 Claude Games は、共有のワークリストを通じて複数の AI エージェントを調整します。
+リポジトリ知識には、大規模なポートフォリオにわたる並列マルチClaudeオペレーションのテンプレートが含まれています。Claude Gamesは、共有ワークリストを通じて複数のAIエージェントを調整します。
 
-1. **監査パス**：各エージェントはワークリストからレポジトリを取得し、80 のコントロールによる監査を実行し、構造化された結果を送信します。
-2. **エンリッチメントパス**：エージェントは、論文、アーキテクチャに関するメモ、および関係のマッピングを追加します。
-3. **修正パス**：エージェントは、スコアリングされた 8 ステップのワークフローを使用して、問題を修正します。
+1. **監査パス** — 各エージェントがワークリストからリポジトリを取得し、80個のコントロールによる監査を実行し、構造化された結果を送信します。
+2. **エンリッチメントパス** — エージェントは、仮説、アーキテクチャノート、および関係マッピングを追加します。
+3. **修正パス** — エージェントは、スコアリングされた8段階のワークフローを使用して検出された問題を修正します。
 
-詳細については、[`templates/claude-games/`](templates/claude-games/) を参照してください。
+完全なプレイブックについては、[`templates/claude-games/`](templates/claude-games/)を参照してください。
 
 ## データモデル
 
@@ -229,11 +257,11 @@ repos
       +-- audit_metrics (pass_rate, coverage, counts)
 ```
 
-すべてのデータは、単一の SQLite データベースに保存され、ドキュメント、メモ、およびレポジトリの説明に対して FTS5 フルテキスト検索が可能です。
+すべてのデータは、ドキュメント、ノート、およびリポジトリの説明全体でFTS5フルテキスト検索を使用する単一のSQLiteデータベースに保存されます。
 
-## 設定
+## 構成
 
-作業領域のルートディレクトリに `rk.config.json` ファイルを作成します（または `rk init` コマンドを実行します）。
+ワークスペースのルートに`rk.config.json`を作成します（または`rk init`を実行します）。
 
 ```json
 {
@@ -244,7 +272,7 @@ repos
 }
 ```
 
-すべての設定は `rk.config.json` ファイルから読み込まれます（`rk init` コマンドによって作成されます）。MCP サーバーも、作業ディレクトリから設定ファイルを読み込みます。
+すべての設定は、`rk.config.json`（`rk init`によって作成される）から取得されます。MCPサーバーも、作業ディレクトリから構成を読み取ります。
 
 ## ライセンス
 
@@ -252,4 +280,4 @@ repos
 
 ---
 
-開発者: <a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a>
+<a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a>によって構築されました。
