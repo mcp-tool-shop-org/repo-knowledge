@@ -1210,6 +1210,43 @@ export function deleteRepoBySlug(
   return { deleted: true, cascaded_rows };
 }
 
+type RepoDeleter = (slug: string) => { deleted: boolean; cascaded_rows: number };
+
+/**
+ * cli-A-004: delete a batch of repos all-or-nothing. Each deleteRepoBySlug
+ * runs its own (here nested → savepoint) transaction, but `rk prune --apply`
+ * needs the WHOLE batch atomic: a mid-batch throw must NOT leave the repos
+ * deleted before the failure permanently gone while the rest survive (a
+ * partial, unrecoverable prune). Wrapping the loop in one db.transaction means
+ * any throw rolls the entire batch back — nothing is deleted unless everything
+ * can be.
+ *
+ * The deleter is injectable (defaults to the real deleteRepoBySlug) ONLY so
+ * the atomicity invariant is testable against THIS transaction: a test that
+ * re-implements the wrapper locally is vacuous (it passes even if this wrapper
+ * is removed). A test injects a deleter that throws mid-batch and asserts the
+ * whole batch rolled back.
+ */
+export function pruneBatch(
+  slugs: string[],
+  deleter: RepoDeleter = deleteRepoBySlug
+): { deletedCount: number; totalCascaded: number } {
+  const db = getDb();
+  let totalCascaded = 0;
+  let deletedCount = 0;
+  const runBatch = db.transaction(() => {
+    for (const slug of slugs) {
+      const result = deleter(slug);
+      if (result.deleted) {
+        deletedCount += 1;
+        totalCascaded += result.cascaded_rows;
+      }
+    }
+  });
+  runBatch();
+  return { deletedCount, totalCascaded };
+}
+
 /**
  * Mark a repo as archived. Sets `lifecycle_status = 'archived'` and
  * `deprecated_at = datetime('now')`. The `reason` option is reserved for

@@ -35,7 +35,7 @@ import {
   openDb, closeDb, getDb,
   upsertRepo,
   archiveRepoBySlug, setReplacedBy, findStaleArchived,
-  deleteRepoBySlug,
+  deleteRepoBySlug, pruneBatch,
 } from '../src/db/init.js';
 
 let tmpDir: string;
@@ -287,9 +287,13 @@ describe('prune --apply batch atomicity (cli-A-004)', () => {
   // bug: the CLI looped over the candidates with NO outer transaction, so a
   // mid-batch throw left the repos deleted *before* the failure permanently
   // gone while the rest survived — a partial, unrecoverable prune. The fix
-  // wraps the whole loop in one db.transaction so any throw rolls the entire
-  // batch back. This test pins that all-or-nothing invariant by replicating
-  // the CLI's runBatch construct and inducing a mid-batch failure.
+  // wraps the whole loop in one db.transaction (the exported pruneBatch).
+  //
+  // This test drives the REAL pruneBatch from src/cli.ts and injects a deleter
+  // that throws mid-batch — so reverting cli.ts's db.transaction wrapper makes
+  // the first delete commit before the throw and the assertion FAILS. (A prior
+  // version re-implemented the wrapper locally and was vacuous: it passed even
+  // with the real wrapper removed.)
 
   it('rolls back ALL deletes when a delete mid-batch throws (all-or-nothing)', () => {
     upsertRepo({ owner: 'o', name: 'first' });
@@ -299,22 +303,21 @@ describe('prune --apply batch atomicity (cli-A-004)', () => {
     const db = getDb();
     const slugs = ['o/first', 'o/second', 'o/third'];
 
-    // Mirror the CLI's atomic batch: delete each slug, but the simulated
-    // failure fires partway through (after 'first' is deleted, before
-    // 'second'). Without the outer transaction, 'first' would already be gone.
-    const runBatch = db.transaction(() => {
-      for (const slug of slugs) {
-        deleteRepoBySlug(slug);
-        if (slug === 'o/first') {
-          throw new Error('simulated mid-batch failure');
-        }
+    // Inject a deleter that delegates to the real deleteRepoBySlug but throws
+    // after 'o/first' is deleted. pruneBatch's OWN db.transaction must roll
+    // 'o/first' back. With the wrapper reverted, 'o/first' would stay gone.
+    const failingDeleter = (slug: string) => {
+      const result = deleteRepoBySlug(slug);
+      if (slug === 'o/first') {
+        throw new Error('simulated mid-batch failure');
       }
-    });
+      return result;
+    };
 
-    expect(() => runBatch()).toThrow(/mid-batch failure/);
+    expect(() => pruneBatch(slugs, failingDeleter)).toThrow(/mid-batch failure/);
 
-    // All-or-nothing: because the batch threw, NOTHING is deleted — including
-    // 'o/first', which was deleted inside the transaction before the throw.
+    // All-or-nothing: because the real pruneBatch transaction threw, NOTHING
+    // is deleted — including 'o/first', which was deleted before the throw.
     const remaining = db.prepare('SELECT slug FROM repos ORDER BY slug').all() as { slug: string }[];
     const remainingSlugs = remaining.map((r) => r.slug);
     expect(remainingSlugs).toContain('o/first');
@@ -329,16 +332,9 @@ describe('prune --apply batch atomicity (cli-A-004)', () => {
 
     const db = getDb();
     const slugs = ['o/x', 'o/y'];
-    let deletedCount = 0;
-    const runBatch = db.transaction(() => {
-      for (const slug of slugs) {
-        const result = deleteRepoBySlug(slug);
-        if (result.deleted) deletedCount += 1;
-      }
-    });
-    runBatch();
+    const summary = pruneBatch(slugs);
 
-    expect(deletedCount).toBe(2);
+    expect(summary.deletedCount).toBe(2);
     const remaining = db.prepare('SELECT COUNT(*) AS c FROM repos').get() as { c: number };
     expect(remaining.c).toBe(0);
   });

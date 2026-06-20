@@ -349,18 +349,23 @@ server.tool(
     content: z.string().describe('Note content'),
   },
   async ({ slug, note_type, title, content }) => {
-    const repoId = resolveId(slug);
-    if (!repoId) {
+    const ref = resolveRepoRef(slug);
+    if (!ref) {
       return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    }
+    if ('ambiguous' in ref) {
+      return { content: [{ type: 'text' as const, text: ambiguousMessage(slug, ref.ambiguous) }] };
     }
     // mcp-A-006: no rebuildIndex() needed. Migration-005's repo_notes
     // INSERT/UPDATE triggers (applied on every openDb) maintain repo_search
     // incrementally, so the note is searchable the instant upsertNote returns.
     // A full-corpus rebuild here was O(corpus) work to index one row — see
     // F-DB-013, which proves notes are searchable without a manual rebuild.
-    upsertNote(repoId, note_type, title || note_type, content);
+    upsertNote(ref.id, note_type, title || note_type, content);
     return {
-      content: [{ type: 'text' as const, text: `Note added to ${slug} [${note_type}]: ${title || note_type}` }],
+      // Echo the CANONICAL slug, not the caller's fragment (provenance-on-
+      // display): an LLM must see which repo the note actually landed on.
+      content: [{ type: 'text' as const, text: `Note added to ${ref.canonical} [${note_type}]: ${title || note_type}` }],
     };
   },
 );
@@ -377,14 +382,17 @@ server.tool(
     note: z.string().optional().describe('Optional context about the relationship'),
   },
   async ({ from_slug, relation_type, to_slug, note }) => {
-    const fromId = resolveId(from_slug);
-    const toId = resolveId(to_slug);
-    if (!fromId) return { content: [{ type: 'text' as const, text: notFoundMessage(from_slug) }] };
-    if (!toId) return { content: [{ type: 'text' as const, text: notFoundMessage(to_slug) }] };
+    const fromRef = resolveRepoRef(from_slug);
+    if (!fromRef) return { content: [{ type: 'text' as const, text: notFoundMessage(from_slug) }] };
+    if ('ambiguous' in fromRef) return { content: [{ type: 'text' as const, text: ambiguousMessage(from_slug, fromRef.ambiguous) }] };
+    const toRef = resolveRepoRef(to_slug);
+    if (!toRef) return { content: [{ type: 'text' as const, text: notFoundMessage(to_slug) }] };
+    if ('ambiguous' in toRef) return { content: [{ type: 'text' as const, text: ambiguousMessage(to_slug, toRef.ambiguous) }] };
 
-    addRel(fromId, relation_type, toId, note);
+    addRel(fromRef.id, relation_type, toRef.id, note);
     return {
-      content: [{ type: 'text' as const, text: `Relationship added: ${from_slug} ${relation_type} ${to_slug}` }],
+      // Echo canonical slugs, not the caller's fragments (provenance-on-display).
+      content: [{ type: 'text' as const, text: `Relationship added: ${fromRef.canonical} ${relation_type} ${toRef.canonical}` }],
     };
   },
 );
@@ -695,12 +703,53 @@ function notFoundMessage(slug: string): string {
   return `Repo "${slug}" not found. Use find_repos (with no filters to list all) to see indexed repos, or sync_repos to fetch new ones from configured owners.`;
 }
 
-function resolveId(slug: string): number | null {
+// A partial slug that matches more than one repo is ambiguous — surface the
+// candidates so the calling LLM disambiguates instead of mutating an
+// arbitrary repo silently.
+function ambiguousMessage(slug: string, candidates: string[]): string {
+  return `Ambiguous slug "${slug}" matches ${candidates.length} repos: ${candidates.join(', ')}. Pass the full slug to disambiguate.`;
+}
+
+// Escape LIKE metacharacters so a slug containing % or _ is matched literally
+// rather than as a wildcard (a repo named e.g. `repo_knowledge` must not let
+// the `_` match any character). Pairs with `ESCAPE '\'` on the LIKE clause —
+// same treatment as sync/dogfood-suggest.ts.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+type RepoRef = { id: number; canonical: string } | { ambiguous: string[] } | null;
+
+/**
+ * Resolve a repo reference by slug for the MCP tools. Exact slug wins;
+ * otherwise an ORDERED, LIKE-escaped partial match.
+ *
+ * The previous resolver did an UNORDERED, UNLIMITED `LIKE %slug%` and returned
+ * an arbitrary first row, so an ambiguous fragment (e.g. "shipcheck" matching
+ * both org/shipcheck and org/shipcheck-plugin) silently resolved to whichever
+ * row SQLite scanned first — a silent mis-target for the MUTATING add_repo_note
+ * and add_relationship tools, corrupting knowledge-DB provenance with no error.
+ * We now distinguish unique / ambiguous / not-found so the mutating tools can
+ * refuse-and-disambiguate and echo the canonical slug (sibling of cli-A-001).
+ */
+function resolveRepoRef(slug: string): RepoRef {
   const db = getDb();
-  let row = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
-  if (row) return row.id;
-  row = db.prepare('SELECT id FROM repos WHERE slug LIKE ? OR name = ?').get(`%${slug}%`, slug) as { id: number } | undefined;
-  return row?.id || null;
+  const exact = db.prepare('SELECT id, slug FROM repos WHERE slug = ?').get(slug) as { id: number; slug: string } | undefined;
+  if (exact) return { id: exact.id, canonical: exact.slug };
+  const matches = db.prepare(
+    "SELECT id, slug FROM repos WHERE slug LIKE ? ESCAPE '\\' OR name = ? ORDER BY slug"
+  ).all(`%${escapeLike(slug)}%`, slug) as { id: number; slug: string }[];
+  if (matches.length === 0) return null;
+  if (matches.length > 1) return { ambiguous: matches.map((m) => m.slug) };
+  return { id: matches[0].id, canonical: matches[0].slug };
+}
+
+// Thin wrapper for the read-only tools: an ambiguous partial resolves to null
+// (handled as not-found / be-more-specific) rather than an arbitrary row, so
+// no read silently targets the wrong repo either.
+function resolveId(slug: string): number | null {
+  const ref = resolveRepoRef(slug);
+  return ref && 'id' in ref ? ref.id : null;
 }
 
 function tryParse(json: string | null | undefined): unknown {

@@ -37,7 +37,7 @@ import {
   // coordinator reconciles if mismatched.
   upsertRig, listRigs,
   upsertRepoLocalPath,
-  deleteRepoBySlug, archiveRepoBySlug, findStaleArchived,
+  deleteRepoBySlug, pruneBatch, archiveRepoBySlug, findStaleArchived,
   // F-BE-FT2: publish state — bindings + version registry (migration-007).
   // PUBLISHER_METHODS validates --publisher-method input before reaching
   // setRepoPackageNames (which throws on bad enum); duplicating the guard
@@ -923,31 +923,19 @@ program
     // a partial, unrecoverable prune. Wrapping the loop in one db.transaction
     // means any throw rolls the entire batch back: nothing is deleted unless
     // everything can be.
-    const db = getDb();
-    let totalCascaded = 0;
-    let deletedCount = 0;
-    const runBatch = db.transaction(() => {
-      for (const slug of slugs) {
-        const result = deleteRepoBySlug(slug);
-        if (result.deleted) {
-          deletedCount += 1;
-          totalCascaded += result.cascaded_rows;
-        }
-      }
-    });
-
+    let summary: { deletedCount: number; totalCascaded: number };
     try {
-      runBatch();
+      summary = pruneBatch(slugs);
     } catch (e: unknown) {
-      // Roll-back already happened inside db.transaction; report and exit
-      // non-zero so the caller knows NOTHING was pruned.
+      // Roll-back already happened inside pruneBatch's db.transaction; report
+      // and exit non-zero so the caller knows NOTHING was pruned.
       console.error(`Prune aborted — no repos deleted (transaction rolled back): ${(e as Error).message}`);
       closeDb();
       process.exit(1);
     }
 
     console.log(
-      `Pruned ${deletedCount} repo(s), ${totalCascaded} child rows cascaded.`
+      `Pruned ${summary.deletedCount} repo(s), ${summary.totalCascaded} child rows cascaded.`
     );
     closeDb();
   });
@@ -962,13 +950,24 @@ program
 // both need owner/name + bindings + local_path.
 function resolveRepoRow(slug: string): Record<string, any> | null {
   const db = getDb();
-  let row = db.prepare('SELECT * FROM repos WHERE slug = ?').get(slug) as Record<string, any> | undefined;
-  if (row) return row;
-  // Partial match — same shape as resolveRepoId's fallback
-  row = db.prepare(
-    'SELECT * FROM repos WHERE slug LIKE ? OR name = ? ORDER BY slug LIMIT 1'
-  ).get(`%${slug}%`, slug) as Record<string, any> | undefined;
-  return row ?? null;
+  const exact = db.prepare('SELECT * FROM repos WHERE slug = ?').get(slug) as Record<string, any> | undefined;
+  if (exact) return exact;
+  // Partial match — ordered, LIKE-escaped, ambiguity-aware (sibling of
+  // cli-A-001's resolveRepoId). bind-package and `doctor --refresh` WRITE
+  // through this resolver, so the old `ORDER BY slug LIMIT 1` arbitrary-first-
+  // row pick could silently mutate the wrong repo (e.g. bind an npm publish
+  // identity onto org/shipcheck-plugin when the operator typed "shipcheck").
+  const matches = db.prepare(
+    "SELECT * FROM repos WHERE slug LIKE ? ESCAPE '\\' OR name = ? ORDER BY slug"
+  ).all(`%${escapeLike(slug)}%`, slug) as Record<string, any>[];
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    console.error(`Error: ambiguous slug "${slug}" — matches: ${matches.map((m) => m.slug).join(', ')}`);
+    console.error(`Disambiguate by passing the full slug.`);
+    closeDb();
+    process.exit(2);
+  }
+  return matches[0];
 }
 
 // ─── versions ────────────────────────────────────────────────────────────────
@@ -1290,16 +1289,23 @@ program
 // exists, exit 2 listing the candidates rather than guessing. Callers should
 // re-resolve the canonical slug from the returned id before echoing it back
 // to the user (provenance-on-display).
+// Escape LIKE metacharacters so a slug containing % or _ is matched literally
+// rather than as a wildcard (sibling of sync-A-007/db-A-006). Pairs with
+// `ESCAPE '\'` on the LIKE clause.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 function resolveRepoId(slug: string): number | null {
   const db = getDb();
   // Try exact slug
   const exact = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
   if (exact) return exact.id;
 
-  // Try partial match — ordered + ambiguity-aware.
+  // Try partial match — ordered, LIKE-escaped, ambiguity-aware.
   const matches = db.prepare(
-    'SELECT id, slug FROM repos WHERE slug LIKE ? OR name = ? ORDER BY slug'
-  ).all(`%${slug}%`, slug) as { id: number; slug: string }[];
+    "SELECT id, slug FROM repos WHERE slug LIKE ? ESCAPE '\\' OR name = ? ORDER BY slug"
+  ).all(`%${escapeLike(slug)}%`, slug) as { id: number; slug: string }[];
 
   if (matches.length === 0) return null;
   if (matches.length > 1) {

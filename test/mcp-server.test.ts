@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  openDb, closeDb,
+  openDb, closeDb, getDb,
   upsertRepo, upsertNote,
 } from '../src/db/init.js';
 
@@ -269,6 +269,49 @@ describe('MCP server end-to-end JSON-RPC behavior (ts-A-004)', () => {
     expect(bad).toBeDefined();
     expect(bad?.result?.isError).toBe(true);
     expect(bad?.result?.content?.[0]?.text ?? '').toMatch(/Invalid|validation|relation_type/i);
+  });
+
+  it('add_repo_note refuses an ambiguous partial slug and mutates neither repo (resolveId ambiguity)', () => {
+    // Two overlapping-prefix repos: a fragment that matches both must NOT
+    // silently resolve to an arbitrary one (the MCP resolveId sibling of
+    // cli-A-001). Seed them into the same isolated temp DB.
+    openDb(dbPath);
+    upsertRepo({ owner: 'acme', name: 'widget' });
+    upsertRepo({ owner: 'acme', name: 'widget-pro' });
+    closeDb();
+
+    const { responses } = exchange([
+      { id: 1, name: 'add_repo_note', args: { slug: 'widget', note_type: 'thesis', content: 'must not land anywhere' } },
+    ]);
+
+    const resp = responses.get(1);
+    expect(resp).toBeDefined();
+    // The mutating tool surfaces the candidates instead of picking row 0.
+    expect(resp?.result?.content?.[0]?.text ?? '').toMatch(/ambiguous/i);
+    expect(resp?.result?.content?.[0]?.text ?? '').toMatch(/widget-pro/);
+
+    // Provenance integrity: NEITHER widget repo was mutated (the beforeEach
+    // seeds an unrelated note on acme/alpha, so scope the check to the
+    // ambiguous targets).
+    openDb(dbPath);
+    const widgetNotes = (getDb().prepare(
+      "SELECT COUNT(*) AS c FROM repo_notes n JOIN repos r ON r.id = n.repo_id WHERE r.slug LIKE 'acme/widget%'"
+    ).get() as { c: number }).c;
+    closeDb();
+    expect(widgetNotes).toBe(0);
+  });
+
+  it('add_repo_note on a UNIQUE partial slug echoes the canonical slug, not the fragment', () => {
+    openDb(dbPath);
+    upsertRepo({ owner: 'acme', name: 'uniquely-named-thing' });
+    closeDb();
+
+    const { responses } = exchange([
+      { id: 1, name: 'add_repo_note', args: { slug: 'uniquely-named', note_type: 'thesis', content: 'lands on the canonical repo' } },
+    ]);
+    const text = responses.get(1)?.result?.content?.[0]?.text ?? '';
+    // Echoes the resolved canonical slug (provenance-on-display), not 'uniquely-named'.
+    expect(text).toMatch(/Note added to acme\/uniquely-named-thing/);
   });
 });
 

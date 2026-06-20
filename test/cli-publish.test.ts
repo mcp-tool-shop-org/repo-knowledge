@@ -317,4 +317,32 @@ describe('rk versions / drift / bind-package (F-TS-FT2)', () => {
     expect(row?.slug).toBe('o/uniquely-named-repo');
     closeDb();
   });
+
+  // resolveRepoRow is the sibling of resolveRepoId and backs the MUTATING
+  // `bind-package` and `doctor --refresh` commands. It was left on the old
+  // `ORDER BY slug LIMIT 1` arbitrary-first-row pick — so `rk bind-package
+  // shipcheck --npm ...` could silently write the npm publish identity onto
+  // the wrong repo (a supply-chain footgun). The fix makes it ambiguity-aware.
+  it('rk bind-package with an ambiguous partial slug exits 2 and binds neither repo (resolveRepoRow)', () => {
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'shipcheck' });
+    upsertRepo({ owner: 'o', name: 'shipcheck-plugin' });
+    closeDb();
+
+    const { code, stderr, stdout } = runCli([
+      'bind-package', 'shipcheck', '--npm', '@scope/shipcheck',
+    ]);
+
+    expect(code).toBe(2);
+    expect(stderr + stdout).toMatch(/ambiguous/i);
+    expect(stderr + stdout).toMatch(/o\/shipcheck-plugin/);
+
+    // Neither repo got an npm binding — the guard fires before the write.
+    openDb(dbPath);
+    const bound = getDb().prepare(
+      "SELECT COUNT(*) AS c FROM repos WHERE npm_package_name IS NOT NULL"
+    ).get() as { c: number };
+    expect(bound.c).toBe(0);
+    closeDb();
+  });
 });
