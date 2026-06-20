@@ -18,6 +18,150 @@ export interface PublishedVersionRecord {
   source: string;
 }
 
+// ─── SYNC-PH-03: shared transient-retry helper ───────────────────────────────
+//
+// Every external worker here and in build-health.ts was single-shot: one
+// execFileSync/fetch, and ANY failure (including a transient 429 / 503 /
+// ECONNRESET / ETIMEDOUT blip) logged + returned []/null — so a flaky network
+// looked identical to "no data on the registry." This helper lets the network
+// workers retry a small number of times on TRANSIENT signals only (never on a
+// 404 / parse error / validation error, which are deterministic), with
+// exponential backoff, and distinguishes a transient-after-retries give-up from
+// a genuine empty result.
+
+/** Substrings/codes that mark an error as worth retrying. */
+const TRANSIENT_SIGNALS = ['429', '503', 'ETIMEDOUT', 'ECONNRESET', 'EAI_AGAIN', 'ECONNREFUSED'];
+
+/**
+ * Classify whether an error (or an HTTP status number) is a transient network
+ * failure worth retrying. Matches on the error message + common Node error
+ * `.code` fields, plus a raw status number when the caller already has one.
+ */
+export function isTransientError(err: unknown, httpStatus?: number): boolean {
+  if (httpStatus === 429 || httpStatus === 503) return true;
+  const code = (err as { code?: unknown })?.code;
+  if (typeof code === 'string' && TRANSIENT_SIGNALS.includes(code)) return true;
+  const msg = (err as Error)?.message ?? String(err ?? '');
+  return TRANSIENT_SIGNALS.some(sig => msg.includes(sig));
+}
+
+/**
+ * Outcome of a retried worker call. `ok` carries the value on success;
+ * `transient` is true ONLY when every attempt failed with a transient signal —
+ * the caller uses it to report "network flaky, retried N times" DISTINCTLY from
+ * a clean empty/absent result, so a flaky registry never masquerades as
+ * "no published versions."
+ */
+export interface RetryResult<T> {
+  ok: boolean;
+  value?: T;
+  transient: boolean;
+  attempts: number;
+  lastError?: string;
+}
+
+export interface RetryOptions {
+  /** Max attempts including the first. Default 3. */
+  attempts?: number;
+  /** Base backoff in ms; attempt N waits base * 2^(N-1). Default 250. */
+  baseDelayMs?: number;
+  /**
+   * Sleep injection seam — tests pass a no-op so backoff doesn't slow the
+   * suite. Defaults to a real setTimeout-backed sleep.
+   */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const defaultSleep = (ms: number): Promise<void> => new Promise(res => setTimeout(res, ms));
+
+export interface RetrySyncOptions {
+  attempts?: number;
+  baseDelayMs?: number;
+  /**
+   * Synchronous backoff seam. Defaults to a busy-wait (the retry count is
+   * bounded to 2-3, so the wall-clock cost is negligible and we avoid pulling
+   * in a blocking-sleep dependency). Tests pass a no-op to keep the suite fast.
+   */
+  sleep?: (ms: number) => void;
+}
+
+const defaultSyncSleep = (ms: number): void => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* bounded busy-wait; attempts <= 3 */ }
+};
+
+/**
+ * Synchronous sibling of withTransientRetry for the execFileSync-based workers
+ * (syncCiStatus, syncNpmAudit, …) that can't go async without changing their
+ * call signature. Same transient-only retry contract.
+ */
+export function withTransientRetrySync<T>(
+  fn: () => T,
+  opts: RetrySyncOptions = {},
+): RetryResult<T> {
+  const maxAttempts = Math.max(1, opts.attempts ?? 3);
+  const baseDelay = opts.baseDelayMs ?? 250;
+  const sleep = opts.sleep ?? defaultSyncSleep;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const value = fn();
+      return { ok: true, value, transient: false, attempts: attempt };
+    } catch (e: unknown) {
+      lastError = e;
+      if (!isTransientError(e)) throw e;
+      if (attempt < maxAttempts) sleep(baseDelay * 2 ** (attempt - 1));
+    }
+  }
+  return {
+    ok: false,
+    transient: true,
+    attempts: maxAttempts,
+    lastError: (lastError as Error)?.message ?? String(lastError),
+  };
+}
+
+/**
+ * Run `fn` with transient-only retry. A non-transient throw (404, parse error,
+ * validation) propagates immediately — retrying a deterministic failure just
+ * wastes time and rate-limit budget. Returns a RetryResult so the caller can
+ * tell "succeeded", "failed transiently after N tries", and (for a thrown
+ * non-transient) it re-throws to preserve the existing single-shot semantics.
+ */
+export async function withTransientRetry<T>(
+  fn: () => T | Promise<T>,
+  opts: RetryOptions = {},
+): Promise<RetryResult<T>> {
+  const maxAttempts = Math.max(1, opts.attempts ?? 3);
+  const baseDelay = opts.baseDelayMs ?? 250;
+  const sleep = opts.sleep ?? defaultSleep;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const value = await fn();
+      return { ok: true, value, transient: false, attempts: attempt };
+    } catch (e: unknown) {
+      lastError = e;
+      if (!isTransientError(e)) {
+        // Deterministic failure — don't retry, re-throw so the worker's own
+        // catch block produces its existing structured message.
+        throw e;
+      }
+      if (attempt < maxAttempts) {
+        await sleep(baseDelay * 2 ** (attempt - 1));
+      }
+    }
+  }
+  return {
+    ok: false,
+    transient: true,
+    attempts: maxAttempts,
+    lastError: (lastError as Error)?.message ?? String(lastError),
+  };
+}
+
 /**
  * Validate a GitHub owner or repository name shape. Mirrors the helper
  * in sync/github.ts (we don't import it because that file's helper is
@@ -169,7 +313,10 @@ export function syncNpmVersion(npm_name: string): PublishedVersionRecord[] {
  * 15s timeout via AbortController. Returns [] on network failure,
  * non-200, malformed JSON, or shape mismatch.
  */
-export async function syncPyPIVersion(pypi_name: string): Promise<PublishedVersionRecord[]> {
+export async function syncPyPIVersion(
+  pypi_name: string,
+  opts?: { retry?: RetryOptions }
+): Promise<PublishedVersionRecord[]> {
   try {
     validatePypiName(pypi_name);
   } catch (e: unknown) {
@@ -179,21 +326,42 @@ export async function syncPyPIVersion(pypi_name: string): Promise<PublishedVersi
   }
 
   const url = `https://pypi.org/pypi/${encodeURIComponent(pypi_name)}/json`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
 
+  // SYNC-PH-03: retry the fetch on transient signals. A 429/503 response is
+  // thrown as a transient error INSIDE the retried fn so it triggers a retry
+  // (rather than being read as a clean "no versions"); a non-2xx that isn't
+  // transient (404) is thrown too, but isTransientError returns false for it,
+  // so withTransientRetry re-throws immediately and we handle it below.
   let response: Response;
   try {
-    response = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
+    const outcome = await withTransientRetry<Response>(async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+        if (res.status === 429 || res.status === 503) {
+          // Mark transient via the message so isTransientError matches.
+          throw new Error(`${res.status} transient from PyPI for ${pypi_name}`);
+        }
+        return res;
+      } finally {
+        clearTimeout(timer);
+      }
+    }, opts?.retry);
+    if (!outcome.ok) {
+      console.error(
+        `syncPyPIVersion: ${pypi_name} transient failure after ${outcome.attempts} attempts: ${outcome.lastError}`
+      );
+      return [];
+    }
+    response = outcome.value as Response;
   } catch (e: unknown) {
     const msg = (e as Error)?.message ?? String(e);
     console.error(`syncPyPIVersion: fetch ${pypi_name} failed: ${msg}`);
     return [];
-  } finally {
-    clearTimeout(timer);
   }
 
   if (!response.ok) {

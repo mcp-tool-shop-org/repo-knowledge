@@ -13,7 +13,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { openDb, closeDb, getDb } from '../src/db/init.js';
+import { openDb, closeDb, getDb, CURRENT_SCHEMA_VERSION } from '../src/db/init.js';
+
+// ts-A-008: head version as a string for meta-row comparisons.
+const HEAD = String(CURRENT_SCHEMA_VERSION);
 
 let tmpDir: string;
 let dbPath: string;
@@ -34,7 +37,7 @@ describe('migration-010 (FT-4 operational hygiene)', () => {
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
   });
 
   it('creates db_health_runs table with expected columns', () => {
@@ -123,7 +126,7 @@ describe('migration-010 (FT-4 operational hygiene)', () => {
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
   });
 
   it('the new tables have no FK to repos — they survive repo deletion', () => {

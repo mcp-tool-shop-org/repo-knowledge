@@ -7,10 +7,45 @@ import Database from 'better-sqlite3';
 import { writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+// PH-AHG-006: formatPassRate now lives in one shared module so the
+// provenance (`~`-tag) rule + null behavior can't drift between the two
+// generators. This script renders rounded, no decimals (decimals: 0).
+import { formatPassRate as formatPassRateShared } from './lib/format.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, '..', 'data', 'knowledge.db');
 const outPath = join(__dirname, '..', 'REMEDIATION-WORKLIST.md');
+
+// This worklist renders rounded pass rates ("~50%"). The provenance/null
+// rule itself lives in scripts/lib/format.mjs (cds-A-005).
+export function formatPassRate(passRateRaw) {
+  return formatPassRateShared(passRateRaw, { decimals: 0 });
+}
+
+// Env-gated self-test (cds-A-005 regression). Runs before any DB side
+// effect so it works without a built database. `RK_SELFTEST=1 node
+// scripts/gen-worklist.mjs` (or `--selftest`) asserts the invariant and exits.
+if (process.env.RK_SELFTEST === '1' || process.argv.includes('--selftest')) {
+  const assertEq = (actual, expected, label) => {
+    if (actual !== expected) {
+      console.error(`[gen-worklist selftest] FAIL ${label}: got ${actual}, want ${expected}`);
+      process.exit(1);
+    }
+  };
+  // Two-part invariant: a fraction (0.5 → 50%) and a small integer
+  // percent (1 → 1%) must render DIFFERENTLY. The bug rendered both as
+  // a 50/100-style percent with no way to tell them apart.
+  assertEq(formatPassRate(0.5), '~50%', 'fraction 0.5');
+  assertEq(formatPassRate(1), '~100%', 'ambiguous 1 is tagged');
+  assertEq(formatPassRate(87), '87%', 'percent 87 untagged');
+  assertEq(formatPassRate(100), '100%', 'percent 100 untagged');
+  // Discriminating assertion: tagged "~100%" (from value 1) must NOT
+  // equal untagged "100%" (from value 100). Without the tag both
+  // collapse to "100%" — the exact bug being pinned.
+  assertEq(formatPassRate(1) === formatPassRate(100), false, 'value 1 distinguishable from value 100');
+  console.log('[gen-worklist selftest] OK');
+  process.exit(0);
+}
 
 const db = new Database(dbPath, { readonly: true });
 
@@ -19,7 +54,10 @@ const db = new Database(dbPath, { readonly: true });
 const rows = db.prepare(`
   WITH latest_runs AS (
     SELECT ar.*,
-           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.completed_at DESC) AS rn
+           -- PH-AHG-001: match the queries.ts "latest run" contract
+           -- (started_at DESC, id DESC); completed_at is nullable so an
+           -- untiebroken ORDER BY completed_at picked an arbitrary row.
+           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.started_at DESC, ar.id DESC) AS rn
     FROM audit_runs ar
   )
   SELECT
@@ -40,9 +78,10 @@ const count = rows.length;
 
 const tableRows = rows.map(r => {
   const findings = `${r.high}H ${r.medium}M ${r.low}L`;
-  // Normalize: some pass_rate values are 0-1 (decimal), others are 0-100 (percent)
-  const pct = r.pass_rate_raw <= 1 ? Math.round(r.pass_rate_raw * 100) : Math.round(r.pass_rate_raw);
-  const passRate = `${pct}%`;
+  // cds-A-005: tagged formatter — a leading `~` marks a value the
+  // <= 1 fraction heuristic interpreted, so 1% (stored as 1) is not
+  // silently rendered as a bare "100%".
+  const passRate = formatPassRate(r.pass_rate_raw);
   return `| [ ] | ${r.slug} | ${findings} | ${passRate} |`;
 }).join('\n');
 

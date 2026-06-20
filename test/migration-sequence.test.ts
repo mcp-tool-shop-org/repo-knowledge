@@ -30,10 +30,13 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { openDb, closeDb, getDb } from '../src/db/init.js';
+import { openDb, closeDb, getDb, CURRENT_SCHEMA_VERSION } from '../src/db/init.js';
+
+// ts-A-008: head version as a string for meta-row comparisons.
+const HEAD = String(CURRENT_SCHEMA_VERSION);
 
 let tmpDir: string;
 let dbPath: string;
@@ -107,7 +110,7 @@ describe('Migration sequence (F-TS-007)', () => {
     // migration-011 extended the relation_type CHECK enum + added
     // repos.forge_vault_path on top of the FT-4 head at '10').
     const v = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
-    expect(v.value).toBe('11');
+    expect(v.value).toBe(HEAD);
   });
 
   it('creates audit tables on migration', () => {
@@ -169,8 +172,8 @@ describe('Migration sequence (F-TS-007)', () => {
     // Second open: already at head, should not re-run anything destructive
     openDb(dbPath);
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('11');
-    expect(v2).toBe('11');
+    expect(v1).toBe(HEAD);
+    expect(v2).toBe(HEAD);
   });
 
   it('opening a brand-new (no-file) DB produces head schema directly', () => {
@@ -180,7 +183,7 @@ describe('Migration sequence (F-TS-007)', () => {
     const freshPath = join(tmpDir, 'fresh.db');
     openDb(freshPath);
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
 
     const tables = getDb().prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = 'audit_runs'"
@@ -238,7 +241,7 @@ describe('Migration sequence (F-TS-007)', () => {
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
   });
 
   it('migration-007 adds repos.npm_package_name / pypi_package_name / publisher_method columns', () => {
@@ -276,5 +279,172 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(idx).toBeDefined();
     expect(idx!.sql).toMatch(/repo_published_versions/);
     expect(idx!.sql).toMatch(/channel/);
+  });
+});
+
+describe('forward-compat guard (PH-DB-001)', () => {
+  // A DB written by a NEWER rk build carries a schema_version above this
+  // build's head. The migration ladder only lower-bound-gates (if version
+  // < N), so without an explicit upper-bound check the newer DB would be
+  // opened and silently treated as current — running old code against a
+  // schema shape it doesn't understand. openDb must refuse loudly.
+  it('refuses to open a DB whose schema_version is newer than CURRENT_SCHEMA_VERSION', () => {
+    // Build a healthy head DB, then stamp a version one past head.
+    openDb(dbPath);
+    closeDb();
+
+    const raw = new Database(dbPath);
+    raw.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(
+      String(CURRENT_SCHEMA_VERSION + 1)
+    );
+    raw.close();
+
+    expect(() => openDb(dbPath)).toThrow(/newer than this rk build|Upgrade rk/i);
+  });
+});
+
+describe('idempotent migration partial-apply recovery (db-A-003)', () => {
+  // The bug: execMigrationIdempotent swallowed "duplicate column name" with
+  // an early return that ABORTED the rest of the migration script — so a
+  // migration whose first ADD COLUMN was already applied (from a prior
+  // crash) would never run its CREATE TABLE / version-bump tail. That is a
+  // permanent no-progress loop: every re-run hits the same duplicate
+  // column, swallows it, and the new tables never appear.
+  //
+  // This fixture pre-applies ONE of migration-006's ADD COLUMNs
+  // (lifecycle_status) on a DB sitting at version 5, leaving the rest of
+  // migration-006 (the rigs + repo_local_paths tables, and the version
+  // bump to 6) un-run. A correct runner must still create those tables AND
+  // advance the version despite the pre-existing column.
+  it('completes migration-006 even when one of its ADD COLUMNs is already applied', () => {
+    // 1. Build a healthy DB and rewind it to just-before-migration-006:
+    //    keep the schema but strip the v6 structures and set version to 5.
+    openDb(dbPath);
+    closeDb();
+
+    const raw = new Database(dbPath);
+    // Drop the v6+ tables so migration-006 has real work to do again.
+    raw.exec('DROP TABLE IF EXISTS repo_local_paths');
+    raw.exec('DROP TABLE IF EXISTS rigs');
+    // Pre-apply ONLY the first migration-006 ADD COLUMN. (lifecycle_status
+    // already exists from the full build, which is exactly the
+    // "duplicate column name" trigger we are testing.) Rewind version to 5
+    // so migration-006 is gated to run again.
+    raw.prepare("UPDATE meta SET value = '5' WHERE key = 'schema_version'").run();
+    // Sanity: the column the migration will collide on is present.
+    const cols = raw.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
+    expect(cols.map(c => c.name)).toContain('lifecycle_status');
+    // …and the v6 tables are gone.
+    const before = raw.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('rigs','repo_local_paths')"
+    ).all() as { name: string }[];
+    expect(before.length).toBe(0);
+    raw.close();
+
+    // 2. Re-open with the fixed runner. The duplicate-column ADD must be
+    //    skipped/tolerated while the CREATE TABLE + version bump still run.
+    openDb(dbPath);
+    const db = getDb();
+
+    // The new v6 tables exist…
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('rigs','repo_local_paths')"
+    ).all() as { name: string }[];
+    expect(tables.map(t => t.name).sort()).toEqual(['repo_local_paths', 'rigs']);
+
+    // …and the version advanced PAST 6 (the ladder ran on through to head).
+    const v = parseInt(
+      (db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value,
+      10
+    );
+    expect(v).toBeGreaterThanOrEqual(6);
+    expect(v).toBe(CURRENT_SCHEMA_VERSION);
+  });
+});
+
+describe('pre-migration auto-snapshot (PR-002)', () => {
+  // PR-002: before the migration ladder mutates the schema in place, openDb
+  // takes a synchronous byte-for-byte snapshot of the pre-migration DB —
+  // the safety net for the highest-blast-radius operation. The snapshot
+  // lands in `<dir-of-dbPath>/backups/pre-migration-<from>-to-<head>-<ts>.db`
+  // and is taken ONLY when: (a) the DB FILE already existed at openDb entry,
+  // (b) the on-disk schema_version is below head, and (c)
+  // RK_NO_MIGRATION_BACKUP is unset.
+  //
+  // dbPath is rooted in the per-test temp dir (beforeEach above), so the
+  // backups/ dir resolves INSIDE that temp dir — the repo's real
+  // data/backups is never touched. afterEach (top of file) rmSyncs the
+  // whole temp dir, cleaning up any snapshot files created here. We also
+  // null out RK_NO_MIGRATION_BACKUP defensively in case an ambient env set
+  // it.
+  const backupsDir = () => join(tmpDir, 'backups');
+  const snapshotFiles = (): string[] => {
+    const dir = backupsDir();
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir).filter(f => f.startsWith('pre-migration-') && f.endsWith('.db'));
+  };
+
+  let savedNoBackup: string | undefined;
+  beforeEach(() => {
+    savedNoBackup = process.env.RK_NO_MIGRATION_BACKUP;
+    delete process.env.RK_NO_MIGRATION_BACKUP;
+  });
+  afterEach(() => {
+    if (savedNoBackup === undefined) delete process.env.RK_NO_MIGRATION_BACKUP;
+    else process.env.RK_NO_MIGRATION_BACKUP = savedNoBackup;
+  });
+
+  it('snapshots a PRE-EXISTING old-version DB before migrating, and still migrates to head', () => {
+    // A pre-existing DB stamped at an OLD schema_version (v1, below head).
+    // The file exists before openDb, so the snapshot guard (a) is satisfied.
+    writeMinimalV1Schema(dbPath);
+    expect(existsSync(dbPath)).toBe(true); // pre-existing file
+
+    // No snapshot exists yet.
+    expect(snapshotFiles()).toHaveLength(0);
+
+    openDb(dbPath);
+
+    // A snapshot file was created under <tmpDir>/backups/ …
+    const snaps = snapshotFiles();
+    expect(snaps.length).toBeGreaterThanOrEqual(1);
+    // …named for the from→head version transition (v1 → head).
+    expect(snaps.some(f => f.startsWith(`pre-migration-1-to-${CURRENT_SCHEMA_VERSION}-`))).toBe(true);
+
+    // …and the live DB still migrated all the way to head.
+    const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
+    expect(v).toBe(HEAD);
+  });
+
+  it('does NOT snapshot a FRESH (no-file) openDb', () => {
+    // No pre-existing file: openDb creates the DB from scratch via schema.sql
+    // then runs the ladder. A brand-new DB has no data to protect, so guard
+    // (a) (file existed at entry) is false — NO snapshot.
+    const freshPath = join(tmpDir, 'fresh.db');
+    expect(existsSync(freshPath)).toBe(false);
+
+    openDb(freshPath);
+
+    // The DB came up at head…
+    const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
+    expect(v).toBe(HEAD);
+    // …but NO snapshot was written (fresh DB → nothing to protect).
+    expect(snapshotFiles()).toHaveLength(0);
+  });
+
+  it('does NOT snapshot when RK_NO_MIGRATION_BACKUP is set, but still migrates', () => {
+    // Escape hatch for ephemeral/test DBs: a pre-existing OLD DB still
+    // migrates to head, but the snapshot is suppressed.
+    process.env.RK_NO_MIGRATION_BACKUP = '1';
+    writeMinimalV1Schema(dbPath);
+    expect(existsSync(dbPath)).toBe(true);
+
+    openDb(dbPath);
+
+    // Migrated to head…
+    const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
+    expect(v).toBe(HEAD);
+    // …with NO snapshot written (escape hatch honored).
+    expect(snapshotFiles()).toHaveLength(0);
   });
 });

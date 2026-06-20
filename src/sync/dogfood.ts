@@ -149,7 +149,28 @@ async function fetchText(url: string): Promise<string | null> {
 async function loadIndex(options: DogfoodSyncOptions): Promise<DogfoodIndex> {
   if (options.localPath) {
     const indexPath = join(options.localPath, 'indexes', 'latest-by-repo.json');
-    return JSON.parse(readFileSync(indexPath, 'utf-8'));
+    // sync-A-002: a bare JSON.parse on a missing/truncated index file
+    // surfaces a terse ENOENT or "Unexpected end of JSON input" with no
+    // path context. Wrap read+parse so the operator gets a structured,
+    // actionable message (mirrors the guard already present at
+    // github.ts:122 and publish.ts:120).
+    let raw: string;
+    try {
+      raw = readFileSync(indexPath, 'utf-8');
+    } catch (e: unknown) {
+      throw new Error(
+        `dogfood index at ${indexPath} is missing or unreadable: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
+    try {
+      return JSON.parse(raw) as DogfoodIndex;
+    } catch (e: unknown) {
+      throw new Error(
+        `dogfood index at ${indexPath} is malformed: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
   }
   return fetchJson(options.indexUrl ?? DEFAULT_INDEX_URL);
 }
@@ -158,7 +179,19 @@ async function loadEnforcement(
   repo: string,
   options: DogfoodSyncOptions,
 ): Promise<string> {
-  const repoName = repo.split('/').pop()!;
+  // SYNC-PH-06: derive the policy filename from the slug's last path
+  // segment. A malformed key (empty string, trailing slash → '', or
+  // whitespace) would yield a bad policy path, so we
+  // guard the non-null assertion explicitly: on an empty derived name we
+  // skip the enforcement lookup and default to 'required' (the same value
+  // a missing policy file resolves to), logging the malformed key to stderr.
+  const repoName = repo.split('/').pop()?.trim() ?? '';
+  if (!repoName) {
+    console.error(
+      `[dogfood-sync] malformed repo key "${repo}" — cannot derive a policy filename; defaulting enforcement to 'required'`,
+    );
+    return 'required';
+  }
   if (options.localPath) {
     const policyPath = join(
       options.localPath,
@@ -203,6 +236,20 @@ export async function syncDogfood(
 
   const db = getDb();
   for (const [repo, surfaces] of Object.entries(index)) {
+    // sync-A-003: a drifted index value that is null or not a plain
+    // object (e.g. a string, number, or array from a corrupt export)
+    // would throw mid-walk at Object.entries(surfaces) below — or, for
+    // an array, iterate numeric keys and corrupt the surface rollup.
+    // Validate the top-level shape and skip-with-warning instead
+    // (mirrors the per-repo shape guards at publish.ts:128/138).
+    if (surfaces === null || typeof surfaces !== 'object' || Array.isArray(surfaces)) {
+      skipped.push(`${repo} — malformed surfaces value in dogfood index (expected object, got ${Array.isArray(surfaces) ? 'array' : surfaces === null ? 'null' : typeof surfaces})`);
+      console.error(
+        `[dogfood-sync] ${repo}: malformed surfaces value in dogfood index — skipping`,
+      );
+      continue;
+    }
+
     const repoId = getRepoIdBySlug(repo);
     if (!repoId) {
       // Stage C humanization: nudge users toward the most likely fix
@@ -215,15 +262,45 @@ export async function syncDogfood(
     repoCount++;
     const enforcement = enforcementByRepo.get(repo) ?? 'required';
 
-    // F-DB-023: wrap the per-repo write block in a transaction. SQLite
-    // transactions amortize fsync cost across the batch (10-100x bulk
-    // insert speedup) and also give us atomicity: if a constraint trips
-    // mid-loop, the repo's rollup stays consistent with its surface rows.
+    // SYNC-PH-01: the per-surface ENTRY is not validated upstream — a
+    // drifted export can carry a surface whose `verified` / `run_id` /
+    // `finished_at` is undefined (or the value isn't a plain object at
+    // all). upsertFact binds those directly into a prepared statement, and
+    // better-sqlite3 throws "SQLite3 can't bind undefined" — which, without
+    // a guard, would abort the ENTIRE sync-dogfood at the first bad surface.
+    // We validate each entry, skip-with-note the malformed ones, and ALSO
+    // wrap the per-repo tx() in try/catch so a repo that still throws is
+    // recorded in `skipped` and the walk continues to the next repo.
+    //
+    // We count facts into a per-repo local and only fold it into the running
+    // total AFTER tx() commits, so a rolled-back transaction never inflates
+    // facts_upserted.
+    let repoFacts = 0;
     const tx = db.transaction(() => {
+      repoFacts = 0;
       const surfaceNames: string[] = [];
       let worstStatus = 'pass';
 
       for (const [surface, entry] of Object.entries(surfaces)) {
+        // SYNC-PH-01: validate the surface entry shape. The static type says
+        // IndexEntry, but the JSON came from disk/network and can drift — a
+        // non-object entry, or one missing the required string fields, is
+        // skipped-with-note rather than allowed to throw at the bind below.
+        // We widen to unknown so the runtime checks are honest about that.
+        const e = entry as unknown;
+        if (
+          e === null || typeof e !== 'object' || Array.isArray(e) ||
+          typeof (e as Record<string, unknown>).verified !== 'string' ||
+          typeof (e as Record<string, unknown>).run_id !== 'string' ||
+          typeof (e as Record<string, unknown>).finished_at !== 'string'
+        ) {
+          skipped.push(`${repo} surface ${surface} — malformed entry (missing verified/run_id/finished_at string)`);
+          console.error(
+            `[dogfood-sync] ${repo} surface ${surface}: malformed entry — skipping (expected verified/run_id/finished_at strings)`,
+          );
+          continue;
+        }
+
         surfaceNames.push(surface);
         const freshness = computeFreshnessDays(entry.finished_at);
 
@@ -242,7 +319,7 @@ export async function syncDogfood(
         upsertFact(repoId, 'dogfood', `surface:${surface}:freshness_days`, freshnessValue, 'detected', SOURCE_PATH);
         upsertFact(repoId, 'dogfood', `surface:${surface}:run_id`, entry.run_id, 'detected', SOURCE_PATH);
         upsertFact(repoId, 'dogfood', `surface:${surface}:finished_at`, entry.finished_at, 'detected', SOURCE_PATH);
-        factsUpserted += 5;
+        repoFacts += 5;
 
         // F-DB-016: a bad-timestamp surface downgrades to 'unknown'
         // rather than silently passing — masking missing freshness as
@@ -259,9 +336,18 @@ export async function syncDogfood(
       // Rollup facts
       upsertFact(repoId, 'dogfood', 'status', worstStatus, 'detected', SOURCE_PATH);
       upsertFact(repoId, 'dogfood', 'surfaces', surfaceNames.join(','), 'detected', SOURCE_PATH);
-      factsUpserted += 2;
+      repoFacts += 2;
     });
-    tx();
+    try {
+      tx();
+      factsUpserted += repoFacts;
+    } catch (e: unknown) {
+      // SYNC-PH-01: one bad repo must not abort the whole sync. Record it
+      // and continue — the transaction already rolled back, so no partial
+      // facts linger and the counter (folded in only on success) is exact.
+      skipped.push(`${repo} — sync failed: ${(e as Error).message}`);
+      console.error(`[dogfood-sync] ${repo}: sync failed, skipping repo — ${(e as Error).message}`);
+    }
   }
 
   // --- Intelligence layer sync ---

@@ -27,6 +27,9 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    # PH-AHG-002: cap wall-clock so a hung install/test can't burn the
+    # default 6h of CI minutes. 15m is generous for ci + typecheck + tests.
+    timeout-minutes: 15
     strategy:
       matrix:
         node-version: [20, 22]
@@ -39,8 +42,17 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npm audit --audit-level=moderate
+      # PH-AHG-003: audit is advisory (continue-on-error), but the signal
+      # used to be invisible — a nameless step with no surfaced output. Name
+      # it and write the findings to the run's Step Summary so an operator
+      # can see vulnerabilities without the step failing the build.
+      - name: npm audit (advisory — does not fail the build)
         continue-on-error: true
+        run: |
+          echo '### npm audit (advisory)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          npm audit --audit-level=moderate 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - run: npm run build
       - run: npm run typecheck
       - run: npm run lint

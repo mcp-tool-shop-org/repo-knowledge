@@ -131,6 +131,9 @@ export function buildFeed(opts?: { kevList?: Set<string> }): FeedEvent[] {
       }
     } else if (history.length === 1) {
       // First-ever snapshot with findings — surface as audit_delta from null.
+      // hg-A-004: mirror the steady-state branch above, which emits for
+      // BOTH critical and high. A first audit carrying only HIGH CVEs must
+      // not stay silent for a cycle just because critical happens to be 0.
       const h = history[0];
       if (h.severity_critical > 0) {
         events.push({
@@ -138,6 +141,14 @@ export function buildFeed(opts?: { kevList?: Set<string> }): FeedEvent[] {
           repo_slug: r.slug,
           payload: { severity: 'critical', from: null, to: h.severity_critical },
           message: `audit_delta  critical: 0 -> ${h.severity_critical}  repo=${r.slug}  (first snapshot)`,
+        });
+      }
+      if (h.severity_high > 0) {
+        events.push({
+          kind: 'audit_delta',
+          repo_slug: r.slug,
+          payload: { severity: 'high', from: null, to: h.severity_high },
+          message: `audit_delta  high: 0 -> ${h.severity_high}  repo=${r.slug}  (first snapshot)`,
         });
       }
     }

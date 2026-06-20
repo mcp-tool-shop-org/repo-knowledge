@@ -166,6 +166,39 @@ describe('getRepoDiff — dep_audit delta', () => {
   });
 });
 
+describe('getRepoDiff — date-only --until (hg-A-005)', () => {
+  it('includes same-day timestamped rows when --until is a bare date', () => {
+    const db = getDb();
+    // Today's date (UTC) as SQLite sees it, plus a same-day note stamped
+    // at midday so it is lexically GREATER than the bare 'YYYY-MM-DD'.
+    const today = (db.prepare("SELECT date('now') AS d").get() as { d: string }).d;
+    db.prepare(`
+      INSERT INTO repo_notes (repo_id, note_type, title, content, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now', 'start of day', '+14 hours'), datetime('now'))
+    `).run(repoId, 'general', 'midday note', 'body', 'manual');
+
+    // Bare date-only until. Without end-of-day normalization the midday
+    // row ('YYYY-MM-DD 14:00:00') sorts after 'YYYY-MM-DD' and is dropped.
+    const r = getRepoDiff(SLUG, { until: today })!;
+    const titles = r.notes_added.map(n => n.title);
+    expect(titles).toContain('midday note');
+  });
+
+  it('still excludes rows on the day AFTER a date-only --until', () => {
+    const db = getDb();
+    const today = (db.prepare("SELECT date('now') AS d").get() as { d: string }).d;
+    // A note stamped tomorrow must NOT leak in when until is today.
+    db.prepare(`
+      INSERT INTO repo_notes (repo_id, note_type, title, content, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now', '+1 day'), datetime('now'))
+    `).run(repoId, 'general', 'tomorrow note', 'body', 'manual');
+
+    const r = getRepoDiff(SLUG, { until: today })!;
+    const titles = r.notes_added.map(n => n.title);
+    expect(titles).not.toContain('tomorrow note');
+  });
+});
+
 describe('getRepoDiff — published_versions', () => {
   it('captures versions whose synced_at lands in the window', () => {
     upsertPublishedVersion({

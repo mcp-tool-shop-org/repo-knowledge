@@ -1,15 +1,19 @@
 /**
- * FT-5: GitHub 404 → lifecycle_status='archived' + warning note.
+ * FT-5: GitHub vanished-repo detection + (opt-in) archival.
  *
  * Strategy: vi.mock child_process so execFileSync emits canned `gh repo
- * list` output. We seed the DB with two previously-active repos, then
- * fire syncGitHub() against a mock that returns only one of them. The
- * vanished repo must flip to lifecycle_status='archived' and acquire a
- * warning note.
+ * list` output. We seed the DB with previously-active repos, then fire
+ * syncGitHub() against a mock that returns only some of them.
+ *
+ * sync-A-006 (deepened): archival is OPT-IN via `{ pruneVanished: true }`.
+ * A routine sync only DETECTS vanished repos (reports them in
+ * `result.vanished`) and NEVER mutates lifecycle state — listing-absence is
+ * an ambiguous signal (a private repo invisible to an under-scoped token is
+ * absent the same way a deleted one is). The archival tests below therefore
+ * pass pruneVanished:true; the safe-default test asserts no mutation without it.
  *
  * Defense-in-depth: a sync with an EMPTY fetch result must NOT archive
- * anything (could be a rate-limit / auth failure / network blip, not
- * signal). That ambient-failure path is exercised in the second test.
+ * anything (could be a rate-limit / auth failure / network blip, not signal).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -34,21 +38,30 @@ const mockExecFileSync = execFileSync as unknown as ReturnType<typeof vi.fn>;
 
 let tmpDir: string;
 let stdoutSpy: ReturnType<typeof vi.spyOn>;
+let stderrSpy: ReturnType<typeof vi.spyOn>;
 let logSpy: ReturnType<typeof vi.spyOn>;
+let errorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), 'rk-gh404-'));
   openDb(join(tmpDir, 'test.db'));
   mockExecFileSync.mockReset();
+  // mcp-PH-001: syncGitHub progress now goes to STDERR (console.error +
+  // process.stderr.write). Spy/silence BOTH channels so the suite stays
+  // quiet; stdout must remain untouched (the JSON-RPC frame channel).
   stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   try { closeDb(); } catch { /* may not be open */ }
   rmSync(tmpDir, { recursive: true, force: true });
   stdoutSpy.mockRestore();
+  stderrSpy.mockRestore();
   logSpy.mockRestore();
+  errorSpy.mockRestore();
 });
 
 describe('syncGitHub vanished-repo archival (FT-5)', () => {
@@ -84,9 +97,10 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
       throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
     });
 
-    const result = syncGitHub(['org']);
+    const result = syncGitHub(['org'], { pruneVanished: true });
 
     expect(result.synced).toBe(1);
+    expect(result.vanished).toContain('org/vanished');
 
     // 'still-here' should remain active.
     const stillHere = getRepo('org/still-here');
@@ -101,9 +115,14 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
 
     // Warning note attached.
     const notes = (vanished!.notes as Array<Record<string, unknown>>);
-    const warning = notes.find(n => n.note_type === 'warning' && String(n.title).includes('GitHub 404'));
+    const warning = notes.find(n => n.note_type === 'warning' && String(n.title).includes('GitHub listing absence'));
     expect(warning).toBeDefined();
-    expect(String(warning!.content)).toMatch(/404 at \d{4}-\d{2}-\d{2}T/);
+    // sync-A-001: the note records only what we observed (absent from the
+    // listing) at an ISO timestamp — it must NOT assert a 404 / deletion
+    // for a repo that was never individually probed.
+    expect(String(warning!.content)).toMatch(/at \d{4}-\d{2}-\d{2}T/);
+    expect(String(warning!.content)).not.toMatch(/404/);
+    expect(String(warning!.content)).not.toMatch(/may be deleted/);
     expect(String(warning!.content)).toContain('rk delete org/vanished');
   });
 
@@ -162,7 +181,7 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
       throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
     });
 
-    syncGitHub(['org']);
+    syncGitHub(['org'], { pruneVanished: true });
 
     // 'untouched/safe' must not be archived even though it wasn't seen.
     const safe = getRepo('untouched/safe');
@@ -218,5 +237,226 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
     const notes = (already!.notes as Array<Record<string, unknown>>);
     const warnings = notes.filter(n => n.note_type === 'warning');
     expect(warnings.length).toBe(0);
+  });
+
+  it('does NOT archive a private prior-active repo omitted from the fetch (sync-A-001 / sync-A-006)', () => {
+    // An under-scoped token (missing `repo` scope) returns only PUBLIC
+    // repos and silently omits private ones. The private repo is active
+    // and present on GitHub — archiving it would stamp a live repo
+    // "may be deleted." Seed one private + one public repo; the fetch
+    // returns only the public one.
+    upsertRepo({ owner: 'org', name: 'pub-survivor', status: 'active', visibility: 'public' });
+    upsertRepo({ owner: 'org', name: 'private-repo', status: 'active', visibility: 'private' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        // Only the public repo is visible to this under-scoped token.
+        return JSON.stringify([
+          {
+            name: 'pub-survivor',
+            owner: { login: 'org' },
+            description: 'visible',
+            url: 'https://github.com/org/pub-survivor',
+            isPrivate: false,
+            isArchived: false,
+            isFork: false,
+            defaultBranchRef: { name: 'main' },
+            stargazerCount: 0,
+            forkCount: 0,
+            createdAt: null,
+            updatedAt: null,
+            pushedAt: null,
+            primaryLanguage: null,
+            repositoryTopics: [],
+            licenseInfo: null,
+          },
+        ]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    // Even WITH archival opted in, a recorded-private repo is never archived
+    // (defense-in-depth on top of the safe opt-in default).
+    syncGitHub(['org'], { pruneVanished: true });
+
+    // The private repo must remain active — visibility=private is the
+    // guard that distinguishes "invisible to this token" from "vanished."
+    const priv = getRepo('org/private-repo');
+    expect(priv).not.toBeNull();
+    expect(priv!.lifecycle_status).toBe('active');
+    expect(priv!.deprecated_at).toBeNull();
+    // And no warning note slandering a live private repo.
+    const privNotes = (priv!.notes as Array<Record<string, unknown>>);
+    expect(privNotes.filter(n => n.note_type === 'warning').length).toBe(0);
+
+    // Sanity: the public survivor stays active too (it was returned).
+    expect(getRepo('org/pub-survivor')!.lifecycle_status).toBe('active');
+  });
+
+  it('does NOT archive a repo whose stored slug differs only by casing (sync-A-004)', () => {
+    // GitHub identity is case-insensitive. The DB holds the slug with
+    // upper-case owner/name; the fetch returns lower-case. A naive
+    // case-sensitive diff would see the stored slug as "vanished."
+    upsertRepo({ owner: 'Org', name: 'CamelRepo', status: 'active', visibility: 'public' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([
+          {
+            name: 'camelrepo',           // lower-cased name
+            owner: { login: 'Org' },     // same owner as the snapshot key
+            description: 'same repo, different casing',
+            url: 'https://github.com/Org/camelrepo',
+            isPrivate: false,
+            isArchived: false,
+            isFork: false,
+            defaultBranchRef: { name: 'main' },
+            stargazerCount: 0,
+            forkCount: 0,
+            createdAt: null,
+            updatedAt: null,
+            pushedAt: null,
+            primaryLanguage: null,
+            repositoryTopics: [],
+            licenseInfo: null,
+          },
+        ]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['Org'], { pruneVanished: true });
+
+    // The original-cased row must stay active — the lower-cased fetch
+    // result is the SAME repo, not a vanish.
+    const stored = getRepo('Org/CamelRepo');
+    expect(stored).not.toBeNull();
+    expect(stored!.lifecycle_status).toBe('active');
+    expect(stored!.deprecated_at).toBeNull();
+  });
+
+  it('DEFAULT sync (no --prune-vanished) detects but never archives a vanished repo (sync-A-006 deepened)', () => {
+    // The surviving-HIGH scenario: a routine `rk sync` must not mutate
+    // lifecycle state on listing-absence. The visibility guard was inert
+    // because local-scanned repos store visibility='public' — so even a
+    // genuinely-private repo absent from an under-scoped fetch looks public
+    // here. The SAFE DEFAULT (no archival) protects it regardless of the
+    // unreliable visibility column.
+    upsertRepo({ owner: 'org', name: 'survivor', status: 'active', visibility: 'public' });
+    // A locally-scanned private repo: stored as 'public' (the default), the
+    // exact shape that defeated the old guard.
+    upsertRepo({ owner: 'org', name: 'looks-public-is-private', status: 'active', visibility: 'public' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([
+          {
+            name: 'survivor', owner: { login: 'org' }, description: 'returned',
+            url: 'https://github.com/org/survivor', isPrivate: false, isArchived: false,
+            isFork: false, defaultBranchRef: { name: 'main' }, stargazerCount: 0,
+            forkCount: 0, createdAt: null, updatedAt: null, pushedAt: null,
+            primaryLanguage: null, repositoryTopics: [], licenseInfo: null,
+          },
+        ]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    // NO pruneVanished flag — the default.
+    const result = syncGitHub(['org']);
+
+    // Detection still runs and reports the candidate...
+    expect(result.vanished).toContain('org/looks-public-is-private');
+    // ...but NOTHING is mutated: the repo stays active with no warning note.
+    const repo = getRepo('org/looks-public-is-private');
+    expect(repo!.lifecycle_status).toBe('active');
+    expect(repo!.deprecated_at).toBeNull();
+    expect((repo!.notes as Array<Record<string, unknown>>).filter(n => n.note_type === 'warning').length).toBe(0);
+  });
+});
+
+// A minimal gh repo entry builder for the channel + truncation tests.
+function ghRepo(name: string, owner = 'org') {
+  return {
+    name, owner: { login: owner }, description: name,
+    url: `https://github.com/${owner}/${name}`, isPrivate: false, isArchived: false,
+    isFork: false, defaultBranchRef: { name: 'main' }, stargazerCount: 0,
+    forkCount: 0, createdAt: null, updatedAt: null, pushedAt: null,
+    primaryLanguage: null, repositoryTopics: [], licenseInfo: null,
+  };
+}
+
+describe('syncGitHub channel discipline — progress on STDERR not STDOUT (mcp-PH-001)', () => {
+  it('writes "Syncing <owner>..." + sync dots to stderr, never stdout', () => {
+    upsertRepo({ owner: 'org', name: 'a', status: 'active' });
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([ghRepo('a')]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['org']);
+
+    // The "Syncing org..." progress line is a console.error call (stderr).
+    const stderrLines = errorSpy.mock.calls.map(c => String(c[0]));
+    expect(stderrLines.some(l => l.includes('Syncing org...'))).toBe(true);
+
+    // The per-repo sync dot went to process.stderr.write, NOT process.stdout.write.
+    const stdoutWrites = stdoutSpy.mock.calls.map(c => String(c[0]));
+    const stderrWrites = stderrSpy.mock.calls.map(c => String(c[0]));
+    expect(stderrWrites).toContain('.');
+    expect(stdoutWrites).not.toContain('.');
+
+    // Nothing progress-y leaked onto console.log (stdout) — the JSON-RPC channel.
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncGitHub truncated-listing prune guard (SYNC-PH-04)', () => {
+  it('suppresses --prune-vanished archival + warns when the fetch hits the limit', () => {
+    // limit=2; the fetch returns exactly 2 repos → listing likely truncated.
+    // The prior-active 'vanished' repo is absent from this (truncated) page, so
+    // a naive prune would archive it. The truncation guard must prevent that.
+    upsertRepo({ owner: 'org', name: 'p1', status: 'active' });
+    upsertRepo({ owner: 'org', name: 'p2', status: 'active' });
+    upsertRepo({ owner: 'org', name: 'vanished', status: 'active' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        // Exactly `limit` rows (p1, p2) — vanished is past the cutoff.
+        return JSON.stringify([ghRepo('p1'), ghRepo('p2')]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['org'], { pruneVanished: true, limit: 2 });
+
+    // No archival happened — the truncation guard disabled prune for this owner.
+    const vanished = getRepo('org/vanished');
+    expect(vanished!.lifecycle_status).toBe('active');
+    expect(vanished!.deprecated_at).toBeNull();
+
+    // A truncation warning was emitted to stderr advising a higher --limit.
+    const stderrLines = errorSpy.mock.calls.map(c => String(c[0]));
+    expect(stderrLines.some(l => /truncated/i.test(l) && /limit/i.test(l))).toBe(true);
+  });
+
+  it('still archives when the fetch is below the limit (not truncated)', () => {
+    // limit=10; only 1 repo returned → well below the cap, listing complete.
+    upsertRepo({ owner: 'org', name: 'survivor', status: 'active' });
+    upsertRepo({ owner: 'org', name: 'gone', status: 'active' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([ghRepo('survivor')]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['org'], { pruneVanished: true, limit: 10 });
+
+    // 'gone' is archived because the listing was demonstrably complete.
+    expect(getRepo('org/gone')!.lifecycle_status).toBe('archived');
   });
 });

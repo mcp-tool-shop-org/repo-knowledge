@@ -107,7 +107,7 @@ Array of per-control check results:
     "tool_source": "gitleaks"
   },
   {
-    "control_id": "CI-002",
+    "control_id": "CIC-002",
     "result": "fail",
     "notes": "No SAST tool found in .github/workflows/",
     "tool_source": "workflow-files"

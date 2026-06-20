@@ -69,10 +69,16 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
   try {
     // Latest run per repo — older runs describe a repo state that has since
     // been re-audited. Mirrors the latest-by-repo.json semantics of the
-    // main dogfood sync. ORDER BY created_at + Map overwrite keeps the
-    // newest row even when two runs share a timestamp.
+    // main dogfood sync.
+    //
+    // ts-A-005: ORDER BY created_at ALONE is NOT a deterministic tie-break.
+    // When two runs share a created_at, SQLite is free to return them in
+    // any order, so the Map-overwrite "winner" was undefined run-to-run.
+    // We add `id` as a secondary key: created_at ASC, id ASC means the
+    // greatest id among same-timestamp runs is iterated LAST and wins the
+    // Map overwrite — a stable, reproducible choice.
     const allRuns = swarmDb.prepare(
-      'SELECT id, repo, status, commit_sha, created_at FROM runs ORDER BY created_at',
+      'SELECT id, repo, status, commit_sha, created_at FROM runs ORDER BY created_at ASC, id ASC',
     ).all() as SwarmRun[];
     const latestByRepo = new Map<string, SwarmRun>();
     for (const run of allRuns) latestByRepo.set(run.repo, run);
@@ -98,9 +104,23 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
       }
 
       const findings = findingsForRun.all(run.id) as SwarmFinding[];
-      runCount++;
 
-      const tx = db.transaction(() => {
+      // SYNC-PH-05 (Stage-C verify): fold per-run deltas into LOCAL vars inside
+      // the tx and only add them to the outer counters AFTER tx() commits —
+      // a JS variable mutation is NOT rolled back when the DB transaction is,
+      // so mutating the outer counters inside the closure would inflate them
+      // on a rollback. Mirrors the dogfood.ts fold-only-on-commit pattern.
+      const tx = db.transaction((): { facts: number; findings: number; open: number } => {
+        let localFacts = 0;
+        // SYNC-PH-05: capture the pre-DELETE finding-fact count so we can log
+        // a one-line delta — a DELETE-then-reinsert with no delta record
+        // leaves the operator blind to whether a re-audit shrank, grew, or
+        // churned the finding set. We count BEFORE the DELETE; the post count
+        // is the number of findings we actually upsert below.
+        const priorFindingCount = (db.prepare(
+          "SELECT COUNT(*) AS n FROM repo_facts WHERE repo_id = ? AND fact_type = 'dogfood.swarm.finding'",
+        ).get(repoId) as { n: number }).n;
+
         // Replace, don't accumulate: a re-audit produces a new run with new
         // finding ids, and stale facts from the previous run would otherwise
         // linger beside the fresh ones.
@@ -111,8 +131,22 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
         const openBySeverity = new Map<string, number>();
         let open = 0;
         let fixed = 0;
+        let upsertedFindings = 0;
 
         for (const f of findings) {
+          // SYNC-PH-05: finding_id is the fact KEY and severity drives the
+          // open-by-severity rollup; an empty/blank value for either would
+          // upsert a keyless or unbucketed fact. Skip-with-warn instead so a
+          // drifted control-plane row doesn't silently corrupt the rollup.
+          if (typeof f.finding_id !== 'string' || f.finding_id.trim() === '' ||
+              typeof f.severity !== 'string' || f.severity.trim() === '') {
+            skipped.push(`${run.repo} — swarm finding skipped: empty finding_id or severity`);
+            console.error(
+              `[swarm-sync] ${run.repo}: skipping swarm finding with empty finding_id or severity`,
+            );
+            continue;
+          }
+
           upsertFact(repoId, 'dogfood.swarm.finding', f.finding_id, JSON.stringify({
             severity: f.severity,
             category: f.category,
@@ -123,7 +157,8 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
             status: f.status,
             run_id: run.id,
           }), 'detected', SOURCE_PATH);
-          factsUpserted++;
+          localFacts++;
+          upsertedFindings++;
 
           if (OPEN_STATUSES.has(f.status)) {
             open++;
@@ -132,6 +167,11 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
             fixed++;
           }
         }
+
+        // SYNC-PH-05: one-line delta to stderr (progress/diagnostic channel).
+        console.error(
+          `[swarm-sync] ${run.repo}: ${priorFindingCount} -> ${upsertedFindings} swarm findings`,
+        );
 
         const severityRollup = SEVERITY_ORDER
           .map((s) => `${s}=${openBySeverity.get(s) ?? 0}`)
@@ -142,20 +182,35 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
           ['run:status', run.status],
           ['run:created_at', run.created_at],
           ['run:commit_sha', run.commit_sha],
-          ['findings:total', String(findings.length)],
+          // SYNC-PH-05: total reflects findings actually upserted, not the
+          // raw row count — skipped (empty finding_id/severity) rows are not
+          // synced facts and would otherwise inflate the rollup.
+          ['findings:total', String(upsertedFindings)],
           ['findings:open', String(open)],
           ['findings:fixed', String(fixed)],
           ['findings:open_by_severity', severityRollup],
         ];
         for (const [key, value] of rollups) {
           upsertFact(repoId, 'dogfood.swarm', key, value, 'detected', SOURCE_PATH);
-          factsUpserted++;
+          localFacts++;
         }
 
-        findingCount += findings.length;
-        openCount += open;
+        return { facts: localFacts, findings: upsertedFindings, open };
       });
-      tx();
+
+      // Per-run resilience (Stage-C verify): one drifted swarm run must not
+      // abort the sync for every remaining repo. Fold the deltas only after
+      // tx() commits; on failure, skip-and-continue (mirrors dogfood.ts).
+      try {
+        const delta = tx();
+        runCount++;
+        factsUpserted += delta.facts;
+        findingCount += delta.findings;
+        openCount += delta.open;
+      } catch (e: unknown) {
+        skipped.push(`${run.repo} — swarm sync failed (rolled back): ${(e as Error).message}`);
+        console.error(`[swarm-sync] ${run.repo}: sync failed, skipped — ${(e as Error).message}`);
+      }
     }
 
     return {

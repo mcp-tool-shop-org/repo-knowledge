@@ -3,8 +3,8 @@
  */
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 
 // Resolve a SQL asset by name across all bundled layouts. import.meta.dirname
 // varies by entry point:
@@ -46,24 +46,108 @@ let _db: DatabaseType | null = null;
 let _dbPath: string | null = null;
 
 /**
+ * Current schema head version. A fresh openDb runs the migration ladder
+ * (002-011) and ends here. ts-A-008: this is the single source of truth
+ * for the head version — the migration test suites import it instead of
+ * hard-coding the literal in dozens of assertions, so a future migration
+ * that bumps the head updates exactly one place.
+ *
+ * Keep in lockstep with the highest `schema_version` stamped by the
+ * migration ladder below (currently migration-011 → '11').
+ */
+export const CURRENT_SCHEMA_VERSION = 11;
+
+/**
+ * Strip `ALTER TABLE <t> ADD COLUMN <col> ...;` statements whose column
+ * already exists, so a partially-applied migration can be re-run without
+ * the duplicate-column abort wiping out the rest of the script.
+ *
+ * SQLite has no native `ADD COLUMN IF NOT EXISTS`. We can't just swallow
+ * the duplicate-column error at the exec level because better-sqlite3's
+ * `.exec()` STOPS at the first error — the surviving statements (CREATE
+ * TABLE, CREATE INDEX, the version bump) would never run. Guarding each
+ * ADD COLUMN against PRAGMA table_info presence lets us remove only the
+ * no-op ALTERs and keep every other statement intact.
+ *
+ * The matcher is conservative: it only neutralizes statements of the form
+ * `ALTER TABLE <ident> ADD COLUMN <ident> ...` (optionally with the bare
+ * `COLUMN` keyword omitted) where the column is already present on the
+ * table. Anything it doesn't confidently recognize is left untouched and
+ * runs verbatim.
+ */
+function stripAppliedAddColumns(db: DatabaseType, sql: string): string {
+  const columnsOf = (table: string): Set<string> => {
+    try {
+      const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+      return new Set(rows.map(r => r.name));
+    } catch {
+      return new Set();
+    }
+  };
+  // Match a full ALTER TABLE ... ADD [COLUMN] <col> ...; statement.
+  const addColRe =
+    /ALTER\s+TABLE\s+(?:"([^"]+)"|`([^`]+)`|(\w+))\s+ADD\s+(?:COLUMN\s+)?(?:"([^"]+)"|`([^`]+)`|(\w+))[^;]*;/gi;
+  return sql.replace(addColRe, (stmt, t1, t2, t3, c1, c2, c3) => {
+    const table = (t1 ?? t2 ?? t3) as string;
+    const col = (c1 ?? c2 ?? c3) as string;
+    if (table && col && columnsOf(table).has(col)) {
+      // Column already present — replace with a comment so semicolon
+      // accounting and line offsets stay sane.
+      return `-- skipped (already applied): ADD COLUMN ${table}.${col};`;
+    }
+    return stmt;
+  });
+}
+
+/**
  * Apply a migration script with idempotent ADD COLUMN tolerance.
  *
  * SQLite has no native `ADD COLUMN IF NOT EXISTS`, so re-running a
- * migration that already applied throws "duplicate column name". We swallow
- * that specific error and rethrow everything else. The script is executed
- * as one `exec` call (not split-by-semicolon) so multi-statement triggers
- * and CHECK constraints with embedded semicolons survive verbatim.
+ * migration that already applied throws "duplicate column name". The
+ * script is executed as one `exec` call (not split-by-semicolon) so
+ * multi-statement triggers and CHECK constraints with embedded semicolons
+ * survive verbatim.
+ *
+ * ATOMICITY (db-A-003): better-sqlite3's `.exec()` autocommits each
+ * statement and STOPS at the first error. The old implementation caught a
+ * "duplicate column name" abort and `return`ed early — which ABORTED the
+ * rest of the script (the CREATE TABLE / CREATE INDEX / version-bump that
+ * make up the bulk of the migration) before they ran. On a partially
+ * applied schema (e.g. one ADD COLUMN landed from a prior crash, the rest
+ * did not) that produced a permanent no-progress loop: every re-run hit
+ * the same duplicate column, swallowed it, and never created the new
+ * tables or bumped the version. The old comment claiming the later
+ * statements were "independently idempotent" was FALSE — they simply
+ * never executed.
+ *
+ * Fix (two layers):
+ *   1. Pre-strip any ADD COLUMN whose column already exists, so a
+ *      partial-apply re-run does not abort on a duplicate column.
+ *   2. Run the (stripped) script inside a single `db.transaction()` so it
+ *      is all-or-nothing — there is no half-applied state in which a new
+ *      column exists but the table-creating / version-bumping tail did
+ *      not run.
  */
 function execMigrationIdempotent(db: DatabaseType, sql: string, label: string): void {
+  const guarded = stripAppliedAddColumns(db, sql);
   try {
-    db.exec(sql);
+    const tx = db.transaction(() => db.exec(guarded));
+    tx();
   } catch (e: unknown) {
     const msg = (e as Error)?.message ?? String(e);
     if (msg.includes('duplicate column name')) {
-      // Idempotent re-run on a partially-applied schema — the ADD COLUMN
-      // statements are no-ops once the column exists. Other migration
-      // statements in the same script are independently idempotent
-      // (CREATE INDEX IF NOT EXISTS, INSERT OR REPLACE, etc.).
+      // Belt-and-suspenders: stripAppliedAddColumns should have removed
+      // every already-present ADD COLUMN, but if a column slipped through
+      // (e.g. an ALTER form the matcher didn't recognize), treat it as a
+      // fully-applied idempotent re-run. The transaction rolled back, so
+      // the on-disk state is unchanged.
+      //
+      // PH-DB-005: surface the tolerated swallow on STDERR. This branch
+      // should be unreachable now that stripAppliedAddColumns pre-strips
+      // applied columns — if it fires, the matcher missed an ALTER form and
+      // an operator should know rather than have it silently absorbed.
+      // Infrastructure diagnostic → stderr (keeps STDOUT clean for MCP/JSON).
+      console.error(`migration ${label}: tolerated already-applied column, continuing`);
       return;
     }
     throw new Error(`Migration ${label} failed: ${msg}`, { cause: e });
@@ -79,14 +163,83 @@ function execMigrationIdempotent(db: DatabaseType, sql: string, label: string): 
  * swallowing duplicate-column errors; a recreate-table migration must
  * either fully apply or fully reject — the migration is gated at the
  * call site by a meta marker so it is invoked only when needed.
+ *
+ * DURABILITY (db-A-001): the DROP→RENAME window in a recreate migration
+ * is the most dangerous moment in the whole ladder — a crash there would
+ * destroy the source table. better-sqlite3's `.exec()` is
+ * autocommit-per-statement, so without a wrapping transaction a failure
+ * after DROP but before RENAME would leave the DB with NO
+ * repo_relationships table at all. We therefore run the entire body
+ * inside `db.transaction()` so it is all-or-nothing: either the recreate
+ * fully commits or the original table is rolled back intact.
+ *
+ * SQLite cannot toggle `PRAGMA foreign_keys` inside a transaction (it
+ * silently no-ops there), and the recreate's DROP+RENAME must run with
+ * FKs OFF, so we toggle FK enforcement OFF before opening the
+ * transaction and restore it ON in a finally block afterwards.
  */
 function execMigrationStrict(db: DatabaseType, sql: string, label: string): void {
+  // FK toggle MUST be outside the transaction — see the doc comment.
+  db.pragma('foreign_keys = OFF');
   try {
-    db.exec(sql);
+    const tx = db.transaction(() => db.exec(sql));
+    tx();
   } catch (e: unknown) {
     const msg = (e as Error)?.message ?? String(e);
     throw new Error(`Migration ${label} failed: ${msg}`, { cause: e });
+  } finally {
+    db.pragma('foreign_keys = ON');
   }
+}
+
+/**
+ * PR-002: auto-snapshot the pre-migration DB before the migration ladder
+ * runs.
+ *
+ * The migration ladder is the highest-blast-radius operation in the whole
+ * system — it ALTERs / DROPs+RECREATEs tables in place. If a migration
+ * corrupts data (or the process dies mid-recreate on a pre-fix binary), the
+ * operator wants a byte-for-byte copy of the DB as it was the instant
+ * BEFORE rk touched it. This takes exactly that copy.
+ *
+ * Snapshot mechanism: SQLite's `VACUUM INTO '<path>'` writes a clean,
+ * consistent, fully-checkpointed copy of the live DB to a new file —
+ * including data sitting in the WAL — without us having to coordinate file
+ * copies around the WAL/SHM sidecars. It is synchronous and runs inside
+ * better-sqlite3's single-threaded handle, so the snapshot is taken before
+ * any migration statement executes.
+ *
+ * Destination: `<dir-of-dbPath>/backups/pre-migration-<from>-to-<head>-<ts>.db`.
+ * Anchoring the backups dir to the DB file's own directory means the real
+ * `data/knowledge.db` snapshots into `data/backups/`, while a test DB in a
+ * temp dir snapshots into that temp dir's `backups/` — the real
+ * `data/backups` is never touched by tests that point dbPath elsewhere.
+ *
+ * The ISO timestamp is made filesystem-safe by replacing every `:` (illegal
+ * in Windows filenames) and `.` with `-`.
+ *
+ * Returns the snapshot file path for the caller to log. The decision of
+ * WHETHER to snapshot (the three-condition guard) lives at the call site in
+ * openDb; this helper unconditionally writes when called.
+ */
+function snapshotPreMigration(
+  db: DatabaseType,
+  dbPath: string,
+  fromVersion: number
+): string {
+  const backupsDir = join(dirname(dbPath), 'backups');
+  // Create the backups dir first — VACUUM INTO will not create parent dirs.
+  mkdirSync(backupsDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const snapshotPath = join(
+    backupsDir,
+    `pre-migration-${fromVersion}-to-${CURRENT_SCHEMA_VERSION}-${stamp}.db`
+  );
+  // VACUUM INTO takes a single-quoted string literal; the path is
+  // machine-generated (no user input) and any single quote in it is
+  // escaped by doubling per SQL string-literal rules, defensively.
+  db.exec(`VACUUM INTO '${snapshotPath.replace(/'/g, "''")}'`);
+  return snapshotPath;
 }
 
 /**
@@ -108,10 +261,55 @@ export function openDb(dbPath: string): DatabaseType {
     return _db;
   }
 
+  // PR-002: capture whether the DB FILE already existed BEFORE `new Database`
+  // opens (and thereby CREATES) it. A brand-new/fresh DB has no data to
+  // protect and must NOT trigger a pre-migration snapshot; only a
+  // pre-existing file with real data is worth backing up. This MUST be read
+  // before the `new Database()` line below — afterwards the file always
+  // exists and the distinction is lost.
+  const fileExistedAtEntry = existsSync(dbPath);
+
   _db = new Database(dbPath);
   _dbPath = dbPath;
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
+  // PH-DB-003: without an explicit busy_timeout better-sqlite3 installs a
+  // 0ms busy handler, so a concurrent writer (rk CLI + the MCP server
+  // sharing one DB) throws SQLITE_BUSY *instantly* on a locked WAL. Give
+  // SQLite a 5s window to wait-and-retry internally before surfacing the
+  // lock to the caller (retry-and-report rather than fail-fast).
+  _db.pragma('busy_timeout = 5000');
+
+  // PH-DB-001: forward-compat guard. The migration ladder below only
+  // *lower-bound* gates (if version < N). A DB written by a NEWER rk build
+  // (schema_version > CURRENT_SCHEMA_VERSION) would otherwise be opened and
+  // silently treated as current — running this older code against a schema
+  // shape it doesn't understand. Refuse loudly so the operator upgrades rk
+  // instead of corrupting a forward-migrated DB. The meta table only exists
+  // once schema.sql has been applied, so guard the read on its presence
+  // (a brand-new file has no meta row yet and is handled by the fresh-DB
+  // path below).
+  const hasMeta = _db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'"
+  ).get();
+  if (hasMeta) {
+    const onDisk = (_db.prepare(
+      "SELECT value FROM meta WHERE key = 'schema_version'"
+    ).get() as { value: string } | undefined)?.value;
+    if (onDisk !== undefined && parseInt(onDisk, 10) > CURRENT_SCHEMA_VERSION) {
+      // Reset the singleton before throwing so the module is not left in a
+      // half-open state — otherwise a retry would hit the `if (_db)`
+      // early-return above and silently hand back the newer-schema DB we
+      // just refused.
+      _db.close();
+      _db = null;
+      _dbPath = null;
+      throw new Error(
+        `Database schema_version ${onDisk} is newer than this rk build ` +
+        `(head ${CURRENT_SCHEMA_VERSION}). Upgrade rk before opening.`
+      );
+    }
+  }
 
   // Check if schema exists
   const hasRepos = _db.prepare(
@@ -121,7 +319,39 @@ export function openDb(dbPath: string): DatabaseType {
   if (!hasRepos) {
     const schema = readFileSync(SCHEMA_PATH, 'utf-8');
     _db.exec(schema);
-    console.log('Database initialized with schema v1');
+    // PH-DB-002: init/migration progress goes to STDERR. STDOUT is the
+    // MCP JSON-RPC frame channel and the CLI --json payload channel;
+    // infrastructure breadcrumbs there corrupt both. A human still sees
+    // stderr in their terminal. Mirrors config.ts's stderr advisory tone.
+    console.error('Database initialized with schema v1');
+  }
+
+  // PR-002: migration safety net. BEFORE the migration ladder mutates the
+  // schema in place, take a synchronous byte-for-byte snapshot of the
+  // pre-migration DB — but ONLY when all three conditions hold:
+  //   (a) the DB FILE already existed at openDb entry (a fresh DB has no
+  //       data to protect — captured as fileExistedAtEntry BEFORE
+  //       `new Database`);
+  //   (b) the on-disk schema_version is BELOW head, i.e. there are
+  //       migrations to run (nothing to protect against if already at head);
+  //   (c) RK_NO_MIGRATION_BACKUP is unset — an escape hatch for ephemeral
+  //       and test DBs that never want the snapshot overhead.
+  // The snapshot path is logged to STDERR (PH-DB-002: migration-progress
+  // channel — STDOUT stays clean for MCP JSON-RPC / CLI --json).
+  const preMigrationVersion = parseInt(
+    (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1',
+    10
+  );
+  if (
+    fileExistedAtEntry &&
+    preMigrationVersion < CURRENT_SCHEMA_VERSION &&
+    !process.env.RK_NO_MIGRATION_BACKUP
+  ) {
+    const snapshotPath = snapshotPreMigration(_db, dbPath, preMigrationVersion);
+    console.error(
+      `Pre-migration snapshot written to ${snapshotPath} ` +
+      `(schema v${preMigrationVersion} → v${CURRENT_SCHEMA_VERSION})`
+    );
   }
 
   // Run migrations — each block compares the current schema_version and
@@ -132,21 +362,21 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version) < 2) {
     const migration = readFileSync(MIGRATION_002, 'utf-8');
     execMigrationIdempotent(_db, migration, '002 (audit evidence layer)');
-    console.log('Applied migration 002: audit evidence layer');
+    console.error('Applied migration 002: audit evidence layer');
   }
 
   const version2 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version2) < 3) {
     const migration = readFileSync(MIGRATION_003, 'utf-8');
     execMigrationIdempotent(_db, migration, '003 (metrics v2)');
-    console.log('Applied migration 003: metrics v2');
+    console.error('Applied migration 003: metrics v2');
   }
 
   const version3 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version3) < 4) {
     const migration = readFileSync(MIGRATION_004, 'utf-8');
     execMigrationIdempotent(_db, migration, '004 (findings idempotency)');
-    console.log('Applied migration 004: findings idempotency (UNIQUE constraint + dedup)');
+    console.error('Applied migration 004: findings idempotency (UNIQUE constraint + dedup)');
   }
 
   // Migration 005 — FTS5 incremental triggers. This is additive over the
@@ -210,7 +440,7 @@ export function openDb(dbPath: string): DatabaseType {
       `).run();
     }
 
-    console.log('Applied migration 006: lifecycle status + cross-rig paths');
+    console.error('Applied migration 006: lifecycle status + cross-rig paths');
   }
 
   // Migration 007 — publish state (npm/pypi package bindings + version
@@ -221,7 +451,7 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version6) < 7) {
     const migration = readFileSync(MIGRATION_007, 'utf-8');
     execMigrationIdempotent(_db, migration, '007 (publish state)');
-    console.log('Applied migration 007: publish state (package bindings + version registry)');
+    console.error('Applied migration 007: publish state (package bindings + version registry)');
   }
 
   // Migration 008 — build/dep/CI health (FT-3). Gated on schema_version:
@@ -232,7 +462,7 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version7) < 8) {
     const migration = readFileSync(MIGRATION_008, 'utf-8');
     execMigrationIdempotent(_db, migration, '008 (build/dep/CI health)');
-    console.log('Applied migration 008: build/dep/CI health (toolchain + audit state + workflow actions)');
+    console.error('Applied migration 008: build/dep/CI health (toolchain + audit state + workflow actions)');
   }
 
   // Migration 009 — build/dep/CI health extensions (FT-3.5). Gated on
@@ -252,7 +482,7 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version8) < 9) {
     const migration = readFileSync(MIGRATION_009, 'utf-8');
     execMigrationIdempotent(_db, migration, '009 (build health extensions)');
-    console.log('Applied migration 009: build health extensions (CVE IDs + history + pin quality + workflow permissions + observed toolchain)');
+    console.error('Applied migration 009: build health extensions (CVE IDs + history + pin quality + workflow permissions + observed toolchain)');
   }
 
   // Migration 010 — operational hygiene run tables (FT-4). Gated on
@@ -267,15 +497,17 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version9) < 10) {
     const migration = readFileSync(MIGRATION_010, 'utf-8');
     execMigrationIdempotent(_db, migration, '010 (operational runs)');
-    console.log('Applied migration 010: operational runs (db_health_runs + sync_runs)');
+    console.error('Applied migration 010: operational runs (db_health_runs + sync_runs)');
   }
 
   // Migration 011 — cross-tool vocabulary (FT-5). Gated on schema_version:
-  // only runs if current version < 11. Uses execMigrationStrict because
-  // the CHECK-constraint extension is done via the SQLite-recommended
-  // "create new table → INSERT...SELECT → DROP → RENAME" pattern, which
-  // must either fully apply or fully reject — there is no
-  // partially-applied state the idempotent runner could safely tolerate.
+  // only runs if current version < 11. Uses execMigrationStrict, which
+  // wraps the CHECK-constraint extension (SQLite's "create new table →
+  // INSERT...SELECT → DROP → RENAME" pattern) in a SINGLE transaction so
+  // it either fully applies or fully rolls back — the DROP→RENAME window
+  // can never strand the DB with no repo_relationships table (db-A-001).
+  // A pre-fix binary could still have left such a stranded state on disk;
+  // the recovery branch below detects and repairs it.
   //
   // Adds: two new relation_type values ('wraps',
   // 'collaborated_in_mission') extending the migration-001 CHECK enum;
@@ -290,10 +522,24 @@ export function openDb(dbPath: string): DatabaseType {
   //     (e.g. migration-sequence test). We apply only the additive
   //     forge_vault_path ADD COLUMN + version bump in that case; the
   //     CHECK-extension is a no-op when the table itself doesn't exist
-  //     yet, so a future schema.sql will need to ship the extended enum
-  //     directly. The current src/db/schema.sql already does, so any
-  //     fresh openDb against missing-file produces the new enum from
-  //     the start.
+  //     yet. Note on the fresh-DB path (db-A-002): a brand-new openDb
+  //     loads schema.sql, which DOES already ship the extended 8-value
+  //     relation_type enum and the forge_vault_path column directly, but
+  //     schema.sql intentionally seeds schema_version='1' (NOT 11) so the
+  //     table-creating migrations 002-010 still run on a fresh DB. That
+  //     means migration-011 still runs on every fresh DB and re-creates
+  //     repo_relationships even though schema.sql already shipped the new
+  //     enum. Because the recreate is now transactional (db-A-001) this
+  //     is durable; it can also be safely skipped when the table already
+  //     accepts the extended enum (see the enum-probe below).
+  //   * CRASH RECOVERY (db-A-001): if a prior run died mid-recreate it
+  //     could leave repo_relationships_new present while repo_relationships
+  //     is gone. execMigrationStrict now wraps the recreate in a
+  //     transaction so this can no longer happen on a forward run, but a
+  //     DB written by an OLDER (pre-fix) binary could already be in that
+  //     state. We detect it explicitly and restore the stranded
+  //     _new table rather than silently stamping version=11 with the
+  //     relationships gone.
   const version10 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version10) < 11) {
     const marker = _db.prepare("SELECT value FROM meta WHERE key = 'cross_tool_vocab_added'").get() as { value: string } | undefined;
@@ -301,11 +547,84 @@ export function openDb(dbPath: string): DatabaseType {
       const hasRelTable = _db.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='repo_relationships'"
       ).get();
-      if (hasRelTable) {
-        const migration = readFileSync(MIGRATION_011, 'utf-8');
-        execMigrationStrict(_db, migration, '011 (cross-tool vocabulary)');
-        console.log('Applied migration 011: cross-tool vocabulary (relation types + forge_vault_path)');
-      } else {
+      const hasStrandedNew = _db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='repo_relationships_new'"
+      ).get();
+
+      if (!hasRelTable && hasStrandedNew) {
+        // Crash recovery: a pre-fix binary died after DROP but before
+        // RENAME, stranding repo_relationships_new with the data inside
+        // it. Complete the swap (rename _new into place, re-create its
+        // indexes, finish the additive forge_vault_path column, and stamp
+        // the version) inside one transaction so the table is restored
+        // with the extended enum and its rows intact. Never stamp
+        // version=11 with the relationships table missing.
+        // Capture into a local const so TS keeps the non-null narrowing
+        // inside the transaction closure (module-level _db widens to null
+        // across the closure boundary).
+        const db = _db;
+        db.pragma('foreign_keys = OFF');
+        try {
+          const tx = db.transaction(() => {
+            db.exec('ALTER TABLE repo_relationships_new RENAME TO repo_relationships');
+            db.exec('CREATE INDEX IF NOT EXISTS idx_rel_from ON repo_relationships(from_repo_id)');
+            db.exec('CREATE INDEX IF NOT EXISTS idx_rel_to ON repo_relationships(to_repo_id)');
+            db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_unique ON repo_relationships(from_repo_id, relation_type, to_repo_id)');
+            // The forge_vault_path ADD COLUMN may or may not have landed
+            // before the crash — tolerate duplicate-column on re-add.
+            try {
+              db.exec('ALTER TABLE repos ADD COLUMN forge_vault_path TEXT');
+            } catch (e: unknown) {
+              const msg = (e as Error)?.message ?? String(e);
+              if (!msg.includes('duplicate column name')) throw e;
+            }
+            db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
+            db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('cross_tool_vocab_added', datetime('now'))").run();
+            // PH-DB-004: leave a durable breadcrumb IN THE SAME transaction
+            // so a recovery is auditable after the fact (rk can surface "this
+            // DB was repaired from a stranded _new table at <time>"). Writing
+            // it inside the tx ties the breadcrumb to the restore atomically —
+            // if the restore rolls back, so does the breadcrumb.
+            db.prepare(
+              "INSERT OR REPLACE INTO meta(key, value) VALUES ('migration_011_recovery', datetime('now') || ' restored from stranded _new')"
+            ).run();
+          });
+          tx();
+        } finally {
+          db.pragma('foreign_keys = ON');
+        }
+        // PH-DB-002/004: recovery breadcrumb on STDERR (infrastructure
+        // progress, not a command result) — keeps STDOUT clean for the MCP
+        // JSON-RPC stream and CLI --json output.
+        console.error('Recovered migration 011: restored stranded repo_relationships_new from an interrupted recreate');
+      } else if (!hasRelTable && !hasStrandedNew) {
+        // Distinguish two cases that both lack repo_relationships:
+        //   (a) a legitimate minimal-v1 fixture that NEVER had the table
+        //       (the migration-sequence test builds a DB with only `meta`
+        //       + `repos`) — we only owe the additive forge_vault_path
+        //       column + version bump.
+        //   (b) a corrupt/half-migrated DB where repo_relationships was
+        //       dropped and NOT replaced — refuse to stamp 11 and fail
+        //       loudly (db-A-001).
+        // Discriminator: schema.sql creates repo_relationships ALONGSIDE
+        // a family of sibling tables (repo_tech, repo_docs, repo_notes,
+        // ...) that NO migration creates. A DB that went through schema.sql
+        // therefore has those siblings; a hand-built minimal-v1 fixture
+        // does not. So if repo_relationships is gone while a schema.sql
+        // sibling like repo_tech is present, the table was destroyed
+        // post-creation — corruption. If repo_tech is also absent, this is
+        // a minimal fixture that legitimately never had repo_relationships.
+        const hasSchemaSibling = _db.prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='repo_tech'"
+        ).get();
+        if (hasSchemaSibling) {
+          throw new Error(
+            'Migration 011 (cross-tool vocabulary): repo_relationships is missing on a DB built ' +
+            'from schema.sql (repo_tech sibling present) and no repo_relationships_new exists to ' +
+            'recover from. Refusing to stamp schema_version=11 with the relationships table gone — ' +
+            'this DB is corrupt and needs manual restore from backup.'
+          );
+        }
         // Minimal-fixture path: no repo_relationships to extend, so
         // only the additive forge_vault_path column + version bump are
         // possible here. ADD COLUMN may collide with a pre-existing
@@ -320,7 +639,39 @@ export function openDb(dbPath: string): DatabaseType {
         }
         _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
         _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('cross_tool_vocab_added', datetime('now'))").run();
-        console.log('Applied migration 011: cross-tool vocabulary (minimal-fixture path — forge_vault_path only)');
+        console.error('Applied migration 011: cross-tool vocabulary (minimal-fixture path — forge_vault_path only)');
+      } else {
+        // The table exists. Probe its CREATE SQL: if the CHECK already
+        // lists the extended enum (e.g. a fresh DB built from the current
+        // schema.sql, which ships the 8-value enum), skip the destructive
+        // DROP→RECREATE entirely — we only owe the additive
+        // forge_vault_path column + version stamp. This avoids needlessly
+        // rebuilding repo_relationships on every fresh openDb (db-A-002).
+        const relSql = (_db.prepare(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='repo_relationships'"
+        ).get() as { sql: string } | undefined)?.sql ?? '';
+        const enumAlreadyExtended =
+          relSql.includes("'wraps'") && relSql.includes("'collaborated_in_mission'");
+
+        if (enumAlreadyExtended) {
+          // Additive-only path: extend the schema bookkeeping without
+          // touching the already-correct relationships table.
+          try {
+            _db.exec("ALTER TABLE repos ADD COLUMN forge_vault_path TEXT");
+          } catch (e: unknown) {
+            const msg = (e as Error)?.message ?? String(e);
+            if (!msg.includes('duplicate column name')) {
+              throw new Error(`Migration 011 (cross-tool vocabulary, enum-already-extended path) failed: ${msg}`, { cause: e });
+            }
+          }
+          _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
+          _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('cross_tool_vocab_added', datetime('now'))").run();
+          console.error('Applied migration 011: cross-tool vocabulary (enum already extended — forge_vault_path only)');
+        } else {
+          const migration = readFileSync(MIGRATION_011, 'utf-8');
+          execMigrationStrict(_db, migration, '011 (cross-tool vocabulary)');
+          console.error('Applied migration 011: cross-tool vocabulary (relation types + forge_vault_path)');
+        }
       }
     } else {
       // Meta marker present but version not yet stamped — bump version
@@ -431,7 +782,14 @@ export function upsertRepo(data: RepoData): number | bigint {
     data.owner, data.name, slug, n(data.github_url), n(data.local_path),
     n(data.description), n(data.purpose), n(data.category),
     data.status || 'unknown', n(data.stage), data.visibility || 'public',
-    data.archived ? 1 : 0, data.default_branch || 'main',
+    // db-A-008: mirror the UPDATE branch's null-preserving form. The old
+    // `data.archived ? 1 : 0` collapsed an explicit null/undefined to 0,
+    // losing the "unknown archived state" distinction (same class of bug
+    // as the stars/forks ?? null idiom below). null here lets the schema
+    // DEFAULT 0 apply for a truly-absent value while an explicit null
+    // survives intact, consistent with UPDATE.
+    data.archived != null ? (data.archived ? 1 : 0) : null,
+    data.default_branch || 'main',
     // F-DB-012: preserve null vs 0 distinction — "unknown stars" is not
     // the same as "zero stars" and downstream queries can drift if they
     // pessimize a missing count to 0. The schema DEFAULT 0 still applies
@@ -600,12 +958,44 @@ export function upsertRelease(repoId: number | bigint, data: ReleaseData): void 
   `).run(repoId, data.tag, data.title, data.body, data.prerelease ? 1 : 0, data.published_at);
 }
 
+/**
+ * Closed set of valid repo_relationships.relation_type values — the
+ * DB-layer mirror of the repo_relationships CHECK constraint (schema.sql
+ * + migration-011). src/index.ts re-exports its own RELATION_TYPES tuple
+ * for the CLI/MCP enum; this lives in the DB layer (no circular import on
+ * index.ts) so addRelationship can validate before the INSERT.
+ *
+ * Keep in lockstep with the CHECK constraint and src/index.ts's
+ * RELATION_TYPES — relation-types.test.ts pins that they agree.
+ */
+export const DB_RELATION_TYPES = [
+  'depends_on', 'related_to', 'supersedes',
+  'shares_domain_with', 'shares_package_with', 'companion_to',
+  // FT-5: cross-tool vocabulary
+  'wraps', 'collaborated_in_mission',
+] as const;
+export type DbRelationType = typeof DB_RELATION_TYPES[number];
+
 export function addRelationship(
   fromRepoId: number | bigint,
   relationType: string,
   toRepoId: number | bigint,
   note: string | null = null
 ): void {
+  // ts-A-003: validate relation_type BEFORE the INSERT. The previous code
+  // relied on `INSERT OR IGNORE` plus a comment claiming the IGNORE only
+  // applied to UNIQUE-constraint violations while CHECK violations still
+  // threw. That was FALSE — SQLite's OR IGNORE clause silently DROPS rows
+  // that fail ANY constraint, including the relation_type CHECK. An
+  // invalid relation_type therefore vanished with no error and no row
+  // written. We now reject out-of-enum values loudly; OR IGNORE remains
+  // ONLY to dedup the (from, relation_type, to) UNIQUE index for valid
+  // values.
+  if (!(DB_RELATION_TYPES as readonly string[]).includes(relationType)) {
+    throw new Error(
+      `Invalid relation_type: ${JSON.stringify(relationType)} — must be one of ${DB_RELATION_TYPES.join(', ')}`
+    );
+  }
   const db = getDb();
   db.prepare(`
     INSERT OR IGNORE INTO repo_relationships (from_repo_id, relation_type, to_repo_id, note)
@@ -660,14 +1050,27 @@ export function findRepos(filters: RepoFilters = {}): Record<string, any>[] {
   if (filters.owner) { conditions.push('r.owner = ?'); params.push(filters.owner); }
   if (filters.status) { conditions.push('r.status = ?'); params.push(filters.status); }
   if (filters.category) { conditions.push('r.category = ?'); params.push(filters.category); }
-  if (filters.archived !== undefined) { conditions.push('r.archived = ?'); params.push(filters.archived ? 1 : 0); }
+  // archived is nullable (NULL = unknown, treated as not-archived); COALESCE
+  // so the false filter still matches never-archived rows inserted as NULL.
+  if (filters.archived !== undefined) {
+    if (filters.archived) { conditions.push('r.archived = 1'); }
+    else { conditions.push('COALESCE(r.archived, 0) = 0'); }
+  }
   if (filters.language) {
     conditions.push('t.primary_language = ?');
     params.push(filters.language);
   }
   if (filters.framework) {
-    conditions.push("t.frameworks LIKE ?");
-    params.push(`%${filters.framework}%`);
+    // db-A-006: t.frameworks is a JSON array (e.g. ["react","react-native"]).
+    // The old `LIKE %react%` over-matched: it returned a repo whose only
+    // framework was "react-native" when filtering for "react", and the
+    // unescaped substring let LIKE metacharacters (%, _) in the filter
+    // value match arbitrary text. Match each array ELEMENT for exact
+    // equality via json_each instead.
+    conditions.push(
+      'EXISTS (SELECT 1 FROM json_each(t.frameworks) fw WHERE fw.value = ?)'
+    );
+    params.push(filters.framework);
   }
   if (filters.app_shape) {
     conditions.push('t.app_shape = ?');
@@ -950,6 +1353,43 @@ export function deleteRepoBySlug(
 
   const cascaded_rows = tx() as number;
   return { deleted: true, cascaded_rows };
+}
+
+type RepoDeleter = (slug: string) => { deleted: boolean; cascaded_rows: number };
+
+/**
+ * cli-A-004: delete a batch of repos all-or-nothing. Each deleteRepoBySlug
+ * runs its own (here nested → savepoint) transaction, but `rk prune --apply`
+ * needs the WHOLE batch atomic: a mid-batch throw must NOT leave the repos
+ * deleted before the failure permanently gone while the rest survive (a
+ * partial, unrecoverable prune). Wrapping the loop in one db.transaction means
+ * any throw rolls the entire batch back — nothing is deleted unless everything
+ * can be.
+ *
+ * The deleter is injectable (defaults to the real deleteRepoBySlug) ONLY so
+ * the atomicity invariant is testable against THIS transaction: a test that
+ * re-implements the wrapper locally is vacuous (it passes even if this wrapper
+ * is removed). A test injects a deleter that throws mid-batch and asserts the
+ * whole batch rolled back.
+ */
+export function pruneBatch(
+  slugs: string[],
+  deleter: RepoDeleter = deleteRepoBySlug
+): { deletedCount: number; totalCascaded: number } {
+  const db = getDb();
+  let totalCascaded = 0;
+  let deletedCount = 0;
+  const runBatch = db.transaction(() => {
+    for (const slug of slugs) {
+      const result = deleter(slug);
+      if (result.deleted) {
+        deletedCount += 1;
+        totalCascaded += result.cascaded_rows;
+      }
+    }
+  });
+  runBatch();
+  return { deletedCount, totalCascaded };
 }
 
 /**

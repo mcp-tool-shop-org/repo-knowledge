@@ -10,7 +10,10 @@ import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { openDb, closeDb, getDb } from '../src/db/init.js';
+import { openDb, closeDb, getDb, CURRENT_SCHEMA_VERSION } from '../src/db/init.js';
+
+// ts-A-008: head version as a string for meta-row comparisons.
+const HEAD = String(CURRENT_SCHEMA_VERSION);
 
 let tmpDir: string;
 let dbPath: string;
@@ -35,7 +38,7 @@ describe('migration-009 (FT-3.5 build-health extensions)', () => {
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
   });
 
   it('adds critical_cve_ids / high_cve_ids / audit_omit_dev to repo_dep_audit_state', () => {
@@ -134,7 +137,7 @@ describe('migration-009 (FT-3.5 build-health extensions)', () => {
     const v = (getDb().prepare(
       "SELECT value FROM meta WHERE key = 'schema_version'"
     ).get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
   });
 
   it('cascades repo_dep_audit_history rows when the parent repo is deleted', () => {

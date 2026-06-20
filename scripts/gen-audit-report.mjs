@@ -8,10 +8,46 @@ import Database from 'better-sqlite3';
 import { writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+// PH-AHG-006: formatPassRate now lives in one shared module so the
+// provenance (`~`-tag) rule + null behavior can't drift between the two
+// generators. This script renders with one decimal place (decimals: 1).
+import { formatPassRate as formatPassRateShared } from './lib/format.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, '..', 'data', 'knowledge.db');
 const outPath = join(__dirname, '..', 'audit_report.md');
+
+// This report renders pass rates with one decimal ("~50.0%"). The
+// provenance/null rule itself lives in scripts/lib/format.mjs (cds-A-005).
+export function formatPassRate(passRate) {
+  return formatPassRateShared(passRate, { decimals: 1 });
+}
+
+// Env-gated self-test (cds-A-005 regression). Runs before any DB side
+// effect so it works without a built database. `RK_SELFTEST=1 node
+// scripts/gen-audit-report.mjs` (or `--selftest`) asserts the invariant and exits.
+if (process.env.RK_SELFTEST === '1' || process.argv.includes('--selftest')) {
+  const assertEq = (actual, expected, label) => {
+    if (actual !== expected) {
+      console.error(`[gen-audit-report selftest] FAIL ${label}: got ${actual}, want ${expected}`);
+      process.exit(1);
+    }
+  };
+  // The two-part invariant: a fraction (0.5 → 50%) and a small integer
+  // percent (1 → 1%) must render DIFFERENTLY. The bug rendered both as
+  // a 50/100-style percent with no way to tell them apart.
+  assertEq(formatPassRate(0.5), '~50.0%', 'fraction 0.5');
+  assertEq(formatPassRate(1), '~100.0%', 'ambiguous 1 is tagged');
+  assertEq(formatPassRate(87), '87.0%', 'percent 87 untagged');
+  assertEq(formatPassRate(100), '100.0%', 'percent 100 untagged');
+  assertEq(formatPassRate(null), '-', 'null renders dash');
+  // The discriminating assertion: tagged "~100.0%" (from value 1) must
+  // NOT equal untagged "100.0%" (from value 100). Without the tag both
+  // collapse to "100.0%" — this is the exact bug being pinned.
+  assertEq(formatPassRate(1) === formatPassRate(100), false, 'value 1 distinguishable from value 100');
+  console.log('[gen-audit-report selftest] OK');
+  process.exit(0);
+}
 
 const db = new Database(dbPath, { readonly: true });
 
@@ -37,7 +73,11 @@ const unauditedRepos = totalRepos - auditedRepos;
 const postureCounts = db.prepare(`
   WITH latest AS (
     SELECT repo_id, overall_posture,
-           ROW_NUMBER() OVER (PARTITION BY repo_id ORDER BY completed_at DESC) AS rn
+           -- PH-AHG-001: match the queries.ts "latest run" contract
+           -- (started_at DESC, id DESC). completed_at is nullable, so an
+           -- ORDER BY completed_at with no tiebreak picked an arbitrary
+           -- row for in-progress/legacy runs and diverged from Stage A.
+           ROW_NUMBER() OVER (PARTITION BY repo_id ORDER BY started_at DESC, id DESC) AS rn
     FROM audit_runs
   )
   SELECT overall_posture, COUNT(*) AS c
@@ -80,7 +120,14 @@ const tableCounts = [
 ];
 push('| Table | Rows |');
 push('|-------|------|');
+// PH-AHG-007: degrade gracefully on a pre-migration DB — a table the
+// generator expects may not exist yet (e.g. running against an old DB before
+// the audit migrations ran). Probe sqlite_master so a missing table renders
+// "n/a" instead of throwing a raw "no such table" stack.
+const tableExists = (t) =>
+  db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?").get(t) != null;
 for (const t of tableCounts) {
+  if (!tableExists(t)) { push(`| ${t} | n/a (absent) |`); continue; }
   const c = db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
   push(`| ${t} | ${c} |`);
 }
@@ -314,7 +361,9 @@ const reposByPosture = db.prepare(`
   WITH latest AS (
     SELECT ar.repo_id, ar.overall_posture, ar.overall_status, ar.summary,
            am.pass_rate, am.high_count, am.medium_count, am.low_count,
-           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.completed_at DESC) AS rn
+           -- PH-AHG-001: match the queries.ts "latest run" contract
+           -- (started_at DESC, id DESC); completed_at is nullable.
+           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.started_at DESC, ar.id DESC) AS rn
     FROM audit_runs ar
     LEFT JOIN audit_metrics am ON am.audit_run_id = ar.id
   )
@@ -343,9 +392,10 @@ for (const posture of ['critical', 'needs_attention', 'healthy']) {
   push('| Slug | Pass Rate | High | Medium | Low |');
   push('|------|-----------|------|--------|-----|');
   for (const r of group) {
-    const pr = r.pass_rate != null
-      ? (r.pass_rate <= 1 ? (r.pass_rate * 100).toFixed(1) : r.pass_rate.toFixed(1)) + '%'
-      : '-';
+    // cds-A-005: tagged formatter — a leading `~` marks a value the
+    // <= 1 fraction heuristic interpreted, so 1% (stored as 1) is not
+    // silently rendered as a bare "100.0%".
+    const pr = formatPassRate(r.pass_rate);
     push(`| ${r.slug} | ${pr} | ${r.high_count} | ${r.medium_count} | ${r.low_count} |`);
   }
   push('');

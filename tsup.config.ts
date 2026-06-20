@@ -13,11 +13,6 @@ export default defineConfig({
   target: 'node20',
   splitting: false,
   external: ['better-sqlite3'],
-  esbuildOptions(options, context) {
-    if (context.format === 'esm') {
-      options.banner = {
-        js: context.format === 'esm' ? '' : '',
-      };
-    }
-  },
+  // No esbuild banner: the CLI shebang comes from src/cli.ts line 1, and
+  // esm is the only format — a banner block here would be a dead no-op.
 });

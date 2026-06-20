@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/repo-knowledge/readme.png" alt="repo-knowledge" width="800" />
+  <img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/repo-knowledge/readme.png" alt="repo-knowledge" width="500" />
 </p>
 
 <p align="center">
@@ -86,6 +86,8 @@ rk audit seed-controls
 | `rk sync-dogfood` | Sync dogfood evidence from dogfood-lab/testing-os into repo facts |
 | `rk suggest-dogfood --repo <slug>` | Suggest known dogfood findings for a repo or surface |
 
+> **`--json` everywhere it matters.** `list`, `find`, `show`, `related`, and `stats` — plus the five audit reads (`posture`, `findings`, `controls`, `unaudited`, `failing`) — all accept `--json` for machine-readable output. JSON is the load-bearing contract across the core commands: pipe any of them straight into `jq`.
+
 ### Lifecycle Commands (v2.0.0)
 
 | Command | Description |
@@ -123,6 +125,16 @@ rk audit seed-controls
 | `rk owners add <owner>` | Append to `rk.config.json` owners |
 | `rk owners remove <owner>` | Remove from `rk.config.json` owners |
 
+### Backup, Restore & Preflight (v2.1.0)
+
+| Command | Description |
+|---------|-------------|
+| `rk backup [--out <path>]` | Snapshot the knowledge DB to a vacuumed copy (`VACUUM INTO`) under `data/backups/` or `--out` |
+| `rk restore <path> [--yes]` | Restore the DB from a snapshot — schema-validated, atomic swap, confirm-gated (refuses a newer-schema backup) |
+| `rk doctor [--json] [--strict]` | Environment preflight: config, DB, schema version, `gh` auth, current rig, recent sync/fsck runs |
+| `rk config [--json]` | Show the resolved effective config with per-field provenance |
+| `rk config validate [--json]` | Validate `rk.config.json` — exits non-zero on placeholder owners, bad shapes, or unresolvable paths |
+
 ### Audit Commands
 
 | Command | Description |
@@ -143,7 +155,7 @@ rk audit seed-controls
 
 ## MCP Server
 
-The MCP server exposes 19 tools for AI-integrated workflows. Add it to your MCP client config:
+The MCP server exposes 30 tools for AI-integrated workflows. Add it to your MCP client config:
 
 **Claude Code (project-scoped `.claude.json`):**
 ```json
@@ -174,7 +186,23 @@ The server reads `rk.config.json` from the working directory at startup. Make su
 
 ### MCP Tools
 
-`get_repo` `find_repos` `search_repos` `related_repos` `repos_by_stack` `repos_needing_work` `repo_summary` `add_repo_note` `add_relationship` `knowledge_stats` `sync_repos` `sync_dogfood` `audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
+**Knowledge & sync:**
+`get_repo` `find_repos` `search_repos` `related_repos` `repos_by_stack` `repos_needing_work` `repo_summary` `add_repo_note` `add_relationship` `knowledge_stats` `sync_repos` `sync_dogfood`
+
+**Audit:**
+`audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
+
+**Build-health** (DB-only reads, no network refresh):
+`health_feed` `health_doctor` `health_portfolio`
+
+**Operational hygiene:**
+`db_fsck` `repo_diff` `ops_runs`
+
+**Lifecycle & publish:**
+`archive_repo` `delete_repo` `repo_versions`
+
+**Dogfood & audit-drill:**
+`suggest_dogfood` `audit_failing`
 
 ## Audit Framework
 

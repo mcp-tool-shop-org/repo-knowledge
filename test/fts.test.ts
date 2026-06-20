@@ -13,12 +13,12 @@
  *     (`/[^\w\s]/g` only matches ASCII word chars; non-ASCII strings
  *     were getting stripped to empty)
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  openDb, closeDb,
+  openDb, closeDb, getDb,
   upsertRepo, upsertNote, upsertDoc,
 } from '../src/db/init.js';
 import { rebuildIndex, search, searchRepos } from '../src/search/fts.js';
@@ -170,6 +170,50 @@ describe('fallback path — FTS5 reserved syntax', () => {
   });
 });
 
+// ─── mcp-PH-006: the FALLBACK query is itself guarded ───────────────────────
+// The primary FTS query has a try/catch with a sanitized fallback, but the
+// fallback ran inside that catch with NO guard of its own — if the fallback
+// threw (an exotic input the sanitizer doesn't tame, or an FTS5/SQLite edge),
+// the whole search() call threw. A search degrading to "no matches" is correct
+// behavior; a crash is not. After the fix the fallback returns [] on failure.
+describe('fallback query is guarded against its own failure (mcp-PH-006)', () => {
+  beforeEach(() => {
+    const id = upsertRepo({ owner: 'o', name: 'r', description: 'guard content here' });
+    upsertNote(id as number, 'thesis', 'thesis', 'guard test for FTS5 fallback');
+    rebuildIndex();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns [] instead of throwing when even the fallback query throws', () => {
+    // Force BOTH paths to throw at .all() time: spy on the live db so every
+    // prepared statement's .all() raises. `search()` resolves the db once via
+    // getDb() and uses it for both the primary and fallback query, so this
+    // makes the primary throw (→ enters catch) AND the fallback throw. Without
+    // the mcp-PH-006 guard the fallback error propagates; with it, [] is
+    // returned.
+    const db = getDb();
+    const realPrepare = db.prepare.bind(db);
+    vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+      const stmt = realPrepare(sql) as { all: (...a: unknown[]) => unknown };
+      // Only sabotage the search MATCH query (.all); leave other prepared
+      // statements intact so nothing else in the suite is affected.
+      if (/repo_search MATCH/.test(sql)) {
+        stmt.all = () => { throw new Error('forced FTS failure (test)'); };
+      }
+      return stmt as never;
+    });
+
+    let results: ReturnType<typeof search> | undefined;
+    // 'redis cache' sanitizes cleanly (so we get past the empty-term early
+    // return) and exercises the real fallback query path, which now throws.
+    expect(() => { results = search('redis cache'); }).not.toThrow();
+    expect(results).toEqual([]);
+  });
+});
+
 describe('Unicode search (F-TS-004 + F-AG-007)', () => {
   // Background on FTS5 + Unicode:
   //
@@ -310,5 +354,146 @@ describe('FTS5 triggers (F-DB-013)', () => {
     const results = search(marker);
     expect(results.length).toBeGreaterThan(0);
     expect(results.some(r => r.source_type === 'doc')).toBe(true);
+  });
+});
+
+// ─── mcp-A-002: colon/quote/star terms must be treated as LITERAL input ──────
+// Before the fix, any term containing ':' (or '"' / '*') was passed verbatim
+// into the FTS5 MATCH expression, so a natural-language query with a colon got
+// reinterpreted as FTS5 syntax. A `column:term` form where `column` is a real
+// FTS5 column (slug, source_type, source_id, title, content) became a COLUMN
+// FILTER — matching the wrong rows entirely — and where it wasn't a real
+// column it raised a parse error and silently dropped into the lossy fallback.
+// The fix quotes every term unconditionally, so colon input is a literal
+// phrase searched against the content.
+describe('colon-containing query is literal, not FTS5 column syntax (mcp-A-002)', () => {
+  it('a `slug:hello` query matches content literally, not as a column filter', () => {
+    // `slug` is a real FTS5 column on repo_search. With the bug, `slug:hello`
+    // is passed verbatim and FTS5 reads it as a COLUMN FILTER — "rows whose
+    // slug column contains 'hello'". The marker word 'hello' lives only in the
+    // DESCRIPTION (the content column), not in the slug, so the buggy column
+    // filter matches nothing here. After the fix, the quoted literal phrase
+    // "slug:hello" tokenizes to `slug hello` and matches the description.
+    upsertRepo({
+      owner: 'lit',
+      name: 'colon-repo',
+      description: 'the slug hello literal marker phrase lives here',
+    });
+    rebuildIndex();
+
+    const results = search('slug:hello');
+    const repoHit = results.find(r => r.slug === 'lit/colon-repo' && r.source_type === 'repo');
+    expect(repoHit).toBeDefined();
+  });
+
+  it('a `title:<word>` query is literal content, not a title-column filter', () => {
+    // `title` is a real FTS5 column. The marker phrase 'title quux' lives in
+    // the DESCRIPTION (content column), and 'quux' is NOT in the row's title
+    // (the slug). Pre-fix, `title:quux` is a column filter on `title` and
+    // misses. Post-fix, the quoted literal "title:quux" tokenizes to
+    // `title quux` and matches the description.
+    upsertRepo({
+      owner: 'lit',
+      name: 'col-title',
+      description: 'documented title quux literal marker in the body',
+    });
+    rebuildIndex();
+
+    let results: ReturnType<typeof search> = [];
+    expect(() => { results = search('title:quux'); }).not.toThrow();
+    expect(results.some(r => r.slug === 'lit/col-title' && r.source_type === 'repo')).toBe(true);
+  });
+});
+
+// ─── mcp-A-003: fallback preserves per-term AND, not a single phrase ─────────
+// When the primary FTS5 query errors, the fallback sanitizes the query and
+// retries. The bug wrapped the WHOLE multi-word sanitized query in one set of
+// quotes — `"redis cache"` — which is an FTS5 PHRASE requiring the words to be
+// adjacent. The fix quotes each surviving token individually so the fallback
+// keeps the intended AND-any-position semantics, matching content where both
+// terms appear but are NOT adjacent.
+describe('fallback path preserves AND semantics (mcp-A-003)', () => {
+  it('non-adjacent multi-term query still matches via the fallback', () => {
+    // Both 'redis' and 'cache' appear, separated by other words. A single
+    // adjacent-phrase fallback ("redis cache") would MISS this; the per-term
+    // AND fallback ("redis" "cache") finds it.
+    const id = upsertRepo({ owner: 'fb', name: 'spread' });
+    upsertNote(
+      id as number,
+      'architecture',
+      'arch',
+      'redis is used as the primary distributed cache here',
+    );
+    rebuildIndex();
+
+    // Force the fallback path: a bare ':' token is an FTS5 syntax error in
+    // BOTH the pre-fix (verbatim) and post-fix (quoted empty phrase) primary
+    // query, so search() drops into the catch branch in either version. The
+    // surviving terms 'redis' and 'cache' are non-adjacent in the content, so
+    // only the per-term AND fallback (post-fix) matches; the single-phrase
+    // fallback (pre-fix) requires adjacency and misses.
+    const results = search('redis : cache');
+    expect(results.some(r => r.slug === 'fb/spread')).toBe(true);
+  });
+});
+
+// ─── cli-A-002: searchRepos honors a caller limit above the inner floor ─────
+// searchRepos hardcoded the inner FTS query limit to 50, then sliced the
+// grouped result to opts.limit. A caller asking for more than 50 repos could
+// therefore never receive more than 50 — the inner cap silently bounded the
+// output below the request. The fix feeds Math.max(50, opts.limit) into the
+// inner query.
+describe('searchRepos honors a large caller limit (cli-A-002)', () => {
+  it('limit 80 over a >50-row corpus returns more than 50 repos', () => {
+    // 60 distinct repos, each with the same shared marker so all 60 match.
+    // Each repo is its own slug, so grouping does NOT collapse them.
+    const marker = 'sharedmarkertoken';
+    for (let i = 0; i < 60; i++) {
+      upsertRepo({
+        owner: 'bulk',
+        name: `repo${i}`,
+        description: `entry number ${i} containing ${marker} inside`,
+      });
+    }
+    rebuildIndex();
+
+    const results = searchRepos(marker, { limit: 80 });
+    // Before the fix the inner cap of 50 made this impossible (<= 50).
+    expect(results.length).toBeGreaterThan(50);
+  });
+});
+
+// ─── mcp-PH-005: searchRepos clamps a hostile limit for non-MCP callers ──────
+// The MCP Zod schema constrains the limit, but searchRepos is exported and
+// called directly by the CLI + library consumers. A negative limit would make
+// the final slice(0, negative) misbehave (returns an unexpected tail / nothing
+// sensible). The clamp pins limit into [1, 100] (truncating non-integers).
+describe('searchRepos clamps a hostile limit (mcp-PH-005)', () => {
+  it('a negative limit does not produce a slice(0, negative) misbehavior', () => {
+    const marker = 'clampmarkertoken';
+    for (let i = 0; i < 5; i++) {
+      upsertRepo({ owner: 'clamp', name: `repo${i}`, description: `holds ${marker} inside` });
+    }
+    rebuildIndex();
+
+    // A negative limit is clamped to 1 — never a negative slice. The result is
+    // a sane, bounded array (exactly 1 here), not an empty/garbled response.
+    const results = searchRepos(marker, { limit: -10 });
+    expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBe(1);
+  });
+
+  it('an over-100 limit is clamped to 100', () => {
+    const marker = 'overlimitmarker';
+    for (let i = 0; i < 3; i++) {
+      upsertRepo({ owner: 'over', name: `repo${i}`, description: `holds ${marker} inside` });
+    }
+    rebuildIndex();
+
+    // 999 clamps to 100; with only 3 matching repos the result is all 3 (never
+    // throws, never returns more than 100).
+    const results = searchRepos(marker, { limit: 999 });
+    expect(results.length).toBeLessThanOrEqual(100);
+    expect(results.length).toBe(3);
   });
 });

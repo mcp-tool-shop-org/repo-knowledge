@@ -28,7 +28,11 @@ import {
   syncCiStatus,
   scanWorkflowPermissions,
   observeToolchain,
+  syncBuildHealthForRepo,
 } from '../src/sync/build-health.js';
+import {
+  openDb, closeDb, getDb, upsertRepo, getRepoIdBySlug,
+} from '../src/db/init.js';
 
 const mockExecFileSync = execFileSync as unknown as ReturnType<typeof vi.fn>;
 
@@ -256,6 +260,57 @@ describe('syncCiStatus (per Memon 2017 / Rehman 2023 / DORA 2024)', () => {
     expect(limitIdx).toBeGreaterThan(-1);
     expect(args[limitIdx + 1]).toBe('10');
   });
+
+  // SYNC-PH-03: transient-retry. The sleep seam is a no-op so the suite
+  // doesn't wait on real backoff.
+  const noSleep = { retry: { sleep: () => undefined } };
+
+  it('retries a TRANSIENT failure and succeeds on the second attempt (SYNC-PH-03)', () => {
+    let calls = 0;
+    mockExecFileSync.mockImplementation(() => {
+      calls++;
+      if (calls === 1) {
+        const err = new Error('connect ETIMEDOUT 140.82.112.3:443') as Error & { code?: string };
+        err.code = 'ETIMEDOUT';
+        throw err;
+      }
+      return JSON.stringify([
+        { conclusion: 'success', startedAt: '2026-05-21T10:00:00Z', url: 'u1' },
+      ]);
+    });
+
+    const result = syncCiStatus('o', 'r', noSleep);
+    // It retried (2 exec calls) and then parsed the successful run.
+    expect(calls).toBe(2);
+    expect(result.status).toBe('passing');
+    expect(result.transient).toBeUndefined();
+  });
+
+  it('reports a PERSISTENT transient failure distinctly (transient:true, status unknown) (SYNC-PH-03)', () => {
+    mockExecFileSync.mockImplementation(() => {
+      const err = new Error('503 Service Unavailable') as Error & { code?: string };
+      throw err;
+    });
+
+    const result = syncCiStatus('o', 'r', noSleep);
+    // status is unknown (no data) but the transient flag distinguishes a
+    // flaky network from a clean unknown.
+    expect(result.status).toBe('unknown');
+    expect(result.transient).toBe(true);
+    // 3 attempts by default.
+    expect(mockExecFileSync.mock.calls.length).toBe(3);
+  });
+
+  it('does NOT retry a non-transient failure (deterministic error) (SYNC-PH-03)', () => {
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('gh: command not found');
+    });
+    const result = syncCiStatus('o', 'r', noSleep);
+    // Single attempt — deterministic failures aren't retried.
+    expect(mockExecFileSync.mock.calls.length).toBe(1);
+    expect(result.status).toBe('unknown');
+    expect(result.transient).toBeUndefined();
+  });
 });
 
 // ─── scanWorkflowPermissions ─────────────────────────────────────────────
@@ -311,6 +366,46 @@ describe('scanWorkflowPermissions (per Beyer 2016 SRE Workbook)', () => {
       'id-token': 'write',
     });
   });
+
+  it('normalizes inline flow-mapping permissions to the same object shape as block form (sync-A-005)', () => {
+    // Inline flow-mapping must parse into a Record, NOT a double-encoded
+    // raw string. The buggy code did JSON.stringify(rest) → the literal
+    // text "{ contents: read, id-token: write }", so JSON.parse yielded a
+    // string and consumers that expected an object (as block form gives)
+    // broke. This pins object-shape parity across the two YAML forms.
+    seedWorkflow([
+      'name: Release',
+      'permissions: { contents: read, id-token: write }',
+      'jobs:',
+      '  publish:',
+      '    runs-on: ubuntu-latest',
+    ].join('\n'), 'inline.yml');
+    const result = scanWorkflowPermissions(tmpDir);
+    expect(result.length).toBe(1);
+    const parsed = JSON.parse(result[0].permissions_json);
+    // Must be an object, not a string — this is the half the bug got wrong.
+    expect(typeof parsed).toBe('object');
+    expect(Array.isArray(parsed)).toBe(false);
+    expect(parsed).toEqual({
+      contents: 'read',
+      'id-token': 'write',
+    });
+  });
+
+  it('still stores inline keyword permissions (read-all) as a JSON string scalar (sync-A-005 other half)', () => {
+    // The keyword form has no key:value structure, so it stays a scalar.
+    // This pins that the flow-mapping fix did NOT over-reach into keywords.
+    seedWorkflow([
+      'name: CI',
+      'permissions: write-all',
+      'jobs:',
+      '  test:',
+      '    runs-on: ubuntu-latest',
+    ].join('\n'), 'keyword.yml');
+    const result = scanWorkflowPermissions(tmpDir);
+    expect(result.length).toBe(1);
+    expect(JSON.parse(result[0].permissions_json)).toBe('write-all');
+  });
 });
 
 // ─── observeToolchain ────────────────────────────────────────────────────
@@ -333,5 +428,50 @@ describe('observeToolchain (per JetBrains 2025)', () => {
 
   it('returns [] when local_path does not exist', () => {
     expect(observeToolchain('/path/that/does/not/exist', 'rig-A')).toEqual([]);
+  });
+});
+
+// ─── syncBuildHealthForRepo — CI metric facts (SYNC-PH-02) ────────────────
+
+describe('syncBuildHealthForRepo stamps CI metric facts (SYNC-PH-02)', () => {
+  // This block needs a real DB because the orchestrator writes facts.
+  beforeEach(() => {
+    openDb(join(tmpDir, 'orch.db'));
+  });
+  afterEach(() => {
+    closeDb();
+  });
+
+  it('stamps ci.pass_rate_last_10 / consecutive_failures / runs_in_last_30d as repo_facts', async () => {
+    const repoId = upsertRepo({ owner: 'o', name: 'r' }) as number;
+
+    // gh run list → two successes so pass_rate=1, consec=0. The within-30d
+    // count depends on startedAt being recent — use "now" so it lands in window.
+    const recent = new Date().toISOString();
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'run' && args[1] === 'list') {
+        return JSON.stringify([
+          { conclusion: 'success', startedAt: recent, url: 'u1' },
+          { conclusion: 'success', startedAt: recent, url: 'u2' },
+        ]);
+      }
+      // No local_path passed → npm/workflow/toolchain workers are skipped.
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    // owner+name set but no local_path → only the CI step runs.
+    await syncBuildHealthForRepo(repoId, { owner: 'o', name: 'r' });
+
+    const db = getDb();
+    const facts = Object.fromEntries(
+      (db.prepare(
+        "SELECT key, value FROM repo_facts WHERE repo_id = ? AND fact_type = 'ci'",
+      ).all(repoId) as { key: string; value: string }[]).map(r => [r.key, r.value]),
+    );
+
+    // The evidence behind the CI verdict is now carried as facts (SYNC-PH-02).
+    expect(facts['pass_rate_last_10']).toBe('1');
+    expect(facts['consecutive_failures']).toBe('0');
+    expect(facts['runs_in_last_30d']).toBe('2');
   });
 });

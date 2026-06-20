@@ -52,16 +52,37 @@ export function suggestByRepo(repoSlug: string): DogfoodSuggestion {
 }
 
 /**
+ * Escape SQL LIKE metacharacters (`%`, `_`, and the escape char itself)
+ * so operator free-text is matched literally rather than as a wildcard.
+ * Pairs with an `ESCAPE '\'` clause on the LIKE.
+ *
+ * sync-A-007: without this, a `--surface` value like `mcp_server` treats
+ * the `_` as "any single char" and `report%` matches everything after
+ * `report`. The percent we wrap around the term for the CSV prefilter is
+ * added AFTER escaping, so it stays a real wildcard.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
  * Get dogfood intelligence suggestions by surface.
  * Searches across all repos that have the specified surface.
+ *
+ * The `surfaces` fact stores a comma-joined CSV of surface names
+ * (see dogfood.ts: `surfaceNames.join(',')`). We narrow candidate repos
+ * with an ESCAPE-clause LIKE prefilter, then confirm EXACT comma-split
+ * membership in JS so a surface like `cli` does not substring-match a
+ * repo whose only surface is `cli-docs`.
  */
 export function suggestBySurface(surface: string): DogfoodSuggestion {
   const db = getDb();
-  // Find all repos that have this surface in dogfood facts
+  // sync-A-007: escape LIKE metachars + ESCAPE clause so `%`/`_` in the
+  // operator-supplied surface are literal, not wildcards.
   const rows = db.prepare(`
-    SELECT DISTINCT repo_id FROM repo_facts
-    WHERE fact_type = 'dogfood' AND key = 'surfaces' AND value LIKE ?
-  `).all(`%${surface}%`) as { repo_id: number }[];
+    SELECT DISTINCT repo_id, value FROM repo_facts
+    WHERE fact_type = 'dogfood' AND key = 'surfaces' AND value LIKE ? ESCAPE '\\'
+  `).all(`%${escapeLike(surface)}%`) as { repo_id: number; value: string }[];
 
   const result = empty();
   const seenFindings = new Set<string>();
@@ -70,15 +91,16 @@ export function suggestBySurface(surface: string): DogfoodSuggestion {
   const seenDocs = new Set<string>();
 
   for (const row of rows) {
+    // Exact CSV membership: the LIKE prefilter can substring-match
+    // (`cli` inside `cli-docs`); confirm the surface is a whole element.
+    const surfaceList = row.value.split(',').map((s) => s.trim());
+    if (surface && !surfaceList.includes(surface)) continue;
+
     const partial = queryFacts(row.repo_id);
     for (const f of partial.findings) {
       if (!seenFindings.has(f.finding_id)) {
-        // Filter by surface if the finding data includes it
-        const parsed = tryParseJson(f);
-        if (!surface || (parsed && surfaceMatches(parsed, surface))) {
-          result.findings.push(f);
-          seenFindings.add(f.finding_id);
-        }
+        result.findings.push(f);
+        seenFindings.add(f.finding_id);
       }
     }
     for (const p of partial.patterns) {
@@ -86,11 +108,8 @@ export function suggestBySurface(surface: string): DogfoodSuggestion {
     }
     for (const r of partial.recommendations) {
       if (!seenRecs.has(r.recommendation_id)) {
-        const parsed = tryParseRecJson(r);
-        if (!surface || (parsed && recSurfaceMatches(parsed, surface))) {
-          result.recommendations.push(r);
-          seenRecs.add(r.recommendation_id);
-        }
+        result.recommendations.push(r);
+        seenRecs.add(r.recommendation_id);
       }
     }
     for (const d of partial.doctrine) {
@@ -155,21 +174,4 @@ function queryFacts(repoId: number | bigint): DogfoodSuggestion {
 
 function empty(): DogfoodSuggestion {
   return { findings: [], patterns: [], recommendations: [], doctrine: [] };
-}
-
-function tryParseJson(f: SuggestedFinding): any {
-  return f; // Already parsed
-}
-
-function surfaceMatches(_parsed: any, _surface: string): boolean {
-  // Findings are already filtered by repo which has the surface
-  return true;
-}
-
-function tryParseRecJson(r: SuggestedRecommendation): any {
-  return r;
-}
-
-function recSurfaceMatches(_parsed: any, _surface: string): boolean {
-  return true;
 }

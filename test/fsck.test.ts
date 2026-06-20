@@ -10,26 +10,53 @@
  * on — mirrors the real "legacy data pre-dating FK enforcement" case
  * that motivates checkOrphanRows.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+// PH-AHG-009: a partial mock of node:fs that keeps every real export but
+// lets a test make existsSync THROW for one sentinel path (simulating an
+// EACCES / unmounted-drive failure). All other fs calls — and existsSync on
+// every non-sentinel path — pass straight through to the real module.
+//
+// The sentinel literal is inlined inside the factory (vi.mock is hoisted
+// above module-level consts, so the factory must not close over them).
+const THROW_PATH = '__rk_existsSync_throws__';
+vi.mock('node:fs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs')>();
+  const sentinel = '__rk_existsSync_throws__';
+  return {
+    ...real,
+    existsSync: (p: import('node:fs').PathLike) => {
+      if (typeof p === 'string' && p.includes(sentinel)) {
+        throw new Error('EACCES: permission denied (simulated)');
+      }
+      return real.existsSync(p);
+    },
+  };
+});
 import {
   openDb, closeDb, getDb,
-  upsertRepo, upsertNote,
+  upsertRepo, upsertNote, upsertDoc,
   listDbHealthRuns,
 } from '../src/db/init.js';
 import { runFsck } from '../src/health/fsck.js';
 import { rebuildIndex } from '../src/search/fts.js';
 
 let tmpDir: string;
+let errSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), 'rk-fsck-'));
   openDb(join(tmpDir, 'test.db'));
+  // PH-AHG-010: runFsck now logs the full seven-check summary to stderr
+  // (diagnostic channel). Silence it so the suite output stays clean.
+  errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
+  errSpy.mockRestore();
   closeDb();
   rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -143,6 +170,35 @@ describe('runFsck — checkStaleLocalPath', () => {
     const report = runFsck();
     expect(report.checks.stale_local_path.count).toBe(0);
   });
+
+  // PH-AHG-009: existsSync can throw (EACCES, unmounted drive). One bad
+  // path must degrade to skipped-with-note, NOT abort the whole check.
+  it('degrades gracefully when existsSync throws on one path (PH-AHG-009)', () => {
+    // A genuinely-missing path (counts as stale) plus a path whose
+    // existsSync throws (the mock above). The whole check must still
+    // complete and runFsck must not propagate the throw.
+    upsertRepo({
+      owner: 'o',
+      name: 'ghost',
+      local_path: join(tmpDir, 'definitely-not-a-dir'),
+    });
+    upsertRepo({
+      owner: 'o',
+      name: 'unreadable',
+      local_path: join(tmpDir, THROW_PATH, 'locked'),
+    });
+
+    let report!: ReturnType<typeof runFsck>;
+    // The throwing path must not crash the run.
+    expect(() => { report = runFsck(); }).not.toThrow();
+    // The genuinely-missing path is still counted as stale; the throwing
+    // path is skipped (not counted as stale, not crashing the check).
+    expect(report.checks.stale_local_path.count).toBe(1);
+    // The skipped path is surfaced with its note so the operator sees it.
+    expect(
+      report.checks.stale_local_path.samples.some(s => s.includes('skipped')),
+    ).toBe(true);
+  });
 });
 
 describe('runFsck — checkFtsRowCountMismatch', () => {
@@ -152,6 +208,35 @@ describe('runFsck — checkFtsRowCountMismatch', () => {
     // match the source.
     rebuildIndex();
     const report = runFsck();
+    expect(report.checks.fts_row_count_mismatch.count).toBe(0);
+  });
+
+  // hg-A-003: rebuildIndex INNER JOINs repo_docs/repo_notes against repos,
+  // so orphan docs/notes (repo_id with no parent) are NEVER indexed. The
+  // expected-count formula must mirror that join — otherwise an orphan doc
+  // inflates `expected` past `fts` and fires a spurious mismatch WARN.
+  it('does not report a spurious FTS mismatch for an orphan doc (hg-A-003)', () => {
+    const id = upsertRepo({ owner: 'o', name: 'a', description: 'an indexable description' });
+    // A legit doc on a real repo — part of the indexable corpus.
+    upsertDoc(id, 'README.md', 'readme', 'README', 'doc body', 'sum-1');
+    // Sync FTS to exactly the legit sources.
+    rebuildIndex();
+
+    // Plant an ORPHAN doc: repo_id points at no repo. FK off to bypass
+    // enforcement, mirroring legacy pre-FK data. rebuildIndex's INNER
+    // JOIN excludes it, so it is NOT in repo_search.
+    const db = getDb();
+    db.pragma('foreign_keys = OFF');
+    db.prepare(`
+      INSERT INTO repo_docs (repo_id, path, doc_type, title, content, checksum)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(91919, 'orphan.md', 'readme', 'orphan', 'orphan body', 'sum-orphan');
+    db.pragma('foreign_keys = ON');
+
+    const report = runFsck();
+    // The orphan is counted by checkOrphanRows (correct) but must NOT
+    // perturb the FTS expected-count — both sides exclude it.
+    expect(report.checks.orphan_rows.count).toBeGreaterThan(0);
     expect(report.checks.fts_row_count_mismatch.count).toBe(0);
   });
 

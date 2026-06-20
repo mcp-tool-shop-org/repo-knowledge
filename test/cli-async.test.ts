@@ -68,6 +68,21 @@ describe('CLI async error surfacing (F-TS-003)', () => {
     expect(stderr + stdout).toMatch(/Path not found|ENOENT|Error/i);
   });
 
+  // cli-PH-002: a typo'd scan path now gets a friendly remedy hint (matching
+  // the note/delete not-found pattern) emitted to STDERR with exit 2, BEFORE
+  // the DB is opened — instead of a bare structured throw from ingestLocalRepo.
+  // (cli-PH-004's empty-owners warning is tested in cli-publish.test.ts, which
+  // isolates cwd + config + DB so the assertion is deterministic.)
+  it('scan of a nonexistent path exits 2 with a path-not-found hint on stderr', () => {
+    const badPath = join(ROOT, 'cli-ph-002-missing-' + Date.now());
+    const { code, stderr } = runCli(['scan', badPath]);
+
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/path not found/i);
+    // The actionable remedy hint must be present.
+    expect(stderr).toMatch(/\.git repo/i);
+  });
+
   it('exits 0 for --help (sanity: error path is the regression, success path is not)', () => {
     const { code } = runCli(['--help']);
     expect(code).toBe(0);
@@ -77,5 +92,44 @@ describe('CLI async error surfacing (F-TS-003)', () => {
     const { code, stdout } = runCli(['--version']);
     expect(code).toBe(0);
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  // cli-A-005: parsePositiveInt used parseInt, which truncates partial
+  // numbers: parseInt('10x') → 10. A typo'd limit would silently degrade into
+  // a valid-looking value instead of being rejected. `rk runs --limit <n>`
+  // coerces during commander arg parsing (before any DB open), so it's a
+  // clean vehicle. The fix requires String(n) === trimmed input.
+  it('rejects a partially-numeric --limit ("10x") with exit 2', () => {
+    const { code, stderr, stdout } = runCli(['runs', '--limit', '10x']);
+    expect(code).toBe(2);
+    expect(stderr + stdout).toMatch(/Invalid --limit|positive integer/i);
+  });
+
+  it('rejects scientific-notation --limit ("1e2") with exit 2', () => {
+    const { code } = runCli(['runs', '--limit', '1e2']);
+    expect(code).toBe(2);
+  });
+
+  it('rejects a fractional --limit ("10.9") with exit 2', () => {
+    const { code } = runCli(['runs', '--limit', '10.9']);
+    expect(code).toBe(2);
+  });
+
+  it('still accepts a clean positive integer --limit', () => {
+    // Sanity: the digits-only guard must not reject legitimate input. `runs`
+    // with a valid --limit exits 0 (it queries operational-run tables, which
+    // are empty/harmless on the production DB).
+    const { code } = runCli(['runs', '--limit', '5', '--json']);
+    expect(code).toBe(0);
+  });
+
+  // cli-A-003: `rk prune --apply --dry-run` previously took the destructive
+  // --apply branch because --dry-run was never read. The two flags are
+  // contradictory; pairing them must error (exit 2), not silently delete.
+  // This guard runs before openDb so it doesn't touch the production DB.
+  it('rejects contradictory `prune --apply --dry-run` with exit 2', () => {
+    const { code, stderr, stdout } = runCli(['prune', '--apply', '--dry-run']);
+    expect(code).toBe(2);
+    expect(stderr + stdout).toMatch(/only one of --dry-run or --apply|not both/i);
   });
 });

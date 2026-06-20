@@ -34,7 +34,11 @@ import {
   getReposByNpmPackage,
   PUBLISHER_METHODS,
   PUBLISHED_VERSION_CHANNELS,
+  CURRENT_SCHEMA_VERSION,
 } from '../src/db/init.js';
+
+// ts-A-008: head version as a string for meta-row comparisons.
+const HEAD = String(CURRENT_SCHEMA_VERSION);
 
 let tmpDir: string;
 let dbPath: string;
@@ -303,12 +307,12 @@ describe('migration-007 idempotency (F-TS-FT2)', () => {
     // vocabulary on top of FT-4's operational hygiene run tables.
     // Pinning the literal here keeps idempotency-on-top semantics
     // tested against the current head.
-    expect(v1).toBe('11');
+    expect(v1).toBe(HEAD);
 
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v2).toBe('11');
+    expect(v2).toBe(HEAD);
   });
 });
 

@@ -10,9 +10,17 @@
 --
 -- SQLite cannot extend a CHECK constraint via ALTER TABLE. The canonical
 -- pattern is "create new table with the new constraint → INSERT…SELECT
--- → DROP old → ALTER…RENAME". We disable FK enforcement for that block
+-- → DROP old → ALTER…RENAME". FK enforcement must be OFF for that block
 -- because the FROM/TO references would temporarily point at a table the
 -- engine no longer treats as the parent during the swap.
+--
+-- DURABILITY (db-A-001): this whole body is wrapped in a db.transaction()
+-- by the JS caller (execMigrationStrict in src/db/init.ts) so a crash in
+-- the DROP→RENAME window can never destroy repo_relationships and leave
+-- the schema half-migrated. better-sqlite3's PRAGMA foreign_keys cannot
+-- be toggled inside a transaction, so the OFF/ON toggle is done by the JS
+-- caller OUTSIDE the transaction — the bare PRAGMA lines that used to live
+-- in this file were removed (a no-op-or-error inside a transaction).
 --
 -- The block is gated at the JS layer on whether `cross_tool_vocab_added`
 -- meta marker already exists; the SQL itself is also written to be safe
@@ -37,10 +45,10 @@
 -- be off for the swap because the old and new tables share a name during
 -- the rename and any FK pointing at repo_relationships(id) would be
 -- temporarily invalid — there are none currently, but disabling FKs
--- defensively matches SQLite's official recipe.
+-- defensively matches SQLite's official recipe. The OFF/ON toggle is
+-- performed by the JS caller OUTSIDE the wrapping transaction (see the
+-- DURABILITY note in the header); no bare PRAGMA is emitted here.
 --------------------------------------------------------------------------------
-PRAGMA foreign_keys = OFF;
-
 CREATE TABLE repo_relationships_new (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   from_repo_id    INTEGER REFERENCES repos(id) ON DELETE CASCADE,
@@ -76,8 +84,6 @@ CREATE INDEX IF NOT EXISTS idx_rel_from ON repo_relationships(from_repo_id);
 CREATE INDEX IF NOT EXISTS idx_rel_to ON repo_relationships(to_repo_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_unique
   ON repo_relationships(from_repo_id, relation_type, to_repo_id);
-
-PRAGMA foreign_keys = ON;
 
 --------------------------------------------------------------------------------
 -- repos: add forge_vault_path

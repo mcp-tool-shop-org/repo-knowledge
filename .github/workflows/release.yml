@@ -17,11 +17,14 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      # SHA-pinned to the same commits ci.yml uses — this OIDC-publishing
+      # workflow must be at least as hardened as CI, not less. Bump both
+      # SHAs in lockstep with ci.yml when those actions are upgraded.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
@@ -63,23 +66,59 @@ jobs:
           echo "$SANDBOX/node_modules/.bin" >> "$GITHUB_PATH"
           "$SANDBOX/node_modules/.bin/npm" --version
 
+      # cds-A-002: fail fast if the tag points at a commit whose
+      # package.json version doesn't match the tag. Publishing would ship
+      # npm at the package.json version while the GH release + SBOM carry
+      # the tag version — a permanent divergence. Guard before publish.
+      - name: Guard — package.json version equals tag version
+        if: github.ref_type == 'tag'
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ steps.bump.outputs.version }}"
+          if [ "$PKG" != "$TAG_VERSION" ]; then
+            echo "::error::package.json version ($PKG) does not match tag version ($TAG_VERSION) — refusing to publish a divergent release." >&2
+            exit 1
+          fi
+          echo "Version guard passed: package.json and tag both at $PKG"
+
+      # cds-A-004: gate publish on a tag ref. A workflow_dispatch off a
+      # non-tag ref would otherwise publish an orphan npm version while the
+      # guarded GH-release and SBOM-upload steps below silently no-op.
+      # workflow_dispatch on a non-tag ref is build + verify only (dry run).
       - name: Publish to npm with provenance (OIDC Trusted Publisher)
+        if: github.ref_type == 'tag'
         run: npm publish --provenance --access public
 
       # Create the GitHub Release if it doesn't already exist. Idempotent —
       # `gh release create` errors if the release exists, so we probe first
-      # and skip when present. Body pulls from CHANGELOG.md's matching section
-      # when available; falls back to the tag annotation otherwise.
+      # and skip when present. Body pulls from CHANGELOG.md's matching
+      # `## [<version>]` section when present (extracted to a notes file);
+      # falls back to gh's auto-generated notes when no section is found.
       - name: Create GitHub release (if not exists)
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v${{ steps.bump.outputs.version }}"
+          VERSION="${{ steps.bump.outputs.version }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; skipping create."
           else
-            gh release create "$TAG" --title "$TAG" --generate-notes
+            # Extract the CHANGELOG section for this version: everything
+            # between `## [<version>]` and the next `## [` heading.
+            NOTES_FILE="$(mktemp)"
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { capture = 1; next }
+              capture && /^## \[/ { exit }
+              capture { print }
+            ' CHANGELOG.md > "$NOTES_FILE"
+            if [ -s "$NOTES_FILE" ]; then
+              echo "Using CHANGELOG section for $VERSION as release notes."
+              gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE"
+            else
+              echo "No CHANGELOG section for $VERSION; using auto-generated notes."
+              gh release create "$TAG" --title "$TAG" --generate-notes
+            fi
           fi
 
       - name: Upload SBOM to GitHub release

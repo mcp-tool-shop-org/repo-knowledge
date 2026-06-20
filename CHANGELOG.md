@@ -2,14 +2,29 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-20
+
+Dogfood-swarm release: a full four-stage health pass (bug/security → proactive → humanization → visual) plus a feature wave. No breaking changes — every v2.0.0 callsite continues to work. Tests **377 → 515**.
+
 ### Added
 
-- `src/sync/swarm.ts` — swarm control-plane sync. `rk sync-dogfood --local <path>` now also reads `swarms/control-plane.db` (the dogfood-labs swarm coordination DB, opened read-only) and mirrors the LATEST run per repo into `repo_facts`: one `dogfood.swarm.finding` fact per finding (severity, category, file/line, description, recommendation, status, run_id) plus eight `dogfood.swarm` rollup facts (`run:id/status/created_at/commit_sha`, `findings:total/open/fixed/open_by_severity`). Re-sync replaces a repo's swarm facts rather than accumulating stale ones. Raw swarm findings deliberately live in their own fact namespace — the curated intelligence layer (`dogfood.finding` / `dogfood.pattern` / …) stays accepted-artifacts-only. On rigs where the YAML intelligence store was never populated, this is the only dogfood intelligence source; before this change sync-dogfood reported zeros while hundreds of verified findings sat in the control plane.
-- CLI `sync-dogfood` output gains a `Swarm control-plane:` section (runs, findings + open count, facts upserted, skipped repos).
+- **MCP surface 19 → 30 tools.** Health: `health_feed`, `health_doctor`, `health_portfolio`. Operational hygiene: `db_fsck` (discloses its `db_health_runs` write), `repo_diff`, `ops_runs`. Lifecycle: `archive_repo` (canonical-slug echo + optional reason note), `delete_repo` (explicit `confirm: true` gate — the only irreversible MCP op). Publish: `repo_versions`. Dogfood/audit: `suggest_dogfood` (repo/surface mutual-exclusion), `audit_failing` (domain enum). All are reads over already-exported builders; none triggers a network refresh.
+- **`--json` on the core query commands** — `list`, `find`, `show`, `related`, `stats`, and the five `audit` reads now emit parseable JSON (a not-found slug emits `{error:"not_found"}` + exit 1, so a `jq` pipeline never gets empty input).
+- **`rk backup` / `rk restore`** — first-class DB snapshots (`VACUUM INTO`); restore validates `schema_version`, is confirm-gated, swaps atomically (temp-then-rename), and clears WAL sidecars so a stale WAL can't replay over the restored file.
+- **Auto-snapshot before migrations** — `openDb()` snapshots a pre-existing DB to `data/backups/` before the migration ladder runs (skipped for fresh DBs and when `RK_NO_MIGRATION_BACKUP` is set).
+- **`rk doctor`** — environment preflight (config, DB, schema-version, `gh auth`, rig, recent runs) with `--json` / `--strict`. **`rk config` / `rk config validate`** — print/validate the resolved config (flags the `your-github-org` placeholder).
+- **Terminal color** — `rk health table`, `rk show` posture, and the `rk games` leaderboard render conventional status color; auto-disabled when piped, on `NO_COLOR`/`TERM=dumb`, and over the MCP stdio channel.
+- `src/sync/swarm.ts` — swarm control-plane sync. `rk sync-dogfood --local <path>` also reads `swarms/control-plane.db` (read-only) and mirrors the latest run per repo into `repo_facts` (one `dogfood.swarm.finding` per finding + eight `dogfood.swarm` rollups). Re-sync replaces a repo's swarm facts. On rigs where the YAML intelligence store was never populated, this is the only dogfood intelligence source.
+- CLI `sync-dogfood` output gains a `Swarm control-plane:` section.
 
 ### Fixed
 
-- `loadIntelligenceExport` — the `sync-export` child process's stderr is now captured instead of inherited, so a crashing legacy exporter (e.g. `ajv` not installed in `tools/findings`) degrades to a one-line `sync-export skipped (…)` message instead of dumping two full stack traces. An `ERR_MODULE_NOT_FOUND` failure adds a `run npm ci in <dir>` hint, and a failed layout candidate now falls through to the next one instead of aborting the intelligence sync.
+- **Migration durability** — migration-011's `DROP`+`RECREATE` and the idempotent ADD-COLUMN runner are now transaction-wrapped; a crash mid-migration can no longer strand the relationship graph or brick the DB in a no-progress loop. A pre-fix stranded state is detected and recovered.
+- **Vanished-repo archival is now opt-in** (`rk sync --prune-vanished`). Listing-absence is ambiguous (a private repo invisible to an under-scoped token looks identical to a deleted one), so a routine `rk sync` only detects-and-warns rather than soft-archiving — closing a path that could escalate to deleting live private repos.
+- **Channel discipline** — migration/sync progress now goes to stderr, keeping stdout clean for `--json` and the MCP JSON-RPC frame channel (previously `sync_repos` over MCP could corrupt the protocol stream).
+- **MCP resolver** — `add_repo_note`/`add_relationship` now refuse an ambiguous partial slug and echo the canonical slug, so an agent can't silently write to the wrong repo. FTS query terms and `LIKE` filters are metacharacter-escaped.
+- Games no-action close no longer earns a phantom perfect-push bonus; audit latest-run selection has a deterministic id tiebreaker; `busy_timeout` set so concurrent writers wait rather than fail; plus ~40 further proactive-health and defensive fixes.
+- `loadIntelligenceExport` — the `sync-export` child's stderr is captured, so a crashing legacy exporter degrades to a one-line `sync-export skipped (…)` message with a `run npm ci in <dir>` hint instead of dumping stack traces.
 
 ## [2.0.0] - 2026-05-21
 

@@ -35,6 +35,7 @@ import {
   openDb, closeDb, getDb,
   upsertRepo,
   archiveRepoBySlug, setReplacedBy, findStaleArchived,
+  deleteRepoBySlug, pruneBatch,
 } from '../src/db/init.js';
 
 let tmpDir: string;
@@ -277,5 +278,64 @@ describe('findStaleArchived (F-TS-FT1)', () => {
     // Nothing archived → nothing stale.
     const stale = findStaleArchived(30);
     expect(stale).toEqual([]);
+  });
+});
+
+describe('prune --apply batch atomicity (cli-A-004)', () => {
+  // The `rk prune --apply` action deletes a batch of stale-archived repos.
+  // Each deleteRepoBySlug runs its own (nested → savepoint) transaction. The
+  // bug: the CLI looped over the candidates with NO outer transaction, so a
+  // mid-batch throw left the repos deleted *before* the failure permanently
+  // gone while the rest survived — a partial, unrecoverable prune. The fix
+  // wraps the whole loop in one db.transaction (the exported pruneBatch).
+  //
+  // This test drives the REAL pruneBatch from src/cli.ts and injects a deleter
+  // that throws mid-batch — so reverting cli.ts's db.transaction wrapper makes
+  // the first delete commit before the throw and the assertion FAILS. (A prior
+  // version re-implemented the wrapper locally and was vacuous: it passed even
+  // with the real wrapper removed.)
+
+  it('rolls back ALL deletes when a delete mid-batch throws (all-or-nothing)', () => {
+    upsertRepo({ owner: 'o', name: 'first' });
+    upsertRepo({ owner: 'o', name: 'second' });
+    upsertRepo({ owner: 'o', name: 'third' });
+
+    const db = getDb();
+    const slugs = ['o/first', 'o/second', 'o/third'];
+
+    // Inject a deleter that delegates to the real deleteRepoBySlug but throws
+    // after 'o/first' is deleted. pruneBatch's OWN db.transaction must roll
+    // 'o/first' back. With the wrapper reverted, 'o/first' would stay gone.
+    const failingDeleter = (slug: string) => {
+      const result = deleteRepoBySlug(slug);
+      if (slug === 'o/first') {
+        throw new Error('simulated mid-batch failure');
+      }
+      return result;
+    };
+
+    expect(() => pruneBatch(slugs, failingDeleter)).toThrow(/mid-batch failure/);
+
+    // All-or-nothing: because the real pruneBatch transaction threw, NOTHING
+    // is deleted — including 'o/first', which was deleted before the throw.
+    const remaining = db.prepare('SELECT slug FROM repos ORDER BY slug').all() as { slug: string }[];
+    const remainingSlugs = remaining.map((r) => r.slug);
+    expect(remainingSlugs).toContain('o/first');
+    expect(remainingSlugs).toContain('o/second');
+    expect(remainingSlugs).toContain('o/third');
+    expect(remainingSlugs).toHaveLength(3);
+  });
+
+  it('commits the whole batch when no delete throws', () => {
+    upsertRepo({ owner: 'o', name: 'x' });
+    upsertRepo({ owner: 'o', name: 'y' });
+
+    const db = getDb();
+    const slugs = ['o/x', 'o/y'];
+    const summary = pruneBatch(slugs);
+
+    expect(summary.deletedCount).toBe(2);
+    const remaining = db.prepare('SELECT COUNT(*) AS c FROM repos').get() as { c: number };
+    expect(remaining.c).toBe(0);
   });
 });

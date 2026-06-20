@@ -199,6 +199,28 @@ function getPublishedVersionsInWindow(repo_id: number, since: string, until: str
 }
 
 /**
+ * hg-A-005: a date-only `--until` (e.g. '2026-06-20') was used verbatim
+ * as an inclusive `<=` bound. SQLite stores timestamps as
+ * 'YYYY-MM-DD HH:MM:SS', so a same-day row '2026-06-20 14:30:00' is
+ * lexically GREATER than the bare '2026-06-20' and got excluded — the
+ * `--until` day silently dropped its own rows. Normalize a date-only
+ * value to end-of-day (datetime(until,'+1 day','-1 second') →
+ * '2026-06-20 23:59:59') so the inclusive bound covers the whole day.
+ * A value that already carries a time component is passed through
+ * unchanged (still routed through datetime() for format parity).
+ */
+function normalizeUntil(db: ReturnType<typeof getDb>, until: string): string {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(until.trim());
+  const sql = dateOnly
+    ? "SELECT datetime(?, '+1 day', '-1 second') AS u"
+    : "SELECT datetime(?) AS u";
+  const row = db.prepare(sql).get(until) as { u: string | null };
+  // datetime() returns null on an unparseable input — fall back to the
+  // raw value rather than corrupting the bound to null.
+  return row.u ?? until;
+}
+
+/**
  * Resolve the (since, until) window to concrete SQLite-comparable
  * strings. If neither bound is supplied, default to "last 7 days
  * ending now." If only `since` is supplied, until = now. If only
@@ -211,7 +233,7 @@ function resolveWindow(opts: RepoDiffOptions): { since: string; until: string } 
   // by the writers.
   const nowRow = db.prepare("SELECT datetime('now') AS now").get() as { now: string };
   const now = nowRow.now;
-  const until = opts.until ?? now;
+  const until = normalizeUntil(db, opts.until ?? now);
   if (opts.since) {
     return { since: opts.since, until };
   }

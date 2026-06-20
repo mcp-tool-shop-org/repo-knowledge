@@ -9,15 +9,18 @@
 
 import type { WorklistRow, RowStatus, Findings } from './types.js';
 
-// F-AG-005: noAction is a strict SUPERSET of done (its prefix matches the
-// done pattern), so it MUST be checked BEFORE done. JavaScript object
-// property iteration follows insertion order, which is what parseStatus
-// relies on — reordering this map changes which pattern wins for the
-// `[x] done by <player> <ts> | 0 findings` shape. With done first, every
-// no-action row would mis-classify as a regular done; the leaderboard
-// then credits findings work that didn't happen.
+// F-AG-005: the `done` and `no_action` rows share the SAME status cell
+// shape — `[x] done by <player> <ts>`. The pipe-delimited `| 0 findings`
+// suffix that distinguishes a no-action close lives in a SEPARATE cell,
+// because parseWorklist produces the status cell via split('|'): a pipe
+// can NEVER appear inside cells[0]. So no_action is NOT detectable from
+// the status cell alone — it is classified from the PARSED CELLS in
+// parseRow (a `0 findings` cell, or findings that parse to 0H 0M 0L on a
+// done row). parseStatus therefore only ever yields `done` for these
+// rows; the no_action upgrade happens downstream. Mis-classifying a
+// no-action row as a regular done would credit the ~45-pt perfect-push
+// for findings work that didn't happen.
 const STATUS_PATTERNS: Record<string, RegExp> = {
-  noAction: /^\[x\]\s*done\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)\s*\|\s*0 findings/,
   done: /^\[x\]\s*done\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)/,
   blocked: /^\[x\]\s*BLOCKED\s+(?<player>\S+)\s+(?<timestamp>\S+)/,
   skipped: /^\[x\]\s*skipped\s+by\s+(?<player>\S+)\s+(?<timestamp>\S+)/,
@@ -27,6 +30,10 @@ const STATUS_PATTERNS: Record<string, RegExp> = {
 
 const FINDINGS_PATTERN = /(?<high>\d+)H\s+(?<medium>\d+)M\s+(?<low>\d+)L/;
 const PASS_RATE_PATTERN = /(?<rate>\d+)%/;
+// A no-action close marks a repo that was already clean: a `done` row
+// carrying an explicit "0 findings" cell (e.g. `| 0 findings |`). This
+// must be matched against a parsed cell, not the status cell.
+const NO_ACTION_PATTERN = /^0\s+findings$/i;
 
 /**
  * Parse a worklist markdown file into structured rows.
@@ -69,23 +76,38 @@ function parseRow(statusCell: string, cells: string[]): WorklistRow | null {
   let findingsStr: string | null = null;
   let passRateStr: string | null = null;
 
+  // F-AG-016 + F-AG-006: slug is first-match-wins. F-AG-006: findings and
+  // pass-rate are ALSO first-match-wins (=== null guard) to match the slug
+  // logic — last-match-wins left them brittle to column reordering (a later
+  // stray "NN%" or "NHNMNL" cell would clobber a correct earlier capture).
+  let hasNoActionCell = false;
   for (const cell of cells) {
     if (slug === null && SLUG_PATTERN.test(cell)) {
       slug = cell;
-      // First valid slug wins — break out of the slug search but
-      // continue scanning for findings + pass-rate cells.
+      // First valid slug wins — keep scanning for findings + pass-rate.
     }
-    const fm = cell.match(FINDINGS_PATTERN);
-    if (fm) findingsStr = cell;
-    const pm = cell.match(PASS_RATE_PATTERN);
-    if (pm) passRateStr = cell;
+    if (findingsStr === null && FINDINGS_PATTERN.test(cell)) findingsStr = cell;
+    if (passRateStr === null && PASS_RATE_PATTERN.test(cell)) passRateStr = cell;
+    if (NO_ACTION_PATTERN.test(cell)) hasNoActionCell = true;
   }
 
   if (!slug) return null;
 
   const findings = parseFindings(findingsStr);
   const passRate = parsePassRate(passRateStr);
-  const status = parseStatus(statusCell);
+  let status = parseStatus(statusCell);
+
+  // F-AG-005: upgrade a `done` row to `no_action` when the parsed cells
+  // signal no findings work happened — either an explicit "0 findings"
+  // cell, or findings that parse to 0H 0M 0L. Detected from the cells,
+  // never the status cell (a pipe can't survive split('|') into cells[0]).
+  // The scorer must NOT award the perfect-push bonus to these rows.
+  if (status.state === 'done') {
+    const zeroFindings = findings.high === 0 && findings.medium === 0 && findings.low === 0;
+    if (hasNoActionCell || zeroFindings) {
+      status = { ...status, state: 'no_action' };
+    }
+  }
 
   return { slug, status, findings, passRate, raw: statusCell };
 }
@@ -111,8 +133,10 @@ function parseStatus(cell: string): RowStatus {
   for (const [key, pattern] of Object.entries(STATUS_PATTERNS)) {
     const m = cell.match(pattern);
     if (m?.groups) {
+      // no_action is never produced here — it's a cell-level upgrade of a
+      // `done` row in parseRow. The status cell only carries the base state.
       return {
-        state: key === 'noAction' ? 'no_action' : key as RowStatus['state'],
+        state: key as RowStatus['state'],
         player: m.groups.player,
         timestamp: m.groups.timestamp,
       };

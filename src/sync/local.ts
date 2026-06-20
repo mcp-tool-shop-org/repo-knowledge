@@ -471,7 +471,12 @@ export function scanDirectory(
         try {
           ingestLocalRepo(repoPath);
           results.scanned++;
-          process.stdout.write('.');
+          // mcp-PH-001 (escaped sibling): scanDirectory is reached via
+          // fullSync -> here on the MCP sync_repos path, where stdout is the
+          // JSON-RPC frame channel. Progress dots are diagnostic, not the
+          // command result, so they go to STDERR — matching the rest of the
+          // channel-discipline fix in sync/index.ts + github.ts.
+          process.stderr.write('.');
         } catch (e: unknown) {
           results.errors.push(`${entry.name}: ${(e as Error).message}`);
         }
@@ -494,7 +499,9 @@ export function scanDirectory(
   }
 
   walk(parentDir, 0);
-  console.log();
+  // mcp-PH-001: the trailing progress newline is diagnostic — stderr, not the
+  // stdout JSON-RPC/--json channel.
+  process.stderr.write('\n');
 
   return results;
 }

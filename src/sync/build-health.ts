@@ -16,12 +16,16 @@
 import { execFileSync } from 'child_process';
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
+// SYNC-PH-03: shared transient-retry helper lives in publish.ts (the other
+// network-worker module) so both sites use ONE retry policy.
+import { withTransientRetrySync, type RetrySyncOptions } from './publish.js';
 import {
   appendDepAuditHistory,
   upsertWorkflowAction,
   upsertWorkflowPermissions,
   upsertObservedToolchain,
   setRepoCiStatus,
+  upsertFact,
   type PinQuality,
 } from '../db/init.js';
 
@@ -59,6 +63,14 @@ export interface CiStatusResult {
   pass_rate_last_10?: number;     // 0..1
   consecutive_failures?: number;
   runs_in_last_30d?: number;
+  /**
+   * SYNC-PH-03: true when every retry attempt failed with a TRANSIENT signal
+   * (429 / 503 / ETIMEDOUT / ECONNRESET). The status is still 'unknown' (we
+   * got no data), but this flag lets a caller report "CI status unavailable —
+   * network flaky, retried" DISTINCTLY from a clean 'unknown' (e.g. only
+   * in-progress runs), so a flaky network never reads as "no CI signal."
+   */
+  transient?: boolean;
 }
 
 export interface WorkflowPermissionsScan {
@@ -289,8 +301,11 @@ export function scanWorkflowActions(
       continue;
     }
 
+    usesRe.lastIndex = 0;
+    let matchedInFile = 0;
     let match;
     while ((match = usesRe.exec(content)) !== null) {
+      matchedInFile++;
       const ref = match[1];
       const ver = match[2];
       // Skip local actions (./.github/actions/foo) — they're vendored
@@ -322,6 +337,18 @@ export function scanWorkflowActions(
       }
 
       refs.push(entry);
+    }
+
+    // SYNC-PH-07: observability marker for the hand-rolled regex parse. If the
+    // file mentions `uses:` more times than our structured matcher captured,
+    // some refs used a YAML form the regex couldn't structure (exotic quoting,
+    // block scalars, anchors). We don't add a YAML dependency this wave — we
+    // just make the silent mis-parse VISIBLE on stderr so it can be triaged.
+    const usesMentions = (content.match(/^\s*-?\s*uses:/gm) ?? []).length;
+    if (usesMentions > matchedInFile) {
+      console.error(
+        `[build-health] ${rel}: partially parsed — ${usesMentions} \`uses:\` line(s) present but only ${matchedInFile} structured by the regex; some action pins may be unrecorded`,
+      );
     }
   }
 
@@ -429,27 +456,47 @@ function probeImmutablePublisher(actionRef: string): boolean | null {
  * response, it shouldn't be a page" — hence consecutive_failures, not
  * single-red alerting.
  */
-export function syncCiStatus(owner: string, repo: string): CiStatusResult {
+export function syncCiStatus(
+  owner: string,
+  repo: string,
+  opts?: { retry?: RetrySyncOptions }
+): CiStatusResult {
   if (!owner || !repo) return { status: 'unknown' };
 
   let raw: string;
   try {
-    raw = execFileSync(
-      'gh',
-      [
-        'run', 'list',
-        '--repo', `${owner}/${repo}`,
-        '--branch', 'main',
-        '--limit', '10',
-        '--json', 'conclusion,startedAt,url,headBranch,status',
-      ],
-      {
-        encoding: 'utf-8',
-        timeout: 30000,
-        maxBuffer: 2 * 1024 * 1024,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
+    // SYNC-PH-03: retry the gh call on TRANSIENT signals (429/503/ETIMEDOUT/
+    // ECONNRESET) so a single network blip doesn't read as "no CI signal." A
+    // non-transient failure (gh missing, auth error, ref not found) is NOT
+    // retried — it re-throws and is caught below into the existing 'unknown'.
+    const outcome = withTransientRetrySync(
+      () => execFileSync(
+        'gh',
+        [
+          'run', 'list',
+          '--repo', `${owner}/${repo}`,
+          '--branch', 'main',
+          '--limit', '10',
+          '--json', 'conclusion,startedAt,url,headBranch,status',
+        ],
+        {
+          encoding: 'utf-8',
+          timeout: 30000,
+          maxBuffer: 2 * 1024 * 1024,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }
+      ),
+      opts?.retry,
     );
+    if (!outcome.ok) {
+      // Transient-after-retries: report it DISTINCTLY (transient:true) so the
+      // caller can tell "flaky network" from a clean 'unknown'.
+      console.error(
+        `syncCiStatus: gh run list ${owner}/${repo}: transient failure after ${outcome.attempts} attempts: ${outcome.lastError}`
+      );
+      return { status: 'unknown', transient: true };
+    }
+    raw = outcome.value as string;
   } catch (e: unknown) {
     const msg = (e as Error)?.message ?? String(e);
     console.error(`syncCiStatus: gh run list ${owner}/${repo}: ${msg}`);
@@ -528,9 +575,19 @@ export function syncCiStatus(owner: string, repo: string): CiStatusResult {
 
 /**
  * Scan workflow YAML for top-level `permissions:` blocks. Returns one
- * entry per workflow file; permissions_json is either the JSON of the
- * block (object or string keyword like read-all/write-all) or the
- * literal "default" when no permissions: appears at the workflow root.
+ * entry per workflow file; permissions_json is one of:
+ *   - the JSON object of a block-form map (`permissions:` then indented
+ *     `scope: level` lines)
+ *   - the JSON object of an inline FLOW-MAPPING (`permissions: { contents:
+ *     read }`) — sync-A-005 normalizes this to the SAME object shape as
+ *     the block form so the two serialize identically
+ *   - a JSON string for an inline keyword (`read-all` / `write-all` /
+ *     `read`), which has no key:value structure
+ *   - the literal "default" when no permissions: appears at the workflow
+ *     root
+ *
+ * Consumers distinguish the object cases from the scalar cases by the
+ * parsed type (object vs string).
  *
  * Per Beyer 2016 (SRE Workbook Ch.5, "Alerting on SLOs"): blast radius
  * is the load-bearing variable when scoring compound risk. A repo with
@@ -579,16 +636,51 @@ export function scanWorkflowPermissions(localPath: string): WorkflowPermissionsS
       const startIdx = content.indexOf(match[0]) + match[0].length;
       const after = content.slice(startIdx).split(/\r?\n/);
       const obj: Record<string, string> = {};
+      let indentedLines = 0;
       for (const line of after) {
         if (line.trim() === '') continue;
         // Top-level key (no leading whitespace) ends the block.
         if (/^\S/.test(line)) break;
+        indentedLines++;
         const kv = line.trim().match(/^([\w-]+):\s*(.+)$/);
         if (kv) obj[kv[1]] = kv[2].trim();
       }
+      // SYNC-PH-07: if the block had indented body lines but NONE parsed into
+      // scope:level pairs, the hand-rolled regex mis-read an exotic YAML form.
+      // We don't add a YAML parser this wave — just surface the partial parse
+      // on stderr so the silent zero-scope result is triageable.
+      if (indentedLines > 0 && Object.keys(obj).length === 0) {
+        console.error(
+          `[build-health] ${rel}: partially parsed — block-form permissions: had ${indentedLines} indented line(s) but no scope:level pair could be structured`,
+        );
+      }
+      results.push({ workflow_file: rel, permissions_json: JSON.stringify(obj) });
+    } else if (rest.startsWith('{') && rest.endsWith('}')) {
+      // sync-A-005: inline FLOW-MAPPING form — `permissions: { contents:
+      // read, id-token: write }`. Parse its key:value pairs into the SAME
+      // Record<string,string> shape the block branch produces, so a flow
+      // map and an equivalent block map serialize identically. Storing the
+      // raw `{ ... }` string (JSON.stringify(rest)) double-encoded it
+      // relative to the block form and broke any consumer that
+      // JSON.parse'd one shape but not the other.
+      const inner = rest.slice(1, -1);
+      const obj: Record<string, string> = {};
+      for (const pair of inner.split(',')) {
+        const kv = pair.trim().match(/^([\w-]+):\s*(.+)$/);
+        if (kv) obj[kv[1]] = kv[2].trim();
+      }
+      // SYNC-PH-07: a non-empty flow body that produced zero pairs means the
+      // regex couldn't structure it — surface the partial parse on stderr.
+      if (inner.trim() !== '' && Object.keys(obj).length === 0) {
+        console.error(
+          `[build-health] ${rel}: partially parsed — inline flow-mapping permissions: had content but no scope:level pair could be structured`,
+        );
+      }
       results.push({ workflow_file: rel, permissions_json: JSON.stringify(obj) });
     } else {
-      // Inline form: `permissions: read-all` or `permissions: { contents: read }`
+      // Inline KEYWORD form: `permissions: read-all` / `write-all` /
+      // `read` — a scalar with no key:value structure. Store it as a JSON
+      // string; consumers distinguish object-vs-string by the parsed type.
       results.push({ workflow_file: rel, permissions_json: JSON.stringify(rest) });
     }
   }
@@ -773,6 +865,21 @@ export async function syncBuildHealthForRepo(
         run_at: ci.run_at ?? null,
         url: ci.url ?? null,
       });
+      // SYNC-PH-02: setRepoCiStatus only persists status/run_at/url — the
+      // computed pass_rate_last_10 / consecutive_failures / runs_in_last_30d
+      // metrics (the actual EVIDENCE behind the status, per DORA 2024 +
+      // Memon 2017) were dropped. Stamp them as repo_facts so `rk show` and
+      // the audit trail carry the signal, not just the bare verdict. Guarded
+      // on !== undefined because an 'unknown' / 'no_workflow' result omits them.
+      if (ci.pass_rate_last_10 !== undefined) {
+        upsertFact(repo_id, 'ci', 'pass_rate_last_10', String(ci.pass_rate_last_10), 'detected', 'gh_run_list');
+      }
+      if (ci.consecutive_failures !== undefined) {
+        upsertFact(repo_id, 'ci', 'consecutive_failures', String(ci.consecutive_failures), 'detected', 'gh_run_list');
+      }
+      if (ci.runs_in_last_30d !== undefined) {
+        upsertFact(repo_id, 'ci', 'runs_in_last_30d', String(ci.runs_in_last_30d), 'detected', 'gh_run_list');
+      }
       updated.push(`ci_status(${ci.status})`);
     } catch (e: unknown) {
       errors.push(`ci_status: ${(e as Error)?.message ?? String(e)}`);
