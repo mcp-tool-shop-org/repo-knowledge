@@ -168,4 +168,31 @@ describe('scanDirectory recursive scan (FT-5)', () => {
       fsMockState.brokenPath = '';
     }
   });
+
+  it('writes scan progress to STDERR, never STDOUT (mcp-PH-001 — MCP sync_repos JSON-RPC channel)', () => {
+    // scanDirectory is reached via fullSync on the MCP sync_repos path, where
+    // STDOUT is the JSON-RPC frame channel. A bare progress dot on stdout
+    // corrupts the protocol stream. Pin that dots + the trailing newline go to
+    // stderr; reverting local.ts to process.stdout.write makes this FAIL.
+    const root = join(tmpDir, 'chan');
+    fakeRepo(join(root, 'r1'));
+    fakeRepo(join(root, 'r2'));
+
+    let stdoutBytes = '';
+    let stderrBytes = '';
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation((c: unknown) => { stdoutBytes += String(c); return true; });
+    const errSpy = vi.spyOn(process.stderr, 'write').mockImplementation((c: unknown) => { stderrBytes += String(c); return true; });
+    try {
+      const result = scanDirectory(root, { maxDepth: 4 });
+      expect(result.scanned).toBe(2);
+    } finally {
+      outSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+
+    // No progress bytes leaked onto stdout (the JSON-RPC / --json channel)...
+    expect(stdoutBytes).toBe('');
+    // ...and the dots DID go to stderr (one per scanned repo + trailing newline).
+    expect(stderrBytes).toContain('.');
+  });
 });

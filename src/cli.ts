@@ -69,6 +69,7 @@ import {
   // FT-5: owners-in-config subcommands (atomic file write).
   listOwners, addOwner, removeOwner,
 } from './config.js';
+import { shouldFailStrict } from './cli-exit.js';
 import { syncDogfood } from './sync/dogfood.js';
 import { suggestByRepo, suggestBySurface } from './sync/dogfood-suggest.js';
 import { parseWorklist } from './games/parser.js';
@@ -845,7 +846,7 @@ program
     }
 
     closeDb();
-    if (opts.strict && drifted > 0) {
+    if (shouldFailStrict(opts.strict, drifted)) {
       process.exit(1);
     }
   });
@@ -1077,7 +1078,7 @@ program
       closeDb();
       // cli-PH-001: even with no rows to render, a --strict refresh that
       // surfaced errors must still gate the exit code for CI.
-      if (opts.strict && refreshErrors > 0) process.exit(2);
+      if (shouldFailStrict(opts.strict, refreshErrors)) process.exit(2);
       return;
     }
 
@@ -1104,7 +1105,7 @@ program
     closeDb();
     // cli-PH-001: the dashboard (the answer) is already on stdout; now gate
     // the exit code on --strict so CI can fail a refresh that hit errors.
-    if (opts.strict && refreshErrors > 0) process.exit(2);
+    if (shouldFailStrict(opts.strict, refreshErrors)) process.exit(2);
   });
 
 // ─── drift ───────────────────────────────────────────────────────────────────
@@ -1265,7 +1266,7 @@ program
     }
 
     closeDb();
-    if (opts.strict && driftCount > 0) {
+    if (shouldFailStrict(opts.strict, driftCount)) {
       process.exit(1);
     }
   });
@@ -1710,7 +1711,7 @@ health
     closeDb();
     // cli-PH-001: feed (the answer) is already on stdout; gate the exit code
     // after rendering so --strict CI runs fail on a dirty refresh.
-    if (opts.strict && refreshErrors > 0) process.exit(2);
+    if (shouldFailStrict(opts.strict, refreshErrors)) process.exit(2);
   });
 
 health
@@ -1757,7 +1758,7 @@ health
     }
     closeDb();
     // cli-PH-001: doctor report (the answer) is already on stdout; gate exit.
-    if (opts.strict && refreshErrors > 0) process.exit(2);
+    if (shouldFailStrict(opts.strict, refreshErrors)) process.exit(2);
   });
 
 health
@@ -1784,7 +1785,7 @@ health
     }
     closeDb();
     // cli-PH-001: table (the answer) is already on stdout; gate exit on --strict.
-    if (opts.strict && refreshErrors > 0) process.exit(2);
+    if (shouldFailStrict(opts.strict, refreshErrors)) process.exit(2);
   });
 
 // Helper used by --refresh paths above. Walks every repo with a

@@ -104,9 +104,14 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
       }
 
       const findings = findingsForRun.all(run.id) as SwarmFinding[];
-      runCount++;
 
-      const tx = db.transaction(() => {
+      // SYNC-PH-05 (Stage-C verify): fold per-run deltas into LOCAL vars inside
+      // the tx and only add them to the outer counters AFTER tx() commits —
+      // a JS variable mutation is NOT rolled back when the DB transaction is,
+      // so mutating the outer counters inside the closure would inflate them
+      // on a rollback. Mirrors the dogfood.ts fold-only-on-commit pattern.
+      const tx = db.transaction((): { facts: number; findings: number; open: number } => {
+        let localFacts = 0;
         // SYNC-PH-05: capture the pre-DELETE finding-fact count so we can log
         // a one-line delta — a DELETE-then-reinsert with no delta record
         // leaves the operator blind to whether a re-audit shrank, grew, or
@@ -152,7 +157,7 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
             status: f.status,
             run_id: run.id,
           }), 'detected', SOURCE_PATH);
-          factsUpserted++;
+          localFacts++;
           upsertedFindings++;
 
           if (OPEN_STATUSES.has(f.status)) {
@@ -187,13 +192,25 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
         ];
         for (const [key, value] of rollups) {
           upsertFact(repoId, 'dogfood.swarm', key, value, 'detected', SOURCE_PATH);
-          factsUpserted++;
+          localFacts++;
         }
 
-        findingCount += upsertedFindings;
-        openCount += open;
+        return { facts: localFacts, findings: upsertedFindings, open };
       });
-      tx();
+
+      // Per-run resilience (Stage-C verify): one drifted swarm run must not
+      // abort the sync for every remaining repo. Fold the deltas only after
+      // tx() commits; on failure, skip-and-continue (mirrors dogfood.ts).
+      try {
+        const delta = tx();
+        runCount++;
+        factsUpserted += delta.facts;
+        findingCount += delta.findings;
+        openCount += delta.open;
+      } catch (e: unknown) {
+        skipped.push(`${run.repo} — swarm sync failed (rolled back): ${(e as Error).message}`);
+        console.error(`[swarm-sync] ${run.repo}: sync failed, skipped — ${(e as Error).message}`);
+      }
     }
 
     return {
