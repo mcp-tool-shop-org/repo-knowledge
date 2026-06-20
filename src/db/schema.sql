@@ -31,7 +31,11 @@ CREATE TABLE IF NOT EXISTS repos (
   created_at      TEXT,
   updated_at      TEXT,
   pushed_at       TEXT,
-  synced_at       TEXT
+  synced_at       TEXT,
+  -- FT-5 / migration-011: game repos point at their forge-vault wing.
+  -- Shipped directly in schema.sql so a schema.sql-only reader sees the
+  -- true head shape. Nullable — only game repos populate it. (db-A-002)
+  forge_vault_path TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_repos_owner_name ON repos(owner, name);
@@ -130,7 +134,11 @@ CREATE TABLE IF NOT EXISTS repo_relationships (
                     CHECK(relation_type IN (
                       'depends_on','related_to','supersedes',
                       'shares_domain_with','shares_package_with',
-                      'companion_to'
+                      'companion_to',
+                      -- FT-5 / migration-011: cross-tool vocabulary. Shipped
+                      -- directly here so a schema.sql-only reader sees the
+                      -- true 8-value head enum. (db-A-002)
+                      'wraps','collaborated_in_mission'
                     )),
   to_repo_id      INTEGER REFERENCES repos(id) ON DELETE CASCADE,
   note            TEXT
@@ -193,5 +201,15 @@ CREATE TABLE IF NOT EXISTS meta (
   value TEXT
 );
 
+-- schema_version is seeded at '1' DELIBERATELY (db-A-002): the migration
+-- ladder in src/db/init.ts is version-gated, and migrations 002-010 create
+-- tables (audit_*, rigs, repo_local_paths, repo_published_versions, etc.)
+-- that this base schema.sql does NOT define. Bumping the seed would SKIP
+-- those table-creating migrations on a fresh DB and break it. Even though
+-- the repos/repo_relationships definitions above already reflect the v11
+-- head shape (forge_vault_path column + extended relation_type enum), the
+-- linear version stays at 1 so the full ladder runs. The fresh-DB path
+-- ends at version 11 with all tables present (see the migration-sequence
+-- test).
 INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1');
 INSERT OR REPLACE INTO meta(key, value) VALUES ('created_at', datetime('now'));

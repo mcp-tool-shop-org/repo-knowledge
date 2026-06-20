@@ -101,9 +101,14 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
 
     // Warning note attached.
     const notes = (vanished!.notes as Array<Record<string, unknown>>);
-    const warning = notes.find(n => n.note_type === 'warning' && String(n.title).includes('GitHub 404'));
+    const warning = notes.find(n => n.note_type === 'warning' && String(n.title).includes('GitHub listing absence'));
     expect(warning).toBeDefined();
-    expect(String(warning!.content)).toMatch(/404 at \d{4}-\d{2}-\d{2}T/);
+    // sync-A-001: the note records only what we observed (absent from the
+    // listing) at an ISO timestamp — it must NOT assert a 404 / deletion
+    // for a repo that was never individually probed.
+    expect(String(warning!.content)).toMatch(/at \d{4}-\d{2}-\d{2}T/);
+    expect(String(warning!.content)).not.toMatch(/404/);
+    expect(String(warning!.content)).not.toMatch(/may be deleted/);
     expect(String(warning!.content)).toContain('rk delete org/vanished');
   });
 
@@ -218,5 +223,99 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
     const notes = (already!.notes as Array<Record<string, unknown>>);
     const warnings = notes.filter(n => n.note_type === 'warning');
     expect(warnings.length).toBe(0);
+  });
+
+  it('does NOT archive a private prior-active repo omitted from the fetch (sync-A-001 / sync-A-006)', () => {
+    // An under-scoped token (missing `repo` scope) returns only PUBLIC
+    // repos and silently omits private ones. The private repo is active
+    // and present on GitHub — archiving it would stamp a live repo
+    // "may be deleted." Seed one private + one public repo; the fetch
+    // returns only the public one.
+    upsertRepo({ owner: 'org', name: 'pub-survivor', status: 'active', visibility: 'public' });
+    upsertRepo({ owner: 'org', name: 'private-repo', status: 'active', visibility: 'private' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        // Only the public repo is visible to this under-scoped token.
+        return JSON.stringify([
+          {
+            name: 'pub-survivor',
+            owner: { login: 'org' },
+            description: 'visible',
+            url: 'https://github.com/org/pub-survivor',
+            isPrivate: false,
+            isArchived: false,
+            isFork: false,
+            defaultBranchRef: { name: 'main' },
+            stargazerCount: 0,
+            forkCount: 0,
+            createdAt: null,
+            updatedAt: null,
+            pushedAt: null,
+            primaryLanguage: null,
+            repositoryTopics: [],
+            licenseInfo: null,
+          },
+        ]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['org']);
+
+    // The private repo must remain active — visibility=private is the
+    // guard that distinguishes "invisible to this token" from "vanished."
+    const priv = getRepo('org/private-repo');
+    expect(priv).not.toBeNull();
+    expect(priv!.lifecycle_status).toBe('active');
+    expect(priv!.deprecated_at).toBeNull();
+    // And no warning note slandering a live private repo.
+    const privNotes = (priv!.notes as Array<Record<string, unknown>>);
+    expect(privNotes.filter(n => n.note_type === 'warning').length).toBe(0);
+
+    // Sanity: the public survivor stays active too (it was returned).
+    expect(getRepo('org/pub-survivor')!.lifecycle_status).toBe('active');
+  });
+
+  it('does NOT archive a repo whose stored slug differs only by casing (sync-A-004)', () => {
+    // GitHub identity is case-insensitive. The DB holds the slug with
+    // upper-case owner/name; the fetch returns lower-case. A naive
+    // case-sensitive diff would see the stored slug as "vanished."
+    upsertRepo({ owner: 'Org', name: 'CamelRepo', status: 'active', visibility: 'public' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([
+          {
+            name: 'camelrepo',           // lower-cased name
+            owner: { login: 'Org' },     // same owner as the snapshot key
+            description: 'same repo, different casing',
+            url: 'https://github.com/Org/camelrepo',
+            isPrivate: false,
+            isArchived: false,
+            isFork: false,
+            defaultBranchRef: { name: 'main' },
+            stargazerCount: 0,
+            forkCount: 0,
+            createdAt: null,
+            updatedAt: null,
+            pushedAt: null,
+            primaryLanguage: null,
+            repositoryTopics: [],
+            licenseInfo: null,
+          },
+        ]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['Org']);
+
+    // The original-cased row must stay active — the lower-cased fetch
+    // result is the SAME repo, not a vanish.
+    const stored = getRepo('Org/CamelRepo');
+    expect(stored).not.toBeNull();
+    expect(stored!.lifecycle_status).toBe('active');
+    expect(stored!.deprecated_at).toBeNull();
   });
 });

@@ -84,6 +84,19 @@ describe('parseWorklist', () => {
     const rows = parseWorklist(md);
     expect(rows[0].findings).toEqual({ high: 3, medium: 1, low: 3 });
   });
+
+  // hg-A-006: findings + pass-rate are first-match-wins, like slug. A
+  // later stray findings/pass-rate-shaped cell (e.g. a trailing notes
+  // column) must NOT clobber the authoritative earlier capture.
+  it('keeps the first findings + pass-rate cell when a later cell also matches', () => {
+    const md = `| Status | Slug | Findings | Pass Rate | Notes |
+|--------|------|----------|-----------|-------|
+| [ ] | org/repo | 3H 1M 3L | 64% | reran 0H 0M 0L at 99% |`;
+
+    const rows = parseWorklist(md);
+    expect(rows[0].findings).toEqual({ high: 3, medium: 1, low: 3 });
+    expect(rows[0].passRate).toBe(64);
+  });
 });
 
 // ─── Scorer Tests ────────────────────────────────────────────────────────────
@@ -297,17 +310,45 @@ describe('renderReport divide-by-zero (F-AG-009)', () => {
   });
 });
 
-// ─── F-AG-005: noAction game state ─────────────────────────────────────────
-// The `noAction` row shape is `[x] done by <player> <ts> | 0 findings`.
-// It is a strict superset of the `done` shape, so STATUS_PATTERNS in
-// parser.ts must check `noAction` BEFORE `done` (since Object.entries
-// iterates in insertion order). After the reordering, a 0-findings done
-// row parses to state='no_action', not 'done'.
-//
-// PROACTIVE: the parser-level test asserts the reordering took effect.
-// The scorer-level test pins the no_action handling in scorer.ts (which
-// is already correct in current source).
+// ─── F-AG-005 / hg-A-001: noAction game state ──────────────────────────────
+// A no-action close is `[x] done by <player> <ts> | 0 findings | <slug> | ...`.
+// The distinguishing `0 findings` marker lives in its OWN pipe-delimited
+// cell — it can never appear inside the status cell, because parseWorklist
+// builds the status cell via split('|') (cells[0] cannot contain a pipe).
+// So no_action is classified from the PARSED CELLS in parseRow (an explicit
+// "0 findings" cell, or findings that parse to 0H 0M 0L on a done row), NOT
+// by reordering a status-cell regex (the old approach could never fire).
+// The scorer's no_action case awards no HEALTHY / PERFECT_PUSH bonus.
 describe('parseWorklist noAction state (F-AG-005)', () => {
+  // hg-A-001: the no-action signal (`| 0 findings |`) lives in its own
+  // pipe-delimited cell, so it can NEVER appear inside the status cell
+  // (cells[0] is produced by split('|')). The old noAction regex matched
+  // a literal pipe inside the status cell → it could never fire → every
+  // 0-findings done close mis-classified as `done` and was awarded the
+  // ~45-pt HEALTHY + PERFECT_PUSH bonus it must not get.
+  it('classifies a real done-with-0-findings line as no_action and withholds the perfect-push bonus', () => {
+    const md = `| Status | Slug | Findings | Pass Rate |
+|--------|------|----------|-----------|
+| [x] done by claude-opus-4 2026-03-18T19:47 | 0 findings | mcp-tool-shop-org/clean-repo | 0H 0M 0L | 100% |`;
+
+    const rows = parseWorklist(md);
+    expect(rows.length).toBe(1);
+    // Parser-level invariant: the row is no_action, not a plain done.
+    expect(rows[0].status.state).toBe('no_action');
+    expect(rows[0].status.player).toBe('claude-opus-4');
+
+    // Scorer-level invariant: no findings points, no HEALTHY bonus, and
+    // crucially NO perfect-push award for a repo with no work done.
+    const summary = scoreGame(rows);
+    const p = summary.leaderboard[0];
+    expect(p.reposDone).toBe(1);
+    expect(p.perfectPushes).toBe(0);
+    expect(p.totalPoints).toBe(0);
+    // A regular done with these same findings would have scored the
+    // HEALTHY + PERFECT_PUSH bonus — pin that this row did NOT.
+    expect(p.totalPoints).not.toBe(POINTS.HEALTHY + POINTS.PERFECT_PUSH);
+  });
+
   it('scoreGame counts no_action rows toward done without findings bonus', () => {
     const rows: WorklistRow[] = [
       {

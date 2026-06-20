@@ -17,6 +17,7 @@ import { createHash } from 'crypto';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import { getDb, getRepoIdBySlug } from '../db/init.js';
 import { rebuildIndex } from '../search/fts.js';
+import { DOMAINS } from './controls.js';
 
 /**
  * F-AG-019: filename-named JSON read helper. Centralises the
@@ -228,6 +229,19 @@ function validateInputs(
       if (!f || !f.title) {
         throw new Error(`findings[${i}] missing required field: title`);
       }
+      // db-A-002-audit: domain + severity are NOT NULL in migration-002 and
+      // domain carries a CHECK enum. Validate presence + the domain enum here
+      // in the shared validator so importAuditInline gets the same guard the
+      // directory path already had at its pre-load site — otherwise a missing
+      // domain reaches .run() as undefined (bind error) and a bogus domain
+      // surfaces as a raw CHECK-constraint failure mid-transaction.
+      if (!f.domain) {
+        throw new Error(`findings[${i}] ("${f.title}") missing required field: domain`);
+      }
+      if (!f.severity) {
+        throw new Error(`findings[${i}] ("${f.title}") missing required field: severity`);
+      }
+      validate(f.domain, DOMAINS, `findings[${i}] ("${f.title}") domain`);
       validate(f.severity, VALID_SEVERITIES, `findings[${i}] ("${f.title}") severity`);
       validate(f.status, VALID_FINDING_STATUSES, `findings[${i}] ("${f.title}") status`);
       validate(f.confidence, VALID_CONFIDENCES, `findings[${i}] ("${f.title}") confidence`);
@@ -235,6 +249,42 @@ function validateInputs(
   }
 
   return { overallStatus, overallPosture };
+}
+
+/**
+ * db-A-001-audit: pre-transaction control_id existence check.
+ *
+ * audit_control_results.control_id and audit_findings.control_id both carry
+ * a FK to audit_controls(id). A typo (e.g. the nonexistent `CI-002` that
+ * AUDIT-CONTRACT.md once referenced — the real id is `CIC-002`) would
+ * otherwise surface as an opaque "FOREIGN KEY constraint failed" mid-
+ * transaction, rolling back the whole import with no hint which id was
+ * wrong. Validating up-front against the seeded catalog yields a clear
+ * "Unknown control_id: X" before we open the write transaction.
+ *
+ * Findings allow a null/absent control_id (the FK is nullable), so only
+ * present values are checked.
+ */
+function validateControlIds(
+  db: DatabaseType,
+  controls?: ControlResultInput[],
+  findings?: FindingInput[],
+): void {
+  const ids = new Set<string>();
+  for (const c of controls ?? []) {
+    if (c?.control_id) ids.add(c.control_id);
+  }
+  for (const f of findings ?? []) {
+    if (f?.control_id) ids.add(f.control_id);
+  }
+  if (ids.size === 0) return;
+
+  const exists = db.prepare('SELECT 1 FROM audit_controls WHERE id = ?');
+  for (const id of ids) {
+    if (!exists.get(id)) {
+      throw new Error(`Unknown control_id: ${id}. Not in the seeded control catalog.`);
+    }
+  }
 }
 
 // ─── Import a complete audit run ─────────────────────────────────────────────
@@ -294,7 +344,16 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
   const metricsPath = join(auditDir, 'metrics.json');
   let metrics: MetricsInput | undefined;
   if (existsSync(metricsPath)) {
-    metrics = readJson(metricsPath) as MetricsInput;
+    const raw = readJson(metricsPath);
+    // db-A-005-audit: guard the shape before the cast, matching the
+    // controls/findings/artifacts siblings above. metrics.json is a single
+    // object (not an array). A null, scalar, or array body would otherwise
+    // pass the cast and blow up inside insertMetrics (property reads on a
+    // null, or undefined binds from a scalar) mid-transaction.
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error(`${metricsPath}: expected metrics object, got ${raw === null ? 'null' : Array.isArray(raw) ? 'array' : typeof raw}`);
+    }
+    metrics = raw as MetricsInput;
   }
 
   const artifactsPath = join(auditDir, 'artifacts.json');
@@ -338,6 +397,10 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
   // F-AG-004: shared validation contract — same enum rules cover both
   // controls + findings on inline and directory paths.
   const { overallStatus, overallPosture } = validateInputs(run, controls, findings);
+
+  // db-A-001-audit: reject unknown control_ids BEFORE the transaction so a
+  // typo yields a clear error instead of an opaque FK-constraint rollback.
+  validateControlIds(db, controls, findings);
 
   let controlCount = 0;
   let findingCount = 0;
@@ -392,6 +455,14 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
       // dashboards keyed by id) would silently break.
       // Canonical identity = (audit_run_id, domain, title, severity) — same
       // as idx_findings_canonical in migration 004.
+      //
+      // db-A-004-audit: NOTE the conflict key is scoped to audit_run_id, so
+      // this id-preserving update ONLY fires for two findings within the SAME
+      // run id. It is NOT cross-run dedup: each importAudit/importAuditInline
+      // call inserts a brand-new audit_runs row (a fresh runId) above, so
+      // re-importing the same fixture produces a SECOND run with its own
+      // findings — by design, runs are an append-only history. The DO UPDATE
+      // matters for retries that reuse a runId, not for re-imports.
       const insFinding = db.prepare(`
         INSERT INTO audit_findings (
           audit_run_id, repo_id, domain, control_id, title, description,
@@ -547,7 +618,14 @@ function insertMetrics(db: DatabaseType, runId: number | bigint, m: MetricsInput
  *
  * Shares the same validation contract + ON CONFLICT semantics as the
  * directory-import path — F-AG-004 dedupes the enum checks; F-AG-002
- * preserves finding row ids on re-import.
+ * preserves finding row ids when two findings collide WITHIN ONE run id.
+ *
+ * db-A-004-audit: idempotency is scoped to a single run id, NOT across
+ * imports. Every call inserts a new audit_runs row (append-only run
+ * history), so re-importing the same payload deliberately creates a second
+ * run with its own findings — it does NOT overwrite the prior run. Callers
+ * that want a single "current" run should query getLatestAudit (which now
+ * tiebreaks on id DESC, db-A-003-audit), not rely on re-import to dedup.
  */
 export function importAuditInline({ run, controls, findings, metrics, artifacts: _artifacts }: AuditInlineInput): ImportResult {
   const db = getDb();
@@ -556,6 +634,10 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
   if (!repoId) throw new Error(`Repo not found: ${run.slug}`);
 
   const { overallStatus, overallPosture } = validateInputs(run, controls, findings);
+
+  // db-A-001-audit: reject unknown control_ids BEFORE the transaction so a
+  // typo yields a clear error instead of an opaque FK-constraint rollback.
+  validateControlIds(db, controls, findings);
 
   let controlCount = 0, findingCount = 0;
   let runId: number | bigint = 0;

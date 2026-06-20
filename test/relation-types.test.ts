@@ -74,14 +74,27 @@ describe('addRelationship accepts FT-5 vocabulary (round-trip)', () => {
     const a = upsertRepo({ owner: 'o', name: 'a' });
     const b = upsertRepo({ owner: 'o', name: 'b' });
     const db = getDb();
-    // Direct insert to exercise the CHECK; addRelationship uses INSERT
-    // OR IGNORE which would silently swallow the failure case the
-    // CHECK rejects (the IGNORE applies to UNIQUE violations only —
-    // CHECK violations still throw, but use direct INSERT here for
-    // clarity).
+    // Direct INSERT (no OR IGNORE) to exercise the raw CHECK constraint.
     expect(() => db.prepare(
       'INSERT INTO repo_relationships (from_repo_id, relation_type, to_repo_id) VALUES (?, ?, ?)'
     ).run(a, 'invented_value', b)).toThrow();
+  });
+
+  it('addRelationship REJECTS an invented relation_type (does not silently drop it)', () => {
+    // ts-A-003 regression: addRelationship uses INSERT OR IGNORE, whose
+    // IGNORE clause silently drops rows that fail ANY constraint —
+    // including the relation_type CHECK, not just the UNIQUE index. Before
+    // the fix an invalid relation_type vanished with no error and no row.
+    // The helper must now throw, and no row may be written.
+    const a = upsertRepo({ owner: 'o', name: 'a' });
+    const b = upsertRepo({ owner: 'o', name: 'b' });
+    expect(() => addRelationship(a, 'not-a-real-vocab', b)).toThrow(/relation_type/);
+
+    const db = getDb();
+    const count = (db.prepare(
+      'SELECT COUNT(*) AS c FROM repo_relationships WHERE from_repo_id = ? AND to_repo_id = ?'
+    ).get(a, b) as { c: number }).c;
+    expect(count).toBe(0);
   });
 
   it('addRelationship is dedup-safe for new vocabulary too', () => {

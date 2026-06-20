@@ -62,6 +62,28 @@ describe('upsertRepo', () => {
     const repo = getRepo('test-org/test-repo');
     expect(repo!.description).toBe('Version 2');
   });
+
+  it('INSERT preserves an explicit null archived (db-A-008)', () => {
+    // The INSERT path used `data.archived ? 1 : 0`, collapsing an explicit
+    // null to 0 — losing the "unknown archived state" distinction the
+    // UPDATE path preserves. Mirror the UPDATE: explicit null stays null.
+    const db = getDb();
+    upsertRepo({ owner: 'o', name: 'unknown-archived', archived: null });
+    const row = db.prepare(
+      'SELECT archived FROM repos WHERE slug = ?'
+    ).get('o/unknown-archived') as { archived: number | null };
+    expect(row.archived).toBeNull();
+  });
+
+  it('INSERT coerces a boolean archived to 0/1 (db-A-008 — true half still works)', () => {
+    const db = getDb();
+    upsertRepo({ owner: 'o', name: 'is-archived', archived: true });
+    upsertRepo({ owner: 'o', name: 'not-archived', archived: false });
+    const a = db.prepare('SELECT archived FROM repos WHERE slug = ?').get('o/is-archived') as { archived: number };
+    const b = db.prepare('SELECT archived FROM repos WHERE slug = ?').get('o/not-archived') as { archived: number };
+    expect(a.archived).toBe(1);
+    expect(b.archived).toBe(0);
+  });
 });
 
 describe('upsertTech', () => {
@@ -157,6 +179,32 @@ describe('findRepos', () => {
     const results = findRepos({ language: 'Haskell' });
     expect(results).toHaveLength(0);
   });
+
+  it('framework filter matches array elements exactly, not as a substring (db-A-006)', () => {
+    // The frameworks column is a JSON array. The old `LIKE %react%` filter
+    // over-matched: a repo whose ONLY framework is "react-native" wrongly
+    // showed up under framework=react. Pin exact element matching.
+    const reactRepo = upsertRepo({ owner: 'o', name: 'react-app' });
+    upsertTech(reactRepo, { frameworks: ['react', 'vite'] });
+    const nativeRepo = upsertRepo({ owner: 'o', name: 'native-app' });
+    upsertTech(nativeRepo, { frameworks: ['react-native'] });
+
+    const hits = findRepos({ framework: 'react' });
+    const slugs = hits.map(h => h.slug);
+    // The genuine react repo matches…
+    expect(slugs).toContain('o/react-app');
+    // …but the react-native-only repo MUST NOT (no substring over-match).
+    expect(slugs).not.toContain('o/native-app');
+  });
+
+  it('framework filter does not treat LIKE metacharacters in the value specially (db-A-006)', () => {
+    // A filter value containing % or _ must not match arbitrary text via
+    // LIKE wildcard semantics — json_each equality is literal.
+    const repo = upsertRepo({ owner: 'o', name: 'r' });
+    upsertTech(repo, { frameworks: ['react'] });
+    const hits = findRepos({ framework: 'r_act' }); // '_' would be a LIKE wildcard
+    expect(hits).toHaveLength(0);
+  });
 });
 
 describe('getStats', () => {
@@ -165,6 +213,48 @@ describe('getStats', () => {
     const stats = getStats();
     expect(stats.repos).toBe(1);
     expect(stats.notes).toBe(0);
+  });
+});
+
+describe('FTS slug rename consistency (db-A-004-DB)', () => {
+  it('renaming a repo slug carries the new slug onto its doc + note FTS rows', () => {
+    const db = getDb();
+    const id = upsertRepo({ owner: 'o', name: 'old', description: 'desc' });
+    upsertDoc(id, 'README.md', 'readme', 'README', 'doc body', 'cksum1');
+    upsertNote(id, 'thesis', 'thesis', 'note body');
+
+    // Sanity: the doc + note FTS rows currently carry the OLD slug.
+    const oldSlug = 'o/old';
+    const beforeDoc = (db.prepare(
+      "SELECT COUNT(*) AS c FROM repo_search WHERE source_type='doc' AND slug = ?"
+    ).get(oldSlug) as { c: number }).c;
+    const beforeNote = (db.prepare(
+      "SELECT COUNT(*) AS c FROM repo_search WHERE source_type='note' AND slug = ?"
+    ).get(oldSlug) as { c: number }).c;
+    expect(beforeDoc).toBe(1);
+    expect(beforeNote).toBe(1);
+
+    // Rename the repo's slug (owner/name change). The repos UPDATE trigger
+    // must rewrite the slug on the repo's doc/note FTS rows too, so search
+    // grouping doesn't split across the old and new slug.
+    const newSlug = 'o/new';
+    db.prepare("UPDATE repos SET name = 'new', slug = ? WHERE id = ?").run(newSlug, id);
+
+    // No FTS rows are left under the old slug…
+    const strayOld = (db.prepare(
+      'SELECT COUNT(*) AS c FROM repo_search WHERE slug = ?'
+    ).get(oldSlug) as { c: number }).c;
+    expect(strayOld).toBe(0);
+
+    // …and the doc + note rows now carry the NEW slug.
+    const afterDoc = (db.prepare(
+      "SELECT COUNT(*) AS c FROM repo_search WHERE source_type='doc' AND slug = ?"
+    ).get(newSlug) as { c: number }).c;
+    const afterNote = (db.prepare(
+      "SELECT COUNT(*) AS c FROM repo_search WHERE source_type='note' AND slug = ?"
+    ).get(newSlug) as { c: number }).c;
+    expect(afterDoc).toBe(1);
+    expect(afterNote).toBe(1);
   });
 });
 

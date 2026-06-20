@@ -149,7 +149,28 @@ async function fetchText(url: string): Promise<string | null> {
 async function loadIndex(options: DogfoodSyncOptions): Promise<DogfoodIndex> {
   if (options.localPath) {
     const indexPath = join(options.localPath, 'indexes', 'latest-by-repo.json');
-    return JSON.parse(readFileSync(indexPath, 'utf-8'));
+    // sync-A-002: a bare JSON.parse on a missing/truncated index file
+    // surfaces a terse ENOENT or "Unexpected end of JSON input" with no
+    // path context. Wrap read+parse so the operator gets a structured,
+    // actionable message (mirrors the guard already present at
+    // github.ts:122 and publish.ts:120).
+    let raw: string;
+    try {
+      raw = readFileSync(indexPath, 'utf-8');
+    } catch (e: unknown) {
+      throw new Error(
+        `dogfood index at ${indexPath} is missing or unreadable: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
+    try {
+      return JSON.parse(raw) as DogfoodIndex;
+    } catch (e: unknown) {
+      throw new Error(
+        `dogfood index at ${indexPath} is malformed: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
   }
   return fetchJson(options.indexUrl ?? DEFAULT_INDEX_URL);
 }
@@ -203,6 +224,20 @@ export async function syncDogfood(
 
   const db = getDb();
   for (const [repo, surfaces] of Object.entries(index)) {
+    // sync-A-003: a drifted index value that is null or not a plain
+    // object (e.g. a string, number, or array from a corrupt export)
+    // would throw mid-walk at Object.entries(surfaces) below — or, for
+    // an array, iterate numeric keys and corrupt the surface rollup.
+    // Validate the top-level shape and skip-with-warning instead
+    // (mirrors the per-repo shape guards at publish.ts:128/138).
+    if (surfaces === null || typeof surfaces !== 'object' || Array.isArray(surfaces)) {
+      skipped.push(`${repo} — malformed surfaces value in dogfood index (expected object, got ${Array.isArray(surfaces) ? 'array' : surfaces === null ? 'null' : typeof surfaces})`);
+      console.error(
+        `[dogfood-sync] ${repo}: malformed surfaces value in dogfood index — skipping`,
+      );
+      continue;
+    }
+
     const repoId = getRepoIdBySlug(repo);
     if (!repoId) {
       // Stage C humanization: nudge users toward the most likely fix

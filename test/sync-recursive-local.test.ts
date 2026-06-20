@@ -11,12 +11,35 @@
  *   - maxDepth=0 falls back to the legacy single-level behavior
  *   - scanner does NOT recurse INSIDE a found repo
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openDb, closeDb } from '../src/db/init.js';
 import { scanDirectory } from '../src/sync/local.js';
+
+// local.ts imports readdirSync from 'fs' (a frozen ESM namespace, so vi.spyOn
+// cannot redefine it). Mock the 'fs' module instead: every call delegates to
+// the real implementation EXCEPT for a single path we flip to throw EACCES,
+// letting us drive scanDirectory's error-aggregation branch deterministically
+// and portably (no real chmod/EPERM needed). The hoisted holder lets the test
+// arm/disarm the failing path; default '' never matches, so all other tests in
+// this file see real fs behavior.
+const fsMockState = vi.hoisted(() => ({ brokenPath: '' }));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    readdirSync: ((p: Parameters<typeof actual.readdirSync>[0], opts: Parameters<typeof actual.readdirSync>[1]) => {
+      if (typeof p === 'string' && p === fsMockState.brokenPath) {
+        const err = new Error('EACCES: permission denied, scandir') as NodeJS.ErrnoException;
+        err.code = 'EACCES';
+        throw err;
+      }
+      return (actual.readdirSync as (...a: unknown[]) => unknown)(p, opts);
+    }) as typeof actual.readdirSync,
+  };
+});
 
 let tmpDir: string;
 
@@ -119,14 +142,30 @@ describe('scanDirectory recursive scan (FT-5)', () => {
     expect(result.scanned).toBe(1);
   });
 
-  it('returns errors for permission-denied subdirectories without halting the walk', () => {
+  it('records the error for a permission-denied subdir AND keeps scanning siblings (ts-A-007)', () => {
     const root = join(tmpDir, 'workspace');
+    // A real repo sibling that must still be scanned despite the error.
     fakeRepo(join(root, 'good-repo'));
-    // We can't actually simulate EPERM portably; instead pass a depth
-    // that includes a path with no children — the walk should still
-    // complete cleanly with no errors.
-    const result = scanDirectory(root, { maxDepth: 4 });
-    expect(result.scanned).toBe(1);
-    expect(result.errors).toEqual([]);
+    // A non-git directory the walk will try to readdirSync to recurse
+    // into — we make THAT one throw EACCES.
+    const brokenDir = join(root, 'broken-dir');
+    mkdirSync(brokenDir, { recursive: true });
+
+    // Arm the mock to throw ONLY for brokenDir; everything else (root scan,
+    // good-repo ingest) delegates to the real readdirSync. This drives the
+    // error-aggregation branch in scanDirectory's walk() deterministically.
+    fsMockState.brokenPath = brokenDir;
+    try {
+      const result = scanDirectory(root, { maxDepth: 4 });
+
+      // The sibling repo was still ingested — the error did not halt the walk.
+      expect(result.scanned).toBe(1);
+      // The broken subdir is recorded in errors with its path + cause.
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0]).toContain(brokenDir);
+      expect(result.errors[0]).toMatch(/EACCES/);
+    } finally {
+      fsMockState.brokenPath = '';
+    }
   });
 });

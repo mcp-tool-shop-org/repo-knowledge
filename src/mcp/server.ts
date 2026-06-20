@@ -27,7 +27,7 @@ import {
   addRelationship as addRel,
 } from '../db/init.js';
 import type { RepoFilters } from '../db/init.js';
-import { searchRepos, rebuildIndex } from '../search/fts.js';
+import { searchRepos } from '../search/fts.js';
 import { fullSync } from '../sync/index.js';
 import { syncDogfood } from '../sync/dogfood.js';
 import { seedControls, DOMAINS } from '../audit/controls.js';
@@ -43,8 +43,13 @@ import { resolveConfig } from '../config.js';
 // from drifting from the CLI + DB CHECK constraints.
 import { NOTE_TYPES, RELATION_TYPES } from '../index.js';
 
-// Resolve config at startup
-const config = resolveConfig();
+// Resolve config at startup. RK_DB_PATH is an explicit DB-path override —
+// it wins over rk.config.json + defaults so MCP hosts and tests can point the
+// server at an isolated database without writing a config file. This is the
+// supported isolation mechanism (test/mcp-server.test.ts relies on it).
+const config = resolveConfig(
+  process.env.RK_DB_PATH ? { dbPath: process.env.RK_DB_PATH } : undefined,
+);
 
 // F-BE-013: read version dynamically from package.json so server.getServerInfo()
 // stays in sync with releases instead of drifting against a hardcoded literal.
@@ -103,8 +108,19 @@ server.tool(
       last_indexed_at: d.last_indexed_at,
     }));
 
+    // mcp-A-005: absolute on-disk paths (local_path, forge_vault_path) are
+    // host-local provenance — they only make sense on the rig that synced the
+    // repo. Move them out of the top-level spread and into a clearly-labelled
+    // `host_local` block so an MCP client (LLM) does not mistake them for
+    // portable, shareable URLs.
+    const { local_path, forge_vault_path, ...rest } = repo as Record<string, any>;
+    const host_local =
+      local_path != null || forge_vault_path != null
+        ? { local_path: local_path ?? null, forge_vault_path: forge_vault_path ?? null }
+        : undefined;
+
     return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ ...repo, docs }, null, 2) }],
+      content: [{ type: 'text' as const, text: JSON.stringify({ ...rest, host_local, docs }, null, 2) }],
     };
   },
 );
@@ -174,9 +190,21 @@ server.tool(
 server.tool(
   'repos_by_stack',
   'Find repos using a specific tech stack combination. Example: "tauri react" or "python mcp".',
-  { stack: z.string().describe('Space-separated tech terms to match') },
+  { stack: z.string().min(1).describe('Space-separated tech terms to match') },
   async ({ stack }) => {
-    const terms = stack.toLowerCase().split(/\s+/);
+    // mcp-A-007: split + filter empties. Without filter(Boolean) an empty or
+    // whitespace-only stack yields a [''] term, and haystack.includes('') is
+    // always true, so `terms.every(...)` matched EVERY repo. Short-circuit on
+    // no real terms so an empty query returns guidance, not the whole catalog.
+    const terms = stack.toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ stack, count: 0, repos: [], hint: 'Provide one or more tech terms, e.g. "tauri react" or "python mcp".' }, null, 2),
+        }],
+      };
+    }
     const db = getDb();
 
     const allRepos = db.prepare(`
@@ -280,9 +308,12 @@ server.tool(
       return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     }
 
-    const fws: string[] = repo.tech?.frameworks
-      ? (typeof repo.tech.frameworks === 'string' ? JSON.parse(repo.tech.frameworks) : repo.tech.frameworks)
-      : [];
+    // mcp-A-001: frameworks is a JSON-encoded TEXT column. Use the guarded
+    // tryParse (same helper get_repo relies on) so a malformed value defaults
+    // to [] instead of throwing out of the whole repo_summary handler.
+    const fwsRaw = repo.tech?.frameworks;
+    const fwsParsed = Array.isArray(fwsRaw) ? fwsRaw : tryParse(fwsRaw);
+    const fws: string[] = Array.isArray(fwsParsed) ? (fwsParsed as string[]) : [];
     const nextStep = repo.notes?.find((n: Record<string, any>) => n.note_type === 'next_step');
     const thesis = repo.notes?.find((n: Record<string, any>) => n.note_type === 'thesis');
     const warnings = repo.notes?.filter(
@@ -322,8 +353,12 @@ server.tool(
     if (!repoId) {
       return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     }
+    // mcp-A-006: no rebuildIndex() needed. Migration-005's repo_notes
+    // INSERT/UPDATE triggers (applied on every openDb) maintain repo_search
+    // incrementally, so the note is searchable the instant upsertNote returns.
+    // A full-corpus rebuild here was O(corpus) work to index one row — see
+    // F-DB-013, which proves notes are searchable without a manual rebuild.
     upsertNote(repoId, note_type, title || note_type, content);
-    rebuildIndex();
     return {
       content: [{ type: 'text' as const, text: `Note added to ${slug} [${note_type}]: ${title || note_type}` }],
     };

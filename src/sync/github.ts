@@ -4,9 +4,10 @@
 import { execFileSync } from 'child_process';
 import {
   upsertRepo, upsertRelease, setTopics, upsertFact, getDb,
-  // FT-5: 404 → lifecycle_status='archived' + warning note. Uses the
-  // existing FT-1 archiver helper so the lifecycle column + deprecated_at
-  // are bumped in one place.
+  // FT-5: listing-absence → lifecycle_status='archived' + warning note.
+  // (NOT an individual 404 probe — sync-A-001: the candidate merely
+  // failed to appear in `gh repo list`.) Uses the existing FT-1 archiver
+  // helper so the lifecycle column + deprecated_at are bumped in one place.
   archiveRepoBySlug, upsertNote,
 } from '../db/init.js';
 
@@ -207,6 +208,12 @@ export function fetchReleases(owner: string, name: string): ReleaseInfo[] {
   }
 }
 
+interface PriorActiveRepo {
+  id: number;
+  slug: string;          // original casing, for storage/display
+  visibility: string | null;
+}
+
 /**
  * FT-5: snapshot the set of (owner, name) slugs for previously-active
  * repos under the given owner. Used to compute the "vanished from
@@ -218,10 +225,21 @@ export function fetchReleases(owner: string, name: string): ReleaseInfo[] {
  * to sync. Joining across orgs would risk archiving a competitor's
  * mirror just because we didn't fetch their org this round.
  *
- * Returns a Map<slug, repo_id> so the post-sync archiver doesn't have
- * to re-query.
+ * sync-A-004: keyed by the LOWERCASED slug because GitHub identity is
+ * case-insensitive — a casing mismatch between the stored slug and the
+ * fetched one (Org/Repo vs org/repo) must NOT be read as "vanished."
+ * The map VALUE keeps the original-cased slug for storage/display.
+ *
+ * sync-A-001 / sync-A-006: we also carry `visibility` so the archiver
+ * can refuse to soft-archive a repo whose last-recorded visibility was
+ * private. An under-scoped token (missing the `repo` scope) returns only
+ * public repos and silently omits private ones; archiving those would
+ * stamp a live private repo "may be deleted."
+ *
+ * Returns a Map<lowercased-slug, PriorActiveRepo> so the post-sync
+ * archiver doesn't have to re-query.
  */
-function snapshotActiveSlugsByOwner(owner: string): Map<string, number> {
+function snapshotActiveSlugsByOwner(owner: string): Map<string, PriorActiveRepo> {
   const db = getDb();
   // Guard against fixtures that lack the lifecycle_status column (e.g.
   // pre-migration-006 schemas in tests). We probe for the column and
@@ -231,11 +249,11 @@ function snapshotActiveSlugsByOwner(owner: string): Map<string, number> {
   const cols = db.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
   const hasLifecycle = cols.some(c => c.name === 'lifecycle_status');
   const sql = hasLifecycle
-    ? `SELECT id, slug FROM repos WHERE owner = ? AND coalesce(lifecycle_status, 'active') = 'active'`
-    : `SELECT id, slug FROM repos WHERE owner = ? AND coalesce(status, 'active') = 'active'`;
-  const rows = db.prepare(sql).all(owner) as { id: number; slug: string }[];
-  const m = new Map<string, number>();
-  for (const r of rows) m.set(r.slug, r.id);
+    ? `SELECT id, slug, visibility FROM repos WHERE owner = ? AND coalesce(lifecycle_status, 'active') = 'active'`
+    : `SELECT id, slug, visibility FROM repos WHERE owner = ? AND coalesce(status, 'active') = 'active'`;
+  const rows = db.prepare(sql).all(owner) as { id: number; slug: string; visibility: string | null }[];
+  const m = new Map<string, PriorActiveRepo>();
+  for (const r of rows) m.set(r.slug.toLowerCase(), { id: r.id, slug: r.slug, visibility: r.visibility });
   return m;
 }
 
@@ -247,15 +265,23 @@ function snapshotActiveSlugsByOwner(owner: string): Map<string, number> {
  * delete <slug>` for the hard cleanup. The note is the audit trail —
  * it surfaces in `rk show <slug>` and in FTS so the operator can find
  * "what disappeared from GitHub" weeks later.
+ *
+ * sync-A-001: the candidate was NOT individually 404-probed — it merely
+ * failed to appear in the owner-level `gh repo list`. That can happen
+ * for a deleted repo, a renamed repo, a transferred repo, or (most
+ * dangerously) one omitted because the token's scope didn't cover it.
+ * So the note no longer asserts "GitHub returned 404 … may be deleted";
+ * it states only what we actually observed (absent from the listing)
+ * and leaves the cause open.
  */
 function archiveVanishedRepo(slug: string, repoId: number, owner: string, name: string): void {
-  archiveRepoBySlug(slug, { reason: 'gh-404-during-sync' });
+  archiveRepoBySlug(slug, { reason: 'absent-from-gh-listing-during-sync' });
   const now = new Date().toISOString();
-  const note = `GitHub returned 404 at ${now}; repo may be deleted, private, or renamed. Investigate or run \`rk delete ${slug}\` to remove.`;
+  const note = `Not present in GitHub's repo listing for ${owner} at ${now}; was previously active. Possible causes: deleted, renamed, transferred, made private, or omitted by an under-scoped token. Confirm with \`gh repo view ${slug}\` before running \`rk delete ${slug}\`.`;
   upsertNote(
     repoId,
     'warning',
-    `GitHub 404 — ${owner}/${name}`,
+    `GitHub listing absence — ${owner}/${name}`,
     note,
     'sync-github'
   );
@@ -265,16 +291,23 @@ function archiveVanishedRepo(slug: string, repoId: number, owner: string, name: 
  * Sync all repos for given owners into the database.
  *
  * FT-5: when a previously-active repo is not present in this sync's
- * fetch results (GitHub returned 404 for it, or the org no longer lists
- * it), we mark `lifecycle_status='archived'` and add a warning note.
+ * fetch results (the owner-level `gh repo list` no longer includes it),
+ * we mark `lifecycle_status='archived'` and add a warning note. Note we
+ * do NOT individually 404-probe the candidate (sync-A-001) — absence
+ * from the listing is the only signal, hence the guards below.
  *
- * Defense against false positives: we only archive when the owner's
- * fetch produced AT LEAST ONE successful repo entry. If the entire
- * owner-level fetch failed (rate limit, network blip, auth missing),
- * fetchGitHubRepos returns []; we treat that as "no signal" rather
- * than "everything vanished." This is the load-bearing distinction
- * between a single repo 404 (real signal) and a whole-org fetch failure
- * (operational noise).
+ * Defense against false positives (three layers):
+ *  - we only archive when the owner's fetch produced AT LEAST ONE
+ *    successful repo entry. If the entire owner-level fetch failed
+ *    (rate limit, network blip, auth missing), fetchGitHubRepos returns
+ *    []; we treat that as "no signal" rather than "everything vanished."
+ *  - sync-A-006: we NEVER archive a repo whose last-recorded visibility
+ *    was private. An under-scoped token returns only public repos and
+ *    silently omits private ones, so a private repo missing from the
+ *    listing is "invisible to this token," not "vanished."
+ *  - sync-A-004: seen/snapshot membership is compared case-insensitively
+ *    because GitHub identity is case-insensitive — Org/Repo and org/repo
+ *    are the same repo and a casing skew must not look like a vanish.
  */
 export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitHubSyncResult {
   const results: GitHubSyncResult = { synced: 0, skipped: 0, errors: [] };
@@ -331,7 +364,9 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
         });
         tx();
 
-        seenSlugs.add(`${repo.owner}/${repo.name}`);
+        // sync-A-004: store the lowercased slug so the vanished diff
+        // below is case-insensitive (GitHub identity is).
+        seenSlugs.add(`${repo.owner}/${repo.name}`.toLowerCase());
         results.synced++;
         process.stdout.write('.');
       } catch (e: any) {
@@ -344,16 +379,28 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
     // produced at least one result — empty fetch = ambient failure,
     // not signal.
     if (repos.length > 0) {
-      for (const [slug, repoId] of priorActive.entries()) {
-        if (seenSlugs.has(slug)) continue;
+      for (const [lowerSlug, prior] of priorActive.entries()) {
+        // sync-A-004: case-insensitive membership — the seenSlugs set is
+        // already lowercased, and so is `lowerSlug`.
+        if (seenSlugs.has(lowerSlug)) continue;
+        // sync-A-006: a repo whose last-recorded visibility was private
+        // is invisible to an under-scoped token. We refuse to soft-archive
+        // it on a listing-absence signal alone — that would stamp a live
+        // private repo "may be deleted." Only public repos (or unknown
+        // visibility) reach the archiver here.
+        if (prior.visibility === 'private') {
+          console.log(`  kept (private, absent from listing): ${prior.slug}`);
+          continue;
+        }
         // The slug was active before this sync but not in this sync's
-        // GitHub results — treat as vanished.
-        const [vOwner, vName] = slug.split('/', 2);
+        // GitHub listing — treat as a vanished candidate. Use the
+        // original-cased slug for storage/display.
+        const [vOwner, vName] = prior.slug.split('/', 2);
         try {
-          archiveVanishedRepo(slug, repoId, vOwner ?? owner, vName ?? slug);
-          console.log(`  archived (gh-404): ${slug}`);
+          archiveVanishedRepo(prior.slug, prior.id, vOwner ?? owner, vName ?? prior.slug);
+          console.log(`  archived (absent from gh listing): ${prior.slug}`);
         } catch (e: unknown) {
-          results.errors.push(`archive ${slug}: ${(e as Error).message}`);
+          results.errors.push(`archive ${prior.slug}: ${(e as Error).message}`);
         }
       }
     }

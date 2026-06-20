@@ -35,6 +35,7 @@ import {
   openDb, closeDb, getDb,
   upsertRepo,
   archiveRepoBySlug, setReplacedBy, findStaleArchived,
+  deleteRepoBySlug,
 } from '../src/db/init.js';
 
 let tmpDir: string;
@@ -277,5 +278,68 @@ describe('findStaleArchived (F-TS-FT1)', () => {
     // Nothing archived → nothing stale.
     const stale = findStaleArchived(30);
     expect(stale).toEqual([]);
+  });
+});
+
+describe('prune --apply batch atomicity (cli-A-004)', () => {
+  // The `rk prune --apply` action deletes a batch of stale-archived repos.
+  // Each deleteRepoBySlug runs its own (nested → savepoint) transaction. The
+  // bug: the CLI looped over the candidates with NO outer transaction, so a
+  // mid-batch throw left the repos deleted *before* the failure permanently
+  // gone while the rest survived — a partial, unrecoverable prune. The fix
+  // wraps the whole loop in one db.transaction so any throw rolls the entire
+  // batch back. This test pins that all-or-nothing invariant by replicating
+  // the CLI's runBatch construct and inducing a mid-batch failure.
+
+  it('rolls back ALL deletes when a delete mid-batch throws (all-or-nothing)', () => {
+    upsertRepo({ owner: 'o', name: 'first' });
+    upsertRepo({ owner: 'o', name: 'second' });
+    upsertRepo({ owner: 'o', name: 'third' });
+
+    const db = getDb();
+    const slugs = ['o/first', 'o/second', 'o/third'];
+
+    // Mirror the CLI's atomic batch: delete each slug, but the simulated
+    // failure fires partway through (after 'first' is deleted, before
+    // 'second'). Without the outer transaction, 'first' would already be gone.
+    const runBatch = db.transaction(() => {
+      for (const slug of slugs) {
+        deleteRepoBySlug(slug);
+        if (slug === 'o/first') {
+          throw new Error('simulated mid-batch failure');
+        }
+      }
+    });
+
+    expect(() => runBatch()).toThrow(/mid-batch failure/);
+
+    // All-or-nothing: because the batch threw, NOTHING is deleted — including
+    // 'o/first', which was deleted inside the transaction before the throw.
+    const remaining = db.prepare('SELECT slug FROM repos ORDER BY slug').all() as { slug: string }[];
+    const remainingSlugs = remaining.map((r) => r.slug);
+    expect(remainingSlugs).toContain('o/first');
+    expect(remainingSlugs).toContain('o/second');
+    expect(remainingSlugs).toContain('o/third');
+    expect(remainingSlugs).toHaveLength(3);
+  });
+
+  it('commits the whole batch when no delete throws', () => {
+    upsertRepo({ owner: 'o', name: 'x' });
+    upsertRepo({ owner: 'o', name: 'y' });
+
+    const db = getDb();
+    const slugs = ['o/x', 'o/y'];
+    let deletedCount = 0;
+    const runBatch = db.transaction(() => {
+      for (const slug of slugs) {
+        const result = deleteRepoBySlug(slug);
+        if (result.deleted) deletedCount += 1;
+      }
+    });
+    runBatch();
+
+    expect(deletedCount).toBe(2);
+    const remaining = db.prepare('SELECT COUNT(*) AS c FROM repos').get() as { c: number };
+    expect(remaining.c).toBe(0);
   });
 });

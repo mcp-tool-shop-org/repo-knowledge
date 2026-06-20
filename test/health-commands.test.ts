@@ -63,6 +63,31 @@ describe('buildFeed — change feed (per Treude & Storey 2010)', () => {
     expect(critDelta.payload.to).toBe(2);
   });
 
+  // hg-A-004: the first-snapshot branch (history.length === 1) used to
+  // emit only for severity_critical > 0, so a first-ever audit carrying
+  // ONLY high CVEs was silent for a full cycle. It must mirror the
+  // steady-state branch and emit a high audit_delta from null too.
+  it('emits a first-snapshot audit_delta for a HIGH-only first audit (hg-A-004)', () => {
+    const repoId = upsertRepo({ owner: 'o', name: 'high-only' }) as number;
+    appendDepAuditHistory({
+      repo_id: repoId,
+      severity_critical: 0, severity_high: 3,
+      severity_moderate: 0, severity_low: 0,
+      tool: 'npm_audit',
+    });
+    const events = buildFeed();
+    const highDelta = events.find(
+      e => e.kind === 'audit_delta' && e.payload.severity === 'high',
+    );
+    expect(highDelta).toBeDefined();
+    expect(highDelta!.payload.from).toBeNull();
+    expect(highDelta!.payload.to).toBe(3);
+    // And it must NOT spuriously emit a critical event (critical is 0).
+    expect(
+      events.some(e => e.kind === 'audit_delta' && e.payload.severity === 'critical'),
+    ).toBe(false);
+  });
+
   it('emits kev_intersect when a new CVE ID is in the KEV list', () => {
     const repoId = upsertRepo({ owner: 'o', name: 'r' }) as number;
     appendDepAuditHistory({
@@ -207,6 +232,39 @@ describe('buildHealthTable (JSON-first per McIlroy 1978 / jq)', () => {
     expect(rows.length).toBe(1);
     expect(rows[0].dep_health).toBe('red');
     expect(rows[0].detail.critical_cve_count).toBe(1);
+  });
+
+  // hg-A-002: audit-presence is the CVE-id sentinel, NOT last_ci_status.
+  // A CI-synced repo that has never had a dep-audit run must show
+  // dep_health=unknown (no repo_dep_audit_state row → NULL CVE-id columns),
+  // not green. The old gate keyed on last_ci_status===null, so any repo
+  // with a CI status leaked through to green.
+  it('grades dep_health unknown for a CI-synced repo with no dep-audit row (hg-A-002)', () => {
+    const repoId = upsertRepo({ owner: 'o', name: 'ci-only' }) as number;
+    setRepoCiStatus(repoId, { status: 'passing' });
+    // Deliberately NO appendDepAuditHistory call → no repo_dep_audit_state row.
+    const rows = buildHealthTable();
+    expect(rows.length).toBe(1);
+    expect(rows[0].detail.ci_status).toBe('passing');
+    expect(rows[0].dep_health).toBe('unknown');
+  });
+
+  // The complement: once a clean dep-audit lands (empty CVE-id arrays, as
+  // the real sync path always passes), the CVE-id columns are '[]' not
+  // NULL, so the repo correctly grades green — not unknown.
+  it('grades dep_health green for a scanned-clean repo with empty CVE-id arrays', () => {
+    const repoId = upsertRepo({ owner: 'o', name: 'clean' }) as number;
+    setRepoCiStatus(repoId, { status: 'passing' });
+    appendDepAuditHistory({
+      repo_id: repoId,
+      severity_critical: 0, severity_high: 0,
+      severity_moderate: 0, severity_low: 0,
+      tool: 'npm_audit',
+      critical_cve_ids: [],
+      high_cve_ids: [],
+    });
+    const rows = buildHealthTable();
+    expect(rows[0].dep_health).toBe('green');
   });
 
   it('grades dep_health yellow when critical > 0 but NO CVE IDs (shape-broken)', () => {

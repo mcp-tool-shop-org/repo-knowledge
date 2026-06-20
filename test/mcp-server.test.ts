@@ -1,141 +1,285 @@
 /**
- * F-TS-005: MCP server module smoke + import-time safety.
+ * MCP server: isolation + import-safety + end-to-end JSON-RPC behavior.
  *
- * Goal: lock down that the MCP server module can be imported without
- * throwing at module-load. The backend agent's F-BE-002 fix moves the
- * `openDb()` call inside `main()` so that import does not crash when
- * the DB path is missing — this test pins that invariant.
+ * ts-A-001 / ts-A-002: the prior version of these tests set RK_DB_PATH in the
+ * child env believing it isolated the server onto a temp DB. The server never
+ * read that env var, so it always opened the REAL data/knowledge.db and
+ * WAL-pragma'd it — the "fresh empty DB" comment was false and the stderr
+ * assertion was gated behind an `if` that was never true. These tests now
+ * isolate the same way cli-publish.test.ts does: spawn with cwd:tmpDir and an
+ * isolated rk.config.json whose dbPath points at a temp DB. (server.ts also now
+ * honors RK_DB_PATH as an explicit override, so both mechanisms work; we set
+ * both and assert the server actually opened the temp DB.)
  *
- * Why not test the tool handlers directly: server.ts uses
- * @modelcontextprotocol/sdk's McpServer.tool() which registers
- * handlers internally. The handlers are closures that close over the
- * imported db helpers — there is no exported factory to drive them
- * without spinning up a full StdioServerTransport. The clean path is
- * the smoke import + an end-to-end spawn test, both of which we cover.
+ * ts-A-004: the prior file had zero behavioral coverage of the MCP handlers —
+ * only an import smoke test, a SIGTERM spawn, and `node --check`. We now drive
+ * the server end-to-end over stdio (newline-delimited JSON-RPC) and assert
+ * get_repo / find_repos / search_repos / add_relationship (enum enforcement).
  *
- * Note: the server module currently runs `main()` at module-load
- * (line 735). A bare `import` will spawn the server and try to connect
- * stdio. We use a child process to test this — never import the
- * server module directly in this test (would hang the vitest worker).
+ * The server module runs main() at module-load and speaks JSON-RPC over stdio,
+ * so we always drive it via a child process — never import it directly (that
+ * would hang the vitest worker).
  */
-import { describe, it, expect } from 'vitest';
-import { existsSync } from 'node:fs';
-import { spawnSync, spawn } from 'node:child_process';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import {
+  openDb, closeDb,
+  upsertRepo, upsertNote,
+} from '../src/db/init.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const MCP = join(ROOT, 'dist', 'mcp', 'server.js');
 
-describe('MCP server module (F-TS-005)', () => {
+let tmpDir: string;
+let dbPath: string;
+let configPath: string;
+
+/** Build a single newline-delimited JSON-RPC line. */
+function rpc(obj: Record<string, unknown>): string {
+  return JSON.stringify(obj) + '\n';
+}
+
+interface JsonRpcResponse {
+  jsonrpc: '2.0';
+  id?: number | string;
+  result?: { content?: { type: string; text: string }[]; [k: string]: unknown };
+  error?: { code: number; message: string };
+}
+
+interface ExchangeResult {
+  status: number | null;
+  stderr: string;
+  responses: Map<number, JsonRpcResponse>;
+}
+
+/**
+ * Spawn the MCP server against the isolated temp DB, send the initialize
+ * handshake plus the supplied tools/call requests as newline-delimited
+ * JSON-RPC on stdin, then collect and parse the responses. Synchronous via
+ * spawnSync: the server reads stdin to EOF, flushes its responses, and exits
+ * cleanly when the event loop drains.
+ */
+function exchange(
+  calls: { id: number; name: string; args: Record<string, unknown> }[],
+  env: Record<string, string> = {},
+): ExchangeResult {
+  const lines: string[] = [];
+  lines.push(rpc({
+    jsonrpc: '2.0', id: 0, method: 'initialize',
+    params: {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'rk-test', version: '0.0.0' },
+    },
+  }));
+  lines.push(rpc({ jsonrpc: '2.0', method: 'notifications/initialized' }));
+  for (const c of calls) {
+    lines.push(rpc({
+      jsonrpc: '2.0', id: c.id, method: 'tools/call',
+      params: { name: c.name, arguments: c.args },
+    }));
+  }
+
+  const res = spawnSync('node', [MCP], {
+    encoding: 'utf-8',
+    timeout: 20000,
+    cwd: tmpDir,
+    input: lines.join(''),
+    env: { ...process.env, ...env, NO_COLOR: '1' },
+  });
+
+  const responses = new Map<number, JsonRpcResponse>();
+  for (const raw of (res.stdout || '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const msg = JSON.parse(line) as JsonRpcResponse;
+      if (typeof msg.id === 'number') responses.set(msg.id, msg);
+    } catch { /* non-JSON log noise on stdout — ignore */ }
+  }
+
+  return { status: res.status, stderr: res.stderr || '', responses };
+}
+
+/** Pull the parsed JSON object out of a tool's text content block. */
+function toolJson(resp: JsonRpcResponse | undefined): Record<string, unknown> {
+  expect(resp).toBeDefined();
+  expect(resp!.error).toBeUndefined();
+  const text = resp!.result?.content?.[0]?.text;
+  expect(typeof text).toBe('string');
+  return JSON.parse(text as string) as Record<string, unknown>;
+}
+
+beforeEach(() => {
+  tmpDir = mkdtempSync(join(ROOT, '.tmp-mcp-'));
+  dbPath = join(tmpDir, 'knowledge.db');
+  configPath = join(tmpDir, 'rk.config.json');
+  writeFileSync(
+    configPath,
+    JSON.stringify({ dbPath, owners: [], localDirs: [], artifactsRoot: join(tmpDir, 'artifacts') }, null, 2),
+    'utf-8',
+  );
+});
+
+afterEach(() => {
+  try { closeDb(); } catch { /* idempotent */ }
+  rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe('MCP server isolation (ts-A-001)', () => {
   if (!existsSync(MCP)) {
-    it.skip('dist/mcp/server.js not built — skip MCP smoke tests', () => {
-      // Intentional skip: tests need a built MCP server artifact.
-    });
+    it.skip('dist/mcp/server.js not built — skip MCP isolation tests', () => {});
     return;
   }
 
-  it('module loads and starts without throwing (smoke test)', () => {
-    // Spawn the MCP server in a child process. Because it speaks JSON-RPC
-    // over stdio, it will sit there waiting for input. We give it 1.5s to
-    // initialize, then SIGTERM it. If the module had a syntax/import
-    // error or threw at module-load, the child would exit non-zero
-    // immediately with the error on stderr.
-    const tmpDir = mkdtempSync(join(tmpdir(), 'rk-mcp-smoke-'));
-    try {
-      const child = spawn('node', [MCP], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          // Force a fresh empty DB so the test does not depend on user state
-          RK_DB_PATH: join(tmpDir, 'smoke.db'),
-        },
-      });
+  it('opens the isolated temp DB (cwd + rk.config.json), not the repo DB', () => {
+    // Seed a repo that only exists in the temp DB. A marker unlikely to ever
+    // appear in the real data/knowledge.db.
+    const marker = 'iso-' + Math.random().toString(36).slice(2, 10);
+    openDb(dbPath);
+    upsertRepo({ owner: 'isolated', name: marker, description: 'temp-db-only repo' });
+    closeDb();
 
-      let stderr = '';
-      let exitCode: number | null = null;
-      let exited = false;
-      child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-      child.on('exit', (code) => { exitCode = code; exited = true; });
+    const { responses, status } = exchange([
+      { id: 1, name: 'get_repo', args: { slug: `isolated/${marker}` } },
+    ]);
 
-      // Wait up to 1.5s for the process to fail-fast OR successfully boot
-      const start = Date.now();
-      while (!exited && Date.now() - start < 1500) {
-        // busy-wait — vitest workers don't have setTimeout sleep helpers
-        // and we want to detect crashes within ~100ms granularity.
-        const now = Date.now();
-        while (Date.now() - now < 50) { /* spin */ }
-      }
+    // The server must still be healthy (it exits 0 after stdin EOF).
+    expect(status === 0 || status === null).toBe(true);
 
-      if (!exited) {
-        // Still running — that's the success case for an MCP server.
-        // Tear it down cleanly.
-        child.kill('SIGTERM');
-      }
-
-      // If it exited within the window, it must have exited cleanly OR
-      // produced a structured stderr error. A crash with an unhandled
-      // throw is a regression.
-      if (exited && exitCode !== 0 && exitCode !== null) {
-        // Must have logged the failure reason — not silently crashed
-        expect(stderr).toMatch(/level|fatal|Error|openDb/);
-      } else {
-        // Server booted (still running when we killed it) — that's the
-        // expected healthy state. Stderr should NOT contain unhandled
-        // exception markers.
-        expect(stderr).not.toMatch(/UnhandledPromiseRejection|TypeError|SyntaxError/);
-      }
-    } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  it('module load reports config errors on stderr (not as crashes)', () => {
-    // F-BE-002 invariant: openDb errors are caught in main() and emitted
-    // as structured JSON on stderr with level=fatal, then exit(1). They
-    // are NOT thrown out of module-scope code.
-    //
-    // We simulate by pointing the server at an unreadable DB path
-    // (a directory, not a file). Better-sqlite3 will refuse to open it.
-    const badPath = join(ROOT, 'src'); // a directory, not a file
-    const res = spawnSync('node', [MCP], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8',
-      timeout: 5000,
-      env: {
-        ...process.env,
-        RK_DB_PATH: badPath,
-      },
-      // Send empty input so server reads EOF immediately
-      input: '',
-    });
-
-    // Either:
-    //  (a) the server crashed with the openDb failure surfaced on stderr,
-    //  (b) it ignored RK_DB_PATH (env var isn't honored) and ran with the
-    //      default path successfully — also acceptable; the contract is
-    //      "no silent module-load crash with no stderr message".
-    // What we forbid: exit code !=0 with empty stderr (silent crash).
-    if (res.status !== 0 && res.status !== null) {
-      expect(res.stderr).not.toBe('');
-    }
+    const text = responses.get(1)?.result?.content?.[0]?.text ?? '';
+    // If the server opened the TEMP db, it finds the seeded repo. If it opened
+    // the real repo DB (the bug), the unique slug is absent and it returns the
+    // notFound guidance message instead.
+    expect(text).toContain(`isolated/${marker}`);
+    expect(text).not.toMatch(/not found/i);
   });
 });
 
-describe('MCP server tool surface (smoke import)', () => {
+describe('MCP server reports config errors on stderr, not as a silent crash (ts-A-002)', () => {
   if (!existsSync(MCP)) {
     it.skip('dist/mcp/server.js not built — skip', () => {});
     return;
   }
 
-  it('module file is well-formed JavaScript', () => {
-    // Sanity: node --check parses the file without executing it. Catches
-    // syntax errors / import-resolution failures without booting the
-    // server. This is the "F-TS-005 minimum smoke test" the agent prompt
-    // calls for.
+  it('exits non-zero AND writes to stderr when pointed at an unopenable DB path', () => {
+    // openDb(config.dbPath) runs at module top-level in server.ts, so a DB
+    // path that better-sqlite3 cannot open throws out of module evaluation —
+    // node prints the error on stderr and exits non-zero. We force a genuinely
+    // unopenable path: a file inside a directory that does not exist.
+    const badPath = join(tmpDir, 'no', 'such', 'dir', 'x.db');
+    // Point the isolated config at the bad path AND set RK_DB_PATH (the
+    // explicit override) so isolation is real regardless of which the server
+    // consults first.
+    writeFileSync(
+      configPath,
+      JSON.stringify({ dbPath: badPath, owners: [], localDirs: [], artifactsRoot: join(tmpDir, 'artifacts') }, null, 2),
+      'utf-8',
+    );
+
+    const res = spawnSync('node', [MCP], {
+      encoding: 'utf-8',
+      timeout: 20000,
+      cwd: tmpDir,
+      input: '',
+      env: { ...process.env, RK_DB_PATH: badPath, NO_COLOR: '1' },
+    });
+
+    // Deterministic — no never-true guard. The bad path MUST surface as a
+    // non-zero exit with a non-empty stderr (no silent crash).
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).not.toBe('');
+    expect(res.stderr).toMatch(/Error|unable to open|openDb|database/i);
+  });
+});
+
+describe('MCP server end-to-end JSON-RPC behavior (ts-A-004)', () => {
+  if (!existsSync(MCP)) {
+    it.skip('dist/mcp/server.js not built — skip', () => {});
+    return;
+  }
+
+  // Seed a small corpus into the isolated temp DB before each behavioral test.
+  beforeEach(() => {
+    openDb(dbPath);
+    const a = upsertRepo({
+      owner: 'acme', name: 'alpha',
+      description: 'alpha service with quokka-token in the blurb',
+      status: 'active', category: 'tool',
+    }) as number;
+    upsertRepo({
+      owner: 'acme', name: 'beta',
+      description: 'beta library',
+      status: 'paused', category: 'library',
+    });
+    upsertNote(a, 'thesis', 'thesis', 'alpha holds the quokka-token concept');
+    closeDb();
+  });
+
+  it('get_repo returns the seeded repo dump', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'get_repo', args: { slug: 'acme/alpha' } },
+    ]);
+    const repo = toolJson(responses.get(1));
+    expect(repo.slug).toBe('acme/alpha');
+    // mcp-A-005: host paths are tucked under host_local, not spread at top.
+    expect(repo).not.toHaveProperty('local_path');
+  });
+
+  it('find_repos filters by status', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'find_repos', args: { status: 'paused' } },
+    ]);
+    const out = toolJson(responses.get(1)) as { count: number; repos: { slug: string }[] };
+    expect(out.count).toBe(1);
+    expect(out.repos[0].slug).toBe('acme/beta');
+  });
+
+  it('search_repos finds content across docs/notes/descriptions', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'search_repos', args: { query: 'quokka-token' } },
+    ]);
+    const out = toolJson(responses.get(1)) as { count: number; results: { slug: string }[] };
+    expect(out.count).toBeGreaterThan(0);
+    expect(out.results.some(r => r.slug === 'acme/alpha')).toBe(true);
+  });
+
+  it('add_relationship enforces the relation_type enum (invalid value rejected)', () => {
+    const { responses } = exchange([
+      // Valid relation first — proves the happy path works.
+      { id: 1, name: 'add_relationship', args: { from_slug: 'acme/alpha', relation_type: 'depends_on', to_slug: 'acme/beta' } },
+      // Invalid enum value — the Zod enum must reject this with a JSON-RPC error.
+      { id: 2, name: 'add_relationship', args: { from_slug: 'acme/alpha', relation_type: 'totally_made_up', to_slug: 'acme/beta' } },
+    ]);
+
+    // Happy path: structured success text, no error.
+    const ok = responses.get(1);
+    expect(ok?.error).toBeUndefined();
+    expect(ok?.result?.content?.[0]?.text ?? '').toMatch(/Relationship added/i);
+
+    // Enum enforcement: the SDK validates the z.enum BEFORE the handler runs
+    // and returns the rejection as a graceful tool result (isError: true) with
+    // the validation message in the content text — NOT a server crash and NOT
+    // a top-level JSON-RPC error. Pins SHIP_GATE B (never crash on bad input).
+    const bad = responses.get(2);
+    expect(bad).toBeDefined();
+    expect(bad?.result?.isError).toBe(true);
+    expect(bad?.result?.content?.[0]?.text ?? '').toMatch(/Invalid|validation|relation_type/i);
+  });
+});
+
+describe('MCP server module is well-formed (smoke)', () => {
+  if (!existsSync(MCP)) {
+    it.skip('dist/mcp/server.js not built — skip', () => {});
+    return;
+  }
+
+  it('node --check parses the module without executing it', () => {
+    // Catches syntax / import-resolution failures without booting the server.
     const res = spawnSync('node', ['--check', MCP], {
       encoding: 'utf-8',
       timeout: 5000,

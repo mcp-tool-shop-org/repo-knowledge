@@ -78,4 +78,43 @@ describe('CLI async error surfacing (F-TS-003)', () => {
     expect(code).toBe(0);
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
+
+  // cli-A-005: parsePositiveInt used parseInt, which truncates partial
+  // numbers: parseInt('10x') → 10. A typo'd limit would silently degrade into
+  // a valid-looking value instead of being rejected. `rk runs --limit <n>`
+  // coerces during commander arg parsing (before any DB open), so it's a
+  // clean vehicle. The fix requires String(n) === trimmed input.
+  it('rejects a partially-numeric --limit ("10x") with exit 2', () => {
+    const { code, stderr, stdout } = runCli(['runs', '--limit', '10x']);
+    expect(code).toBe(2);
+    expect(stderr + stdout).toMatch(/Invalid --limit|positive integer/i);
+  });
+
+  it('rejects scientific-notation --limit ("1e2") with exit 2', () => {
+    const { code } = runCli(['runs', '--limit', '1e2']);
+    expect(code).toBe(2);
+  });
+
+  it('rejects a fractional --limit ("10.9") with exit 2', () => {
+    const { code } = runCli(['runs', '--limit', '10.9']);
+    expect(code).toBe(2);
+  });
+
+  it('still accepts a clean positive integer --limit', () => {
+    // Sanity: the digits-only guard must not reject legitimate input. `runs`
+    // with a valid --limit exits 0 (it queries operational-run tables, which
+    // are empty/harmless on the production DB).
+    const { code } = runCli(['runs', '--limit', '5', '--json']);
+    expect(code).toBe(0);
+  });
+
+  // cli-A-003: `rk prune --apply --dry-run` previously took the destructive
+  // --apply branch because --dry-run was never read. The two flags are
+  // contradictory; pairing them must error (exit 2), not silently delete.
+  // This guard runs before openDb so it doesn't touch the production DB.
+  it('rejects contradictory `prune --apply --dry-run` with exit 2', () => {
+    const { code, stderr, stdout } = runCli(['prune', '--apply', '--dry-run']);
+    expect(code).toBe(2);
+    expect(stderr + stdout).toMatch(/only one of --dry-run or --apply|not both/i);
+  });
 });

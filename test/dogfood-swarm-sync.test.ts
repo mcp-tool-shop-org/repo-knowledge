@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import {
   openDb, closeDb, getDb,
-  upsertRepo, getRepoIdBySlug,
+  upsertRepo, getRepoIdBySlug, upsertFact,
 } from '../src/db/init.js';
 import { syncDogfood } from '../src/sync/dogfood.js';
 import { syncSwarmControlPlane } from '../src/sync/swarm.js';
+import { suggestBySurface } from '../src/sync/dogfood-suggest.js';
 
 let tmpDir: string;
 
@@ -202,6 +203,65 @@ describe('Swarm control-plane sync', () => {
     expect(keys).not.toContain('F-OLD-1');
   });
 
+  it('breaks created_at ties deterministically by id; surfaces CRITICAL + recurring (ts-A-005 / ts-A-006)', async () => {
+    const fixtureDir = join(tmpDir, 'dogfood-labs');
+    mkdirSync(fixtureDir);
+    createBaseFixtures(fixtureDir);
+    // Two runs for the SAME repo with the SAME created_at. ORDER BY
+    // created_at alone leaves the Map-overwrite winner undefined — on a
+    // plain scan SQLite returns rows in insertion (rowid) order, so the
+    // LAST-inserted run wins. We insert the intended WINNER ('swarm-zzz',
+    // greater id) FIRST and the intended LOSER ('swarm-aaa') LAST, so:
+    //   - buggy ORDER BY created_at → loser 'swarm-aaa' inserted last wins
+    //     → run:id='swarm-aaa' → assertions below FAIL.
+    //   - fixed ORDER BY created_at ASC, id ASC → 'swarm-zzz' (greater id)
+    //     sorts last → wins → run:id='swarm-zzz' → assertions PASS.
+    // The winning run carries a CRITICAL + recurring finding so the rollup
+    // also pins ts-A-006: CRITICAL shows in open_by_severity AND
+    // 'recurring' counts as open (it is in OPEN_STATUSES).
+    createControlPlaneDb(fixtureDir,
+      [
+        { id: 'swarm-zzz', repo: 'test-org/repo-mcp', commit_sha: 'winner0', created_at: '2026-06-01 00:00:00' },
+        { id: 'swarm-aaa', repo: 'test-org/repo-mcp', commit_sha: 'loser00', created_at: '2026-06-01 00:00:00' },
+      ],
+      [
+        { run_id: 'swarm-zzz', finding_id: 'F-WIN-CRIT', severity: 'CRITICAL', category: 'security', description: 'critical recurring issue', status: 'recurring' },
+        { run_id: 'swarm-aaa', finding_id: 'F-LOSE-1', severity: 'LOW', category: 'style', description: 'from the losing run', status: 'new' },
+      ],
+    );
+
+    const result = await syncDogfood({ localPath: fixtureDir });
+
+    // Only one run mirrored, and it is the higher-id tie-break winner.
+    expect(result.swarm!.runs).toBe(1);
+
+    const db = getDb();
+    const repoId = getRepoIdBySlug('test-org/repo-mcp');
+    const rollups = Object.fromEntries(
+      (db.prepare(
+        "SELECT key, value FROM repo_facts WHERE repo_id = ? AND fact_type = 'dogfood.swarm'",
+      ).all(repoId) as { key: string; value: string }[]).map((r) => [r.key, r.value]),
+    );
+
+    // Tie-break: the winning run's id + commit are stamped, not the loser's.
+    expect(rollups['run:id']).toBe('swarm-zzz');
+    expect(rollups['run:commit_sha']).toBe('winner0');
+
+    // ts-A-006: the recurring CRITICAL finding is the only finding mirrored
+    // (we read the winning run's findings, not the loser's), it counts as
+    // open, and it lands in the CRITICAL severity bucket.
+    expect(rollups['findings:total']).toBe('1');
+    expect(rollups['findings:open']).toBe('1');
+    expect(rollups['findings:open_by_severity']).toBe('CRITICAL=1,HIGH=0,MEDIUM=0,LOW=0');
+
+    // The losing run's finding must NOT be present.
+    const findingKeys = (db.prepare(
+      "SELECT key FROM repo_facts WHERE repo_id = ? AND fact_type = 'dogfood.swarm.finding'",
+    ).all(repoId) as { key: string }[]).map((r) => r.key);
+    expect(findingKeys).toEqual(['F-WIN-CRIT']);
+    expect(findingKeys).not.toContain('F-LOSE-1');
+  });
+
   it('returns null when no control-plane DB exists', () => {
     const fixtureDir = join(tmpDir, 'dogfood-labs');
     mkdirSync(fixtureDir);
@@ -234,5 +294,106 @@ describe('Swarm control-plane sync', () => {
     expect(result.swarm!.findings).toBe(0);
     expect(result.swarm!.skipped.length).toBe(1);
     expect(result.swarm!.skipped[0]).toContain('unknown-org/mystery');
+  });
+});
+
+describe('syncDogfood index error handling', () => {
+  it('throws a structured, path-bearing error on a malformed local index (sync-A-002)', async () => {
+    const fixtureDir = join(tmpDir, 'dogfood-labs');
+    const indexDir = join(fixtureDir, 'indexes');
+    mkdirSync(indexDir, { recursive: true });
+    // Truncated / invalid JSON — a bare JSON.parse here would throw the
+    // terse "Unexpected end of JSON input" with no path context.
+    writeFileSync(join(indexDir, 'latest-by-repo.json'), '{ "test-org/repo-mcp": ');
+
+    await expect(syncDogfood({ localPath: fixtureDir })).rejects.toThrow(
+      /dogfood index at .*latest-by-repo\.json is malformed:/,
+    );
+  });
+
+  it('skips-with-warning a repo whose surfaces value is null / non-object (sync-A-003)', async () => {
+    const fixtureDir = join(tmpDir, 'dogfood-labs');
+    const indexDir = join(fixtureDir, 'indexes');
+    mkdirSync(indexDir, { recursive: true });
+    // Drifted index: 'test-org/repo-mcp' has a valid surfaces object, but
+    // two sibling repos carry a null and an array value respectively.
+    // Without the shape guard, the null value throws at Object.entries
+    // mid-walk and kills the whole sync (the valid repo never lands).
+    writeFileSync(join(indexDir, 'latest-by-repo.json'), JSON.stringify({
+      'test-org/repo-mcp': {
+        'mcp-server': {
+          run_id: 'repo-mcp-1', verified: 'pass', verification_status: 'accepted',
+          finished_at: freshDate, path: 'records/test-org/repo-mcp/run-1.json',
+        },
+      },
+      'test-org/null-repo': null,
+      'test-org/array-repo': ['not', 'an', 'object'],
+    }));
+
+    const result = await syncDogfood({ localPath: fixtureDir });
+
+    // The valid repo still synced — a single drifted value did not abort
+    // the walk.
+    expect(result.repos).toBe(1);
+    const repoId = getRepoIdBySlug('test-org/repo-mcp');
+    expect(repoId).not.toBeNull();
+
+    // Both malformed entries were recorded in skipped with an actionable
+    // reason naming the bad shape.
+    const skippedNull = result.skipped.find(s => s.includes('test-org/null-repo'));
+    const skippedArray = result.skipped.find(s => s.includes('test-org/array-repo'));
+    expect(skippedNull).toBeDefined();
+    expect(skippedNull).toMatch(/malformed surfaces value/);
+    expect(skippedArray).toBeDefined();
+    expect(skippedArray).toMatch(/got array/);
+  });
+});
+
+describe('suggestBySurface — LIKE escaping + exact membership (sync-A-007)', () => {
+  // Seed a repo with a CSV `surfaces` fact and one finding so the
+  // suggestion has scoped content to return.
+  function seedRepoWithSurfaces(slug: string, owner: string, name: string, surfacesCsv: string, findingId: string) {
+    upsertRepo({ slug, owner, name } as any);
+    const repoId = getRepoIdBySlug(slug)!;
+    upsertFact(repoId, 'dogfood', 'surfaces', surfacesCsv, 'detected', 'testing-os/indexes/latest-by-repo.json');
+    upsertFact(repoId, 'dogfood.finding', findingId, JSON.stringify({
+      title: `finding for ${slug}`, issue_kind: 'bug', summary: 's',
+    }), 'detected', 'testing-os/intelligence-export');
+    return repoId;
+  }
+
+  it('treats an underscore in --surface literally instead of as a wildcard', () => {
+    // Two repos, neither with a literal underscore in its surfaces CSV.
+    seedRepoWithSurfaces('o/cli-repo', 'o', 'cli-repo', 'cli', 'F-CLI-1');
+    seedRepoWithSurfaces('o/rep-repo', 'o', 'rep-repo', 'reports', 'F-REP-1');
+
+    // Buggy LIKE '%_%' makes `_` match any single char → EVERY repo with a
+    // non-empty surfaces CSV matches. With the fix, `_` is escaped + the
+    // exact membership check requires a surface literally named "_", which
+    // neither repo has → no findings returned.
+    const result = suggestBySurface('_');
+    expect(result.findings.length).toBe(0);
+  });
+
+  it('matches a surface as a whole CSV element, not a substring', () => {
+    // 'cli-docs' must NOT be matched by querying 'cli' — substring match
+    // was never intended; the surface list is comma-delimited elements.
+    seedRepoWithSurfaces('o/docs-repo', 'o', 'docs-repo', 'cli-docs', 'F-DOCS-1');
+
+    const substringQuery = suggestBySurface('cli');
+    expect(substringQuery.findings.find(f => f.finding_id === 'F-DOCS-1')).toBeUndefined();
+
+    // Exact element matches.
+    const exactQuery = suggestBySurface('cli-docs');
+    expect(exactQuery.findings.find(f => f.finding_id === 'F-DOCS-1')).toBeDefined();
+  });
+
+  it('returns the matching repo for an exact multi-element CSV surface', () => {
+    seedRepoWithSurfaces('o/multi', 'o', 'multi', 'mcp-server,cli', 'F-MULTI-1');
+
+    const cliHit = suggestBySurface('cli');
+    expect(cliHit.findings.find(f => f.finding_id === 'F-MULTI-1')).toBeDefined();
+    const mcpHit = suggestBySurface('mcp-server');
+    expect(mcpHit.findings.find(f => f.finding_id === 'F-MULTI-1')).toBeDefined();
   });
 });

@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   openDb, closeDb, getDb,
-  upsertRepo, upsertNote,
+  upsertRepo, upsertNote, upsertDoc,
   listDbHealthRuns,
 } from '../src/db/init.js';
 import { runFsck } from '../src/health/fsck.js';
@@ -152,6 +152,35 @@ describe('runFsck — checkFtsRowCountMismatch', () => {
     // match the source.
     rebuildIndex();
     const report = runFsck();
+    expect(report.checks.fts_row_count_mismatch.count).toBe(0);
+  });
+
+  // hg-A-003: rebuildIndex INNER JOINs repo_docs/repo_notes against repos,
+  // so orphan docs/notes (repo_id with no parent) are NEVER indexed. The
+  // expected-count formula must mirror that join — otherwise an orphan doc
+  // inflates `expected` past `fts` and fires a spurious mismatch WARN.
+  it('does not report a spurious FTS mismatch for an orphan doc (hg-A-003)', () => {
+    const id = upsertRepo({ owner: 'o', name: 'a', description: 'an indexable description' });
+    // A legit doc on a real repo — part of the indexable corpus.
+    upsertDoc(id, 'README.md', 'readme', 'README', 'doc body', 'sum-1');
+    // Sync FTS to exactly the legit sources.
+    rebuildIndex();
+
+    // Plant an ORPHAN doc: repo_id points at no repo. FK off to bypass
+    // enforcement, mirroring legacy pre-FK data. rebuildIndex's INNER
+    // JOIN excludes it, so it is NOT in repo_search.
+    const db = getDb();
+    db.pragma('foreign_keys = OFF');
+    db.prepare(`
+      INSERT INTO repo_docs (repo_id, path, doc_type, title, content, checksum)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(91919, 'orphan.md', 'readme', 'orphan', 'orphan body', 'sum-orphan');
+    db.pragma('foreign_keys = ON');
+
+    const report = runFsck();
+    // The orphan is counted by checkOrphanRows (correct) but must NOT
+    // perturb the FTS expected-count — both sides exclude it.
+    expect(report.checks.orphan_rows.count).toBeGreaterThan(0);
     expect(report.checks.fts_row_count_mismatch.count).toBe(0);
   });
 

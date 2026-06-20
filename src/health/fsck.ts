@@ -214,17 +214,34 @@ function checkFtsRowCountMismatch(): FsckCheck {
   const fts = (db.prepare('SELECT COUNT(*) AS c FROM repo_search').get() as { c: number }).c;
   // The FTS index mirrors three sources (per src/search/fts.ts
   // rebuildIndex): repos with description/purpose, repo_docs with
-  // content, repo_notes. We compute the same sum and compare.
+  // content, repo_notes. We must compute the SAME sum or the check
+  // false-positives.
+  //
+  // hg-A-003: rebuildIndex INNER JOINs repo_docs / repo_notes against
+  // repos, so an orphan doc/note (repo_id with no parent repo) is NOT
+  // indexed. Counting those orphans here produced a spurious FTS
+  // mismatch WARN. Mirror rebuildIndex exactly: INNER JOIN repos for
+  // docs + notes. (The repos predicate already matches
+  // [description, purpose].filter(Boolean) — non-empty either field.)
   const repoSources = (db.prepare(`
     SELECT COUNT(*) AS c FROM repos
      WHERE (description IS NOT NULL AND description != '')
         OR (purpose IS NOT NULL AND purpose != '')
   `).get() as { c: number }).c;
   const docSources = tableExists('repo_docs')
-    ? (db.prepare('SELECT COUNT(*) AS c FROM repo_docs WHERE content IS NOT NULL').get() as { c: number }).c
+    ? (db.prepare(`
+        SELECT COUNT(*) AS c
+          FROM repo_docs d
+          JOIN repos r ON r.id = d.repo_id
+         WHERE d.content IS NOT NULL
+      `).get() as { c: number }).c
     : 0;
   const noteSources = tableExists('repo_notes')
-    ? (db.prepare('SELECT COUNT(*) AS c FROM repo_notes').get() as { c: number }).c
+    ? (db.prepare(`
+        SELECT COUNT(*) AS c
+          FROM repo_notes n
+          JOIN repos r ON r.id = n.repo_id
+      `).get() as { c: number }).c
     : 0;
   const expected = repoSources + docSources + noteSources;
   const diff = Math.abs(fts - expected);

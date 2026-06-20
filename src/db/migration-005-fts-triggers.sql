@@ -13,8 +13,13 @@
 --     don't support UPDATE in the same shape, and the delete keeps the index
 --     deduplicated against any prior rebuild that may have left rows).
 --   * DELETE removes the matching row by source_type + source_id.
---   * Triggers reference the slug via JOIN to repos at trigger time so they
---     stay correct even after a repo's owner/name changes.
+--   * The note/doc triggers reference the slug via JOIN to repos at trigger
+--     time, so a freshly inserted/updated note or doc row always gets the
+--     CURRENT slug. But a repo SLUG RENAME does not re-fire the note/doc
+--     triggers — their rows keep the OLD slug until the row is next edited.
+--     The repos UPDATE trigger below therefore also rewrites the slug on the
+--     repo's existing note/doc FTS rows (db-A-004-DB), so a rename keeps all
+--     of a repo's search rows grouped under one slug.
 --
 -- The triggers are CREATE TRIGGER IF NOT EXISTS, so re-running this migration
 -- is safe. The migration script is also idempotent against partially applied
@@ -44,6 +49,14 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_repo_search_repos_update
 AFTER UPDATE ON repos
 BEGIN
+  -- db-A-004-DB: when the repo's slug changes, carry the new slug onto
+  -- the repo's existing doc/note FTS rows too. Those rows were written
+  -- with the slug current at note/doc edit time and are NOT re-fired by
+  -- a repos UPDATE, so without this they keep the OLD slug and the
+  -- repo's search results split across two slugs. Guarded on an actual
+  -- rename so the common no-slug-change UPDATE stays a single-row touch.
+  UPDATE repo_search SET slug = NEW.slug
+   WHERE slug = OLD.slug AND OLD.slug <> NEW.slug;
   DELETE FROM repo_search WHERE source_type = 'repo' AND source_id = CAST(NEW.id AS TEXT);
   INSERT INTO repo_search (slug, source_type, source_id, title, content)
   SELECT

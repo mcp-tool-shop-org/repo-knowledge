@@ -101,12 +101,18 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
   const db = getDb();
   const limit = opts.limit || 20;
 
-  // FTS5 query: handle simple terms by adding * for prefix matching
+  // FTS5 query: wrap EVERY whitespace-separated term in double quotes so the
+  // input is always treated as literal phrases ANDed together. mcp-A-002: the
+  // old code passed terms containing ':', '"', or '*' through verbatim, which
+  // let a natural-language query with a colon or a URL be reinterpreted as
+  // FTS5 syntax (column filters, prefix tokens) and either error or mis-match.
+  // mcp-A-004: this layer does NOT do prefix matching — it never appends '*';
+  // it quotes terms into literal phrases. (Embedded double quotes are doubled
+  // per the FTS5 string-literal escaping rule so they don't terminate early.)
   const ftsQuery = query
     .split(/\s+/)
-    .map(term => term.includes(':') || term.includes('"') || term.includes('*')
-      ? term
-      : `"${term}"`)
+    .filter(Boolean)
+    .map(term => `"${term.replace(/"/g, '""')}"`)
     .join(' ');
 
   try {
@@ -137,6 +143,18 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
     const simpleTerm = query.replace(/[^\p{L}\p{N}\s]/gu, '');
     if (!simpleTerm.trim()) return [];
 
+    // mcp-A-003: quote each surviving token individually and join with spaces
+    // so the fallback preserves the primary path's per-term AND semantics. The
+    // old code wrapped the WHOLE multi-word query in one set of quotes —
+    // `"redis cache"` — which is an FTS5 phrase requiring the words to be
+    // adjacent, silently narrowing results vs. the intended `"redis" "cache"`
+    // (both terms present, any position).
+    const fallbackQuery = simpleTerm
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(t => `"${t}"`)
+      .join(' ');
+
     return db.prepare(`
       SELECT
         slug,
@@ -149,7 +167,7 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
       WHERE repo_search MATCH ?
       ORDER BY rank
       LIMIT ?
-    `).all(`"${simpleTerm}"`, limit) as SearchResult[];
+    `).all(fallbackQuery, limit) as SearchResult[];
   }
 }
 
@@ -158,7 +176,14 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
  * Returns unique repo slugs with match context.
  */
 export function searchRepos(query: string, opts: SearchOptions = {}): RepoSearchResult[] {
-  const results = search(query, { ...opts, limit: 50 });
+  // cli-A-002: feed the caller's requested limit into the inner FTS query
+  // instead of a hardcoded 50. Multiple matches can collapse onto one slug
+  // during grouping, so a hardcoded inner cap of 50 silently under-delivered
+  // whenever the caller asked for more than 50 repos (e.g. `--limit 80`). We
+  // keep a floor of 50 rows so small-limit callers still see enough raw
+  // matches to group well, then slice to opts.limit below.
+  const innerLimit = Math.max(50, opts.limit ?? 50);
+  const results = search(query, { ...opts, limit: innerLimit });
 
   // Group by slug
   const bySlug = new Map<string, RepoSearchResult>();

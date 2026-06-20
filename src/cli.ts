@@ -91,13 +91,20 @@ function config(): ReturnType<typeof resolveConfig> {
   return _configCache;
 }
 
-// F-BE-008: parse positive integer with surface-naming error. Exits 2 with a
-// helpful message if the value is non-numeric, NaN, infinite, or < 1. Used
-// for --limit and similar numeric options where bad input would silently
-// degrade (parseInt('foo') → NaN → undefined SQL bind → no results).
+// F-BE-008 / cli-A-005: parse positive integer with surface-naming error.
+// Exits 2 with a helpful message if the value is non-numeric, NaN, infinite,
+// or < 1. Used for --limit and similar numeric options where bad input would
+// silently degrade (parseInt('foo') → NaN → undefined SQL bind → no results).
+//
+// parseInt is *too* lenient: parseInt('10x') → 10, parseInt('1e2') → 1,
+// parseInt('10.9') → 10. Those would silently truncate a typo into a valid
+// looking limit. We require the trimmed input to be exactly the canonical
+// decimal form of the parsed integer (a digits-only value) so partial parses
+// are rejected, not truncated.
 function parsePositiveInt(value: string, label: string): number {
-  const n = Number.parseInt(value, 10);
-  if (!Number.isFinite(n) || n < 1) {
+  const trimmed = value.trim();
+  const n = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(n) || n < 1 || String(n) !== trimmed) {
     console.error(`Invalid ${label}: ${value}`);
     console.error(`Expected a positive integer (e.g., --limit 10).`);
     process.exit(2);
@@ -518,7 +525,9 @@ program
     }
 
     upsertNote(repoId, opts.type, opts.title || opts.type, opts.content);
-    console.log(`Note added to ${slug}`);
+    // cli-A-001: echo the resolved canonical slug, not the user's input, so a
+    // partial match makes the real target visible.
+    console.log(`Note added to ${canonicalSlug(repoId, slug)}`);
     rebuildIndex();
     closeDb();
   });
@@ -554,7 +563,8 @@ program
     }
 
     addRelationship(fromId, type, toId, opts.note);
-    console.log(`Relationship added: ${from} ${type} ${to}`);
+    // cli-A-001: echo the resolved canonical slugs, not the user's input.
+    console.log(`Relationship added: ${canonicalSlug(fromId, from)} ${type} ${canonicalSlug(toId, to)}`);
     closeDb();
   });
 
@@ -857,6 +867,17 @@ program
   .option('--apply', 'Actually delete the archived candidates', false)
   .option('--days <n>', 'Minimum days since archive', '30')
   .action(async (opts: { dryRun: boolean; apply: boolean; days: string }): Promise<void> => {
+    // cli-A-003: reject the contradictory --dry-run + --apply combination
+    // BEFORE opening the DB. Previously --dry-run was never read, so
+    // `--apply --dry-run` silently took the destructive branch — the opposite
+    // of what a user pairing the two flags expects. Mirror the suggest-dogfood
+    // ambiguous-invocation guard.
+    if (opts.dryRun && opts.apply) {
+      console.error('Error: specify only one of --dry-run or --apply, not both.');
+      console.error('Example: rk prune --days 30            (dry-run, the default)');
+      console.error('   or:   rk prune --days 30 --apply    (actually delete)');
+      process.exit(2);
+    }
     const days = parsePositiveInt(opts.days, '--days');
     openDb(config().dbPath);
 
@@ -895,18 +916,34 @@ program
       process.exit(2);
     }
 
+    // cli-A-004: the whole --apply batch is all-or-nothing. Each
+    // deleteRepoBySlug runs its own (now nested → savepoint) transaction, but
+    // without the outer wrapper a mid-batch throw would leave the repos
+    // deleted *before* the failure permanently gone while the rest survived —
+    // a partial, unrecoverable prune. Wrapping the loop in one db.transaction
+    // means any throw rolls the entire batch back: nothing is deleted unless
+    // everything can be.
+    const db = getDb();
     let totalCascaded = 0;
     let deletedCount = 0;
-    for (const slug of slugs) {
-      try {
+    const runBatch = db.transaction(() => {
+      for (const slug of slugs) {
         const result = deleteRepoBySlug(slug);
         if (result.deleted) {
           deletedCount += 1;
           totalCascaded += result.cascaded_rows;
         }
-      } catch (e: unknown) {
-        console.error(`  Failed: ${slug} — ${(e as Error).message}`);
       }
+    });
+
+    try {
+      runBatch();
+    } catch (e: unknown) {
+      // Roll-back already happened inside db.transaction; report and exit
+      // non-zero so the caller knows NOTHING was pruned.
+      console.error(`Prune aborted — no repos deleted (transaction rolled back): ${(e as Error).message}`);
+      closeDb();
+      process.exit(1);
     }
 
     console.log(
@@ -1244,15 +1281,43 @@ program
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// cli-A-001: resolve a user-supplied slug to a repo id. Exact slug wins
+// immediately. The partial-match fallback used to be an UNORDERED/UNLIMITED
+// `LIKE %slug%` that silently returned an arbitrary first row — so an
+// ambiguous fragment (e.g. "shipcheck" matching both `org/shipcheck` and
+// `org/shipcheck-plugin`) would mutate whichever repo SQLite happened to
+// return first. We now order by slug and, if more than one partial match
+// exists, exit 2 listing the candidates rather than guessing. Callers should
+// re-resolve the canonical slug from the returned id before echoing it back
+// to the user (provenance-on-display).
 function resolveRepoId(slug: string): number | null {
   const db = getDb();
   // Try exact slug
-  let row = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
-  if (row) return row.id;
+  const exact = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
+  if (exact) return exact.id;
 
-  // Try partial match
-  row = db.prepare('SELECT id FROM repos WHERE slug LIKE ? OR name = ?').get(`%${slug}%`, slug) as { id: number } | undefined;
-  return row?.id || null;
+  // Try partial match — ordered + ambiguity-aware.
+  const matches = db.prepare(
+    'SELECT id, slug FROM repos WHERE slug LIKE ? OR name = ? ORDER BY slug'
+  ).all(`%${slug}%`, slug) as { id: number; slug: string }[];
+
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    console.error(`Error: ambiguous slug "${slug}" — matches: ${matches.map((m) => m.slug).join(', ')}`);
+    console.error(`Disambiguate by passing the full slug.`);
+    closeDb();
+    process.exit(2);
+  }
+  return matches[0].id;
+}
+
+// cli-A-001: re-resolve the canonical slug from a repo id so success lines
+// echo the resolved target, not the user's (possibly partial) input. Mirrors
+// the diff command's canonical re-resolution at the `diff <slug>` handler.
+function canonicalSlug(repoId: number, fallback: string): string {
+  const db = getDb();
+  const row = db.prepare('SELECT slug FROM repos WHERE id = ?').get(repoId) as { slug: string } | undefined;
+  return row?.slug ?? fallback;
 }
 
 function formatRepo(repo: Record<string, any>): string {

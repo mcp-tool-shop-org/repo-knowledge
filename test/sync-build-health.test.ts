@@ -311,6 +311,46 @@ describe('scanWorkflowPermissions (per Beyer 2016 SRE Workbook)', () => {
       'id-token': 'write',
     });
   });
+
+  it('normalizes inline flow-mapping permissions to the same object shape as block form (sync-A-005)', () => {
+    // Inline flow-mapping must parse into a Record, NOT a double-encoded
+    // raw string. The buggy code did JSON.stringify(rest) → the literal
+    // text "{ contents: read, id-token: write }", so JSON.parse yielded a
+    // string and consumers that expected an object (as block form gives)
+    // broke. This pins object-shape parity across the two YAML forms.
+    seedWorkflow([
+      'name: Release',
+      'permissions: { contents: read, id-token: write }',
+      'jobs:',
+      '  publish:',
+      '    runs-on: ubuntu-latest',
+    ].join('\n'), 'inline.yml');
+    const result = scanWorkflowPermissions(tmpDir);
+    expect(result.length).toBe(1);
+    const parsed = JSON.parse(result[0].permissions_json);
+    // Must be an object, not a string — this is the half the bug got wrong.
+    expect(typeof parsed).toBe('object');
+    expect(Array.isArray(parsed)).toBe(false);
+    expect(parsed).toEqual({
+      contents: 'read',
+      'id-token': 'write',
+    });
+  });
+
+  it('still stores inline keyword permissions (read-all) as a JSON string scalar (sync-A-005 other half)', () => {
+    // The keyword form has no key:value structure, so it stays a scalar.
+    // This pins that the flow-mapping fix did NOT over-reach into keywords.
+    seedWorkflow([
+      'name: CI',
+      'permissions: write-all',
+      'jobs:',
+      '  test:',
+      '    runs-on: ubuntu-latest',
+    ].join('\n'), 'keyword.yml');
+    const result = scanWorkflowPermissions(tmpDir);
+    expect(result.length).toBe(1);
+    expect(JSON.parse(result[0].permissions_json)).toBe('write-all');
+  });
 });
 
 // ─── observeToolchain ────────────────────────────────────────────────────

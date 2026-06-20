@@ -252,4 +252,69 @@ describe('rk versions / drift / bind-package (F-TS-FT2)', () => {
     expect(row.publisher_method).toBe('npm_trusted');
     closeDb();
   });
+
+  // ─── cli-A-001: resolveRepoId ambiguity + provenance-on-display ──────────
+  //
+  // Two overlapping-slug repos (`o/shipcheck` and `o/shipcheck-plugin`) live
+  // in the DB. The fragment "shipcheck" is a partial match for BOTH. The old
+  // resolveRepoId did an UNORDERED/UNLIMITED `LIKE %shipcheck%` and returned
+  // whichever row SQLite handed back first — so `rk note shipcheck ...` would
+  // silently mutate an arbitrary one of the two. The fix makes the partial
+  // path ambiguity-aware (exit 2 listing the candidates). It also re-resolves
+  // the canonical slug from the chosen id so a *unique* partial echoes the
+  // full target back, not the user's fragment (cli-A-006).
+
+  it('rk note with an ambiguous partial slug errors-as-ambiguous (exit 2), mutating neither repo', () => {
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'shipcheck' });
+    upsertRepo({ owner: 'o', name: 'shipcheck-plugin' });
+    closeDb();
+
+    const { code, stderr, stdout } = runCli([
+      'note', 'shipcheck', '--type', 'thesis', '--content', 'ambiguous target',
+    ]);
+
+    // Must refuse to guess: exit 2, and name both candidates so the user can
+    // disambiguate.
+    expect(code).toBe(2);
+    expect(stderr + stdout).toMatch(/ambiguous/i);
+    expect(stderr + stdout).toMatch(/o\/shipcheck/);
+    expect(stderr + stdout).toMatch(/o\/shipcheck-plugin/);
+
+    // Neither repo may have received the note — the ambiguity guard fires
+    // before any write.
+    openDb(dbPath);
+    const noteCount = getDb().prepare(
+      'SELECT COUNT(*) AS c FROM repo_notes'
+    ).get() as { c: number };
+    expect(noteCount.c).toBe(0);
+    closeDb();
+  });
+
+  it('rk note with a unique partial slug echoes the canonical slug, not the user input', () => {
+    openDb(dbPath);
+    // Only one repo contains the fragment "uniquely-named" so the partial
+    // resolves unambiguously.
+    upsertRepo({ owner: 'o', name: 'uniquely-named-repo' });
+    upsertRepo({ owner: 'o', name: 'something-else' });
+    closeDb();
+
+    const { code, stdout } = runCli([
+      'note', 'uniquely-named', '--type', 'thesis', '--content', 'provenance check',
+    ]);
+
+    expect(code).toBe(0);
+    // The success line must surface the resolved canonical slug, NOT the
+    // partial the user typed. The bug echoed back the raw input ("Note added
+    // to uniquely-named"), hiding which repo was actually written.
+    expect(stdout).toMatch(/Note added to o\/uniquely-named-repo/);
+
+    // And the note really landed on the resolved repo.
+    openDb(dbPath);
+    const row = getDb().prepare(
+      `SELECT r.slug AS slug FROM repo_notes n JOIN repos r ON r.id = n.repo_id`
+    ).get() as { slug: string } | undefined;
+    expect(row?.slug).toBe('o/uniquely-named-repo');
+    closeDb();
+  });
 });

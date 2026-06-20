@@ -89,17 +89,25 @@ function gradeCi(r: PortfolioHealthRow): HealthTableRow['ci_health'] {
 }
 
 // Per Pu 2026 (NDSS) + CISA KEV + ACM CSUR 2024:
-//   - red:    critical > 0 AND we have at least one CVE ID captured
-//             (a finding without an ID is shape-broken; better surfaced
-//             as yellow than alarming on a number with no anchor)
-//   - yellow: critical > 0 (no IDs) OR high > 0
-//   - green:  all zeros
+//   - red:     critical > 0 AND we have at least one CVE ID captured
+//              (a finding without an ID is shape-broken; better surfaced
+//              as yellow than alarming on a number with no anchor)
+//   - yellow:  critical > 0 (no IDs) OR high > 0
+//   - unknown: no dep-audit row at all (never scanned) — distinct from clean
+//   - green:   scanned and all zeros
 function gradeDep(r: PortfolioHealthRow): HealthTableRow['dep_health'] {
   if (r.severity_critical > 0) {
     return parseCveCount(r.critical_cve_ids) > 0 ? 'red' : 'yellow';
   }
   if (r.severity_high > 0) return 'yellow';
-  if (r.last_ci_status === null && r.severity_critical === 0 && r.severity_high === 0) {
+  // hg-A-002: audit-presence is signalled by the CVE-id columns, NOT by
+  // last_ci_status. getPortfolioHealth LEFT JOINs repo_dep_audit_state and
+  // exposes critical_cve_ids / high_cve_ids UN-coalesced — both are NULL
+  // iff no dep-audit row exists (severity_* are coalesced to 0, so they
+  // can't tell "scanned-clean" from "never-scanned"). Gating on
+  // last_ci_status meant a CI-synced but never-dep-audited repo showed
+  // green; gate on the real audit sentinel instead.
+  if (r.critical_cve_ids === null && r.high_cve_ids === null) {
     // No audit data yet — distinct from clean.
     return 'unknown';
   }

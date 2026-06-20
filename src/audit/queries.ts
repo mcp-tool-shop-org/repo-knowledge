@@ -174,6 +174,11 @@ export interface RunComparison {
 
 /**
  * Get the latest audit run for a repo.
+ *
+ * db-A-003-audit: `started_at` is caller-supplied and only second-precision,
+ * so two runs imported within the same second tie. Runs are append-only and
+ * id is a monotonic AUTOINCREMENT, so a secondary `id DESC` makes "latest"
+ * deterministic — the most recently inserted run always wins the tie.
  */
 export function getLatestAudit(repoId: number | bigint): AuditRun | null {
   const db = getDb();
@@ -182,7 +187,7 @@ export function getLatestAudit(repoId: number | bigint): AuditRun | null {
     FROM audit_runs ar
     JOIN repos r ON r.id = ar.repo_id
     WHERE ar.repo_id = ?
-    ORDER BY ar.started_at DESC LIMIT 1
+    ORDER BY ar.started_at DESC, ar.id DESC LIMIT 1
   `).get(repoId) as AuditRun | undefined;
 
   if (!run) return null;
@@ -218,7 +223,7 @@ export function getAuditPosture(repoId: number | bigint): AuditPosture | null {
     SELECT id, overall_status, overall_posture, summary, blocking_release,
            started_at, completed_at, commit_sha, scope_level
     FROM audit_runs WHERE repo_id = ?
-    ORDER BY started_at DESC LIMIT 1
+    ORDER BY started_at DESC, id DESC LIMIT 1
   `).get(repoId) as { id: number; overall_status: string; overall_posture: string; summary: string | null; blocking_release: number; started_at: string; completed_at: string | null; commit_sha: string | null; scope_level: string } | undefined;
 
   if (!run) return null;
@@ -270,7 +275,7 @@ export function getPortfolioPosture(): PortfolioEntry[] {
     FROM repos r
     LEFT JOIN repo_tech t ON t.repo_id = r.id
     LEFT JOIN audit_runs ar ON ar.id = (
-      SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC LIMIT 1
+      SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC, id DESC LIMIT 1
     )
     LEFT JOIN audit_metrics am ON am.audit_run_id = ar.id
     ORDER BY
@@ -294,7 +299,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
              am.critical_count, am.high_count, am.pass_rate
       FROM repos r
       JOIN audit_runs ar ON ar.id = (
-        SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC LIMIT 1
+        SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC, id DESC LIMIT 1
       )
       LEFT JOIN audit_metrics am ON am.audit_run_id = ar.id
       WHERE ar.overall_posture = ?
@@ -308,7 +313,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       FROM repos r
       LEFT JOIN repo_tech t ON t.repo_id = r.id
       WHERE NOT EXISTS (SELECT 1 FROM audit_runs ar WHERE ar.repo_id = r.id)
-      AND r.archived = 0
+      AND COALESCE(r.archived, 0) = 0
       ORDER BY r.slug
     `).all() as Record<string, any>[];
   }
@@ -330,7 +335,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       JOIN audit_runs ar ON ar.id = cr.audit_run_id
       JOIN repos r ON r.id = ar.repo_id
       WHERE cr.control_id = ? AND cr.result = 'fail'
-      AND ar.id = (SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC LIMIT 1)
+      AND ar.id = (SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC, id DESC LIMIT 1)
       ORDER BY r.slug
     `).all(filters.failed_control) as Record<string, any>[];
   }
@@ -343,7 +348,7 @@ export function findByAuditStatus(filters: AuditStatusFilters = {}): Record<stri
       JOIN audit_runs ar ON ar.id = cr.audit_run_id
       JOIN repos r ON r.id = ar.repo_id
       WHERE ac.domain = ? AND cr.result = 'fail'
-      AND ar.id = (SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC LIMIT 1)
+      AND ar.id = (SELECT id FROM audit_runs WHERE repo_id = r.id ORDER BY started_at DESC, id DESC LIMIT 1)
       ORDER BY r.slug, ac.id
     `).all(filters.domain_failing) as Record<string, any>[];
   }

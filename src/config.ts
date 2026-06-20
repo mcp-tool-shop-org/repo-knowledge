@@ -25,7 +25,14 @@ export function resolveConfig(overrides?: Partial<RkConfig>): RkConfig {
     try {
       const file = JSON.parse(readFileSync(configPath, 'utf-8'));
       config = { ...config, ...file };
-    } catch { /* ignore malformed config */ }
+    } catch (e: unknown) {
+      // db-A-007: a malformed rk.config.json silently produced empty
+      // owners (so `rk sync` no-opped with no signal). Surface it on
+      // stderr — same channel + tone as the path-traversal advisory
+      // below — so the operator sees WHY their config didn't take.
+      const msg = (e as Error)?.message ?? String(e);
+      console.error(`[rk] Warning: rk.config.json is malformed and was ignored (${msg}). Using defaults.`);
+    }
   }
 
   // 3. Apply explicit overrides — but only fields the caller explicitly
@@ -84,20 +91,41 @@ function configPath(): string {
 }
 
 /**
+ * Read the raw rk.config.json and report whether it was missing, parsed
+ * cleanly, or was present-but-malformed. The owners-write helpers use the
+ * `malformed` flag to REFUSE clobbering an unparseable file (db-A-007) —
+ * a missing file is fine to create fresh, but a malformed file may hold
+ * config the operator wants to keep, and blindly overwriting it would
+ * destroy that. `data` is the parsed object on success, otherwise {}.
+ */
+function readRkConfigFileState(): {
+  data: Partial<RkConfig>;
+  exists: boolean;
+  malformed: boolean;
+} {
+  const p = configPath();
+  if (!existsSync(p)) return { data: {}, exists: false, malformed: false };
+  try {
+    const parsed = JSON.parse(readFileSync(p, 'utf-8'));
+    if (parsed && typeof parsed === 'object') {
+      return { data: parsed as Partial<RkConfig>, exists: true, malformed: false };
+    }
+    // Valid JSON but not an object (e.g. a bare number/string/array) —
+    // not a usable config shape; treat as malformed.
+    return { data: {}, exists: true, malformed: true };
+  } catch {
+    return { data: {}, exists: true, malformed: true };
+  }
+}
+
+/**
  * Read the raw rk.config.json (un-merged with defaults). Returns an
  * empty object if the file is missing OR malformed — the caller decides
  * whether to treat that as an error (the owners-write helpers create a
  * fresh shape when missing, which matches `rk init`'s template).
  */
 export function readRkConfigFile(): Partial<RkConfig> {
-  const p = configPath();
-  if (!existsSync(p)) return {};
-  try {
-    const parsed = JSON.parse(readFileSync(p, 'utf-8'));
-    return parsed && typeof parsed === 'object' ? parsed as Partial<RkConfig> : {};
-  } catch {
-    return {};
-  }
+  return readRkConfigFileState().data;
 }
 
 /**
@@ -144,9 +172,21 @@ export function listOwners(): string[] {
  * preserves the operator's spelling, so we don't fold case).
  *
  * Persisted atomically via writeRkConfigFile.
+ *
+ * db-A-007: if the file exists but is malformed, REFUSE to write — a
+ * blind overwrite would clobber whatever (recoverable) content the
+ * operator has. Throws a clear error instead so the caller surfaces it
+ * rather than silently dropping the unparseable file on the floor.
  */
 export function addOwner(owner: string): { added: boolean; owners: string[] } {
-  const file = readRkConfigFile();
+  const state = readRkConfigFileState();
+  if (state.malformed) {
+    throw new Error(
+      `rk.config.json is malformed — refusing to add owner "${owner}" and overwrite it. ` +
+      `Fix or delete ${configPath()} first.`
+    );
+  }
+  const file = state.data;
   const owners = Array.isArray(file.owners) ? file.owners.slice() : [];
   if (owners.includes(owner)) return { added: false, owners };
   owners.push(owner);
@@ -157,9 +197,19 @@ export function addOwner(owner: string): { added: boolean; owners: string[] } {
 /**
  * Remove an owner from rk.config.json. Returns `{ removed: false }` if
  * the owner was not present (case-sensitive).
+ *
+ * db-A-007: as with addOwner, refuse to write when the file is malformed
+ * rather than clobbering an unparseable config.
  */
 export function removeOwner(owner: string): { removed: boolean; owners: string[] } {
-  const file = readRkConfigFile();
+  const state = readRkConfigFileState();
+  if (state.malformed) {
+    throw new Error(
+      `rk.config.json is malformed — refusing to remove owner "${owner}" and overwrite it. ` +
+      `Fix or delete ${configPath()} first.`
+    );
+  }
+  const file = state.data;
   const owners = Array.isArray(file.owners) ? file.owners.slice() : [];
   const idx = owners.indexOf(owner);
   if (idx === -1) return { removed: false, owners };

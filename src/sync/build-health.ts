@@ -528,9 +528,19 @@ export function syncCiStatus(owner: string, repo: string): CiStatusResult {
 
 /**
  * Scan workflow YAML for top-level `permissions:` blocks. Returns one
- * entry per workflow file; permissions_json is either the JSON of the
- * block (object or string keyword like read-all/write-all) or the
- * literal "default" when no permissions: appears at the workflow root.
+ * entry per workflow file; permissions_json is one of:
+ *   - the JSON object of a block-form map (`permissions:` then indented
+ *     `scope: level` lines)
+ *   - the JSON object of an inline FLOW-MAPPING (`permissions: { contents:
+ *     read }`) — sync-A-005 normalizes this to the SAME object shape as
+ *     the block form so the two serialize identically
+ *   - a JSON string for an inline keyword (`read-all` / `write-all` /
+ *     `read`), which has no key:value structure
+ *   - the literal "default" when no permissions: appears at the workflow
+ *     root
+ *
+ * Consumers distinguish the object cases from the scalar cases by the
+ * parsed type (object vs string).
  *
  * Per Beyer 2016 (SRE Workbook Ch.5, "Alerting on SLOs"): blast radius
  * is the load-bearing variable when scoring compound risk. A repo with
@@ -587,8 +597,25 @@ export function scanWorkflowPermissions(localPath: string): WorkflowPermissionsS
         if (kv) obj[kv[1]] = kv[2].trim();
       }
       results.push({ workflow_file: rel, permissions_json: JSON.stringify(obj) });
+    } else if (rest.startsWith('{') && rest.endsWith('}')) {
+      // sync-A-005: inline FLOW-MAPPING form — `permissions: { contents:
+      // read, id-token: write }`. Parse its key:value pairs into the SAME
+      // Record<string,string> shape the block branch produces, so a flow
+      // map and an equivalent block map serialize identically. Storing the
+      // raw `{ ... }` string (JSON.stringify(rest)) double-encoded it
+      // relative to the block form and broke any consumer that
+      // JSON.parse'd one shape but not the other.
+      const inner = rest.slice(1, -1);
+      const obj: Record<string, string> = {};
+      for (const pair of inner.split(',')) {
+        const kv = pair.trim().match(/^([\w-]+):\s*(.+)$/);
+        if (kv) obj[kv[1]] = kv[2].trim();
+      }
+      results.push({ workflow_file: rel, permissions_json: JSON.stringify(obj) });
     } else {
-      // Inline form: `permissions: read-all` or `permissions: { contents: read }`
+      // Inline KEYWORD form: `permissions: read-all` / `write-all` /
+      // `read` — a scalar with no key:value structure. Store it as a JSON
+      // string; consumers distinguish object-vs-string by the parsed type.
       results.push({ workflow_file: rel, permissions_json: JSON.stringify(rest) });
     }
   }

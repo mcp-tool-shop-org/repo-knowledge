@@ -69,10 +69,16 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
   try {
     // Latest run per repo — older runs describe a repo state that has since
     // been re-audited. Mirrors the latest-by-repo.json semantics of the
-    // main dogfood sync. ORDER BY created_at + Map overwrite keeps the
-    // newest row even when two runs share a timestamp.
+    // main dogfood sync.
+    //
+    // ts-A-005: ORDER BY created_at ALONE is NOT a deterministic tie-break.
+    // When two runs share a created_at, SQLite is free to return them in
+    // any order, so the Map-overwrite "winner" was undefined run-to-run.
+    // We add `id` as a secondary key: created_at ASC, id ASC means the
+    // greatest id among same-timestamp runs is iterated LAST and wins the
+    // Map overwrite — a stable, reproducible choice.
     const allRuns = swarmDb.prepare(
-      'SELECT id, repo, status, commit_sha, created_at FROM runs ORDER BY created_at',
+      'SELECT id, repo, status, commit_sha, created_at FROM runs ORDER BY created_at ASC, id ASC',
     ).all() as SwarmRun[];
     const latestByRepo = new Map<string, SwarmRun>();
     for (const run of allRuns) latestByRepo.set(run.repo, run);

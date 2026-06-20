@@ -33,7 +33,10 @@ import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { openDb, closeDb, getDb } from '../src/db/init.js';
+import { openDb, closeDb, getDb, CURRENT_SCHEMA_VERSION } from '../src/db/init.js';
+
+// ts-A-008: head version as a string for meta-row comparisons.
+const HEAD = String(CURRENT_SCHEMA_VERSION);
 
 let tmpDir: string;
 let dbPath: string;
@@ -107,7 +110,7 @@ describe('Migration sequence (F-TS-007)', () => {
     // migration-011 extended the relation_type CHECK enum + added
     // repos.forge_vault_path on top of the FT-4 head at '10').
     const v = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
-    expect(v.value).toBe('11');
+    expect(v.value).toBe(HEAD);
   });
 
   it('creates audit tables on migration', () => {
@@ -169,8 +172,8 @@ describe('Migration sequence (F-TS-007)', () => {
     // Second open: already at head, should not re-run anything destructive
     openDb(dbPath);
     const v2 = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v1).toBe('11');
-    expect(v2).toBe('11');
+    expect(v1).toBe(HEAD);
+    expect(v2).toBe(HEAD);
   });
 
   it('opening a brand-new (no-file) DB produces head schema directly', () => {
@@ -180,7 +183,7 @@ describe('Migration sequence (F-TS-007)', () => {
     const freshPath = join(tmpDir, 'fresh.db');
     openDb(freshPath);
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
 
     const tables = getDb().prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = 'audit_runs'"
@@ -238,7 +241,7 @@ describe('Migration sequence (F-TS-007)', () => {
     closeDb();
     expect(() => openDb(dbPath)).not.toThrow();
     const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
-    expect(v).toBe('11');
+    expect(v).toBe(HEAD);
   });
 
   it('migration-007 adds repos.npm_package_name / pypi_package_name / publisher_method columns', () => {
@@ -276,5 +279,64 @@ describe('Migration sequence (F-TS-007)', () => {
     expect(idx).toBeDefined();
     expect(idx!.sql).toMatch(/repo_published_versions/);
     expect(idx!.sql).toMatch(/channel/);
+  });
+});
+
+describe('idempotent migration partial-apply recovery (db-A-003)', () => {
+  // The bug: execMigrationIdempotent swallowed "duplicate column name" with
+  // an early return that ABORTED the rest of the migration script — so a
+  // migration whose first ADD COLUMN was already applied (from a prior
+  // crash) would never run its CREATE TABLE / version-bump tail. That is a
+  // permanent no-progress loop: every re-run hits the same duplicate
+  // column, swallows it, and the new tables never appear.
+  //
+  // This fixture pre-applies ONE of migration-006's ADD COLUMNs
+  // (lifecycle_status) on a DB sitting at version 5, leaving the rest of
+  // migration-006 (the rigs + repo_local_paths tables, and the version
+  // bump to 6) un-run. A correct runner must still create those tables AND
+  // advance the version despite the pre-existing column.
+  it('completes migration-006 even when one of its ADD COLUMNs is already applied', () => {
+    // 1. Build a healthy DB and rewind it to just-before-migration-006:
+    //    keep the schema but strip the v6 structures and set version to 5.
+    openDb(dbPath);
+    closeDb();
+
+    const raw = new Database(dbPath);
+    // Drop the v6+ tables so migration-006 has real work to do again.
+    raw.exec('DROP TABLE IF EXISTS repo_local_paths');
+    raw.exec('DROP TABLE IF EXISTS rigs');
+    // Pre-apply ONLY the first migration-006 ADD COLUMN. (lifecycle_status
+    // already exists from the full build, which is exactly the
+    // "duplicate column name" trigger we are testing.) Rewind version to 5
+    // so migration-006 is gated to run again.
+    raw.prepare("UPDATE meta SET value = '5' WHERE key = 'schema_version'").run();
+    // Sanity: the column the migration will collide on is present.
+    const cols = raw.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
+    expect(cols.map(c => c.name)).toContain('lifecycle_status');
+    // …and the v6 tables are gone.
+    const before = raw.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('rigs','repo_local_paths')"
+    ).all() as { name: string }[];
+    expect(before.length).toBe(0);
+    raw.close();
+
+    // 2. Re-open with the fixed runner. The duplicate-column ADD must be
+    //    skipped/tolerated while the CREATE TABLE + version bump still run.
+    openDb(dbPath);
+    const db = getDb();
+
+    // The new v6 tables exist…
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('rigs','repo_local_paths')"
+    ).all() as { name: string }[];
+    expect(tables.map(t => t.name).sort()).toEqual(['repo_local_paths', 'rigs']);
+
+    // …and the version advanced PAST 6 (the ladder ran on through to head).
+    const v = parseInt(
+      (db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value,
+      10
+    );
+    expect(v).toBeGreaterThanOrEqual(6);
+    expect(v).toBe(CURRENT_SCHEMA_VERSION);
   });
 });
