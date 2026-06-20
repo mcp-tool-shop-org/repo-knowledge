@@ -29,6 +29,8 @@ import {
   openDb, closeDb, getDb,
   upsertRepo, upsertNote,
 } from '../src/db/init.js';
+import { seedControls } from '../src/audit/controls.js';
+import { importAuditInline } from '../src/audit/import.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -357,6 +359,293 @@ describe('MCP server end-to-end JSON-RPC behavior (ts-A-004)', () => {
     expect(bad).toBeDefined();
     expect(bad?.result?.isError).toBe(true);
     expect(bad?.result?.content?.[0]?.text ?? '').toMatch(/Invalid|validation|limit|greater than or equal/i);
+  });
+});
+
+// ─── Feature-pass Wave 1: MCP completeness tools ─────────────────────────────
+// MCP-001 (health_*), MCP-002 (db_fsck / repo_diff / ops_runs), MCP-004
+// (archive_repo / delete_repo), MCP-005 (repo_versions), MCP-006
+// (suggest_dogfood / audit_failing). Drives the same exchange() JSON-RPC harness.
+
+/**
+ * tools/list helper: send the initialize handshake then a tools/list request
+ * and return the registered tool names. Reuses the same spawn shape as
+ * exchange() but speaks the list method rather than tools/call.
+ */
+function listTools(): { names: string[]; status: number | null } {
+  const lines: string[] = [];
+  lines.push(rpc({
+    jsonrpc: '2.0', id: 0, method: 'initialize',
+    params: {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'rk-test', version: '0.0.0' },
+    },
+  }));
+  lines.push(rpc({ jsonrpc: '2.0', method: 'notifications/initialized' }));
+  lines.push(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }));
+
+  const res = spawnSync('node', [MCP], {
+    encoding: 'utf-8',
+    timeout: 20000,
+    cwd: tmpDir,
+    input: lines.join(''),
+    env: { ...process.env, NO_COLOR: '1' },
+  });
+
+  const names: string[] = [];
+  for (const raw of (res.stdout || '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const msg = JSON.parse(line) as JsonRpcResponse;
+      if (msg.id === 1) {
+        const tools = (msg.result?.tools ?? []) as { name: string }[];
+        for (const t of tools) names.push(t.name);
+      }
+    } catch { /* non-JSON log noise — ignore */ }
+  }
+  return { names, status: res.status };
+}
+
+describe('MCP completeness tools — registration (MCP-001/002/004/005/006)', () => {
+  if (!existsSync(MCP)) {
+    it.skip('dist/mcp/server.js not built — skip', () => {});
+    return;
+  }
+
+  it('registers every new tool in tools/list', () => {
+    const { names } = listTools();
+    const expected = [
+      // MCP-001
+      'health_feed', 'health_doctor', 'health_portfolio',
+      // MCP-002
+      'db_fsck', 'repo_diff', 'ops_runs',
+      // MCP-004
+      'archive_repo', 'delete_repo',
+      // MCP-005
+      'repo_versions',
+      // MCP-006
+      'suggest_dogfood', 'audit_failing',
+    ];
+    for (const name of expected) {
+      expect(names, `tool "${name}" should be registered`).toContain(name);
+    }
+  });
+});
+
+describe('MCP completeness tools — behavior', () => {
+  if (!existsSync(MCP)) {
+    it.skip('dist/mcp/server.js not built — skip', () => {});
+    return;
+  }
+
+  // Seed a corpus into the isolated temp DB before each behavioral test.
+  beforeEach(() => {
+    openDb(dbPath);
+    upsertRepo({
+      owner: 'acme', name: 'alpha',
+      description: 'alpha service', status: 'active', category: 'tool',
+    });
+    upsertRepo({
+      owner: 'acme', name: 'beta',
+      description: 'beta library', status: 'active', category: 'library',
+    });
+    closeDb();
+  });
+
+  // ── MCP-001: health_doctor over a real repo ──
+  it('health_doctor returns a structured single-repo report for the canonical slug', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'health_doctor', args: { slug: 'acme/alpha' } },
+    ]);
+    const out = toolJson(responses.get(1));
+    expect(out.slug).toBe('acme/alpha');
+    // The doctor report shape: ci / toolchain / dep_audit / workflow_* sections.
+    expect(out).toHaveProperty('ci');
+    expect(out).toHaveProperty('dep_audit');
+    expect(out).toHaveProperty('workflow_actions');
+  });
+
+  it('health_doctor on an unknown slug returns the not-found guidance', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'health_doctor', args: { slug: 'no-such-repo-xyz' } },
+    ]);
+    const text = responses.get(1)?.result?.content?.[0]?.text ?? '';
+    expect(text).toMatch(/not found/i);
+  });
+
+  // ── MCP-002: db_fsck writes a db_health_runs row and returns the report ──
+  it('db_fsck runs the integrity checks, returns run_id, and persists a db_health_runs row', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'db_fsck', args: {} },
+    ]);
+    const out = toolJson(responses.get(1));
+    expect(out).toHaveProperty('checks');
+    expect(out).toHaveProperty('exit_code');
+    expect(typeof out.run_id).toBe('number');
+    expect(out.run_id as number).toBeGreaterThan(0);
+
+    // Named side effect: a db_health_runs row was written by the handler.
+    openDb(dbPath);
+    const count = (getDb().prepare('SELECT COUNT(*) AS c FROM db_health_runs').get() as { c: number }).c;
+    closeDb();
+    expect(count).toBeGreaterThan(0);
+  });
+
+  // ── MCP-004: archive_repo archives + echoes canonical slug + records reason ──
+  it('archive_repo flips lifecycle_status, echoes the canonical slug, and records the reason note', () => {
+    const { responses } = exchange([
+      // Partial fragment "alpha" resolves uniquely to acme/alpha.
+      { id: 1, name: 'archive_repo', args: { slug: 'alpha', reason: 'superseded by beta' } },
+    ]);
+    const text = responses.get(1)?.result?.content?.[0]?.text ?? '';
+    // Echoes the canonical slug, not the fragment.
+    expect(text).toMatch(/Archived: acme\/alpha/);
+
+    openDb(dbPath);
+    const row = getDb().prepare(
+      'SELECT lifecycle_status, deprecated_at FROM repos WHERE slug = ?'
+    ).get('acme/alpha') as { lifecycle_status: string | null; deprecated_at: string | null };
+    // The reason is persisted as a warning note (archiveRepoBySlug ignores it).
+    const noteCount = (getDb().prepare(
+      "SELECT COUNT(*) AS c FROM repo_notes n JOIN repos r ON r.id = n.repo_id " +
+      "WHERE r.slug = 'acme/alpha' AND n.note_type = 'warning'"
+    ).get() as { c: number }).c;
+    closeDb();
+    expect(row.lifecycle_status).toBe('archived');
+    expect(row.deprecated_at).not.toBeNull();
+    expect(noteCount).toBeGreaterThan(0);
+  });
+
+  it('delete_repo refuses without confirm=true and does NOT delete', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'delete_repo', args: { slug: 'acme/beta', confirm: false } },
+    ]);
+    const text = responses.get(1)?.result?.content?.[0]?.text ?? '';
+    expect(text).toMatch(/Refused|confirm/i);
+
+    openDb(dbPath);
+    const stillThere = getDb().prepare('SELECT 1 FROM repos WHERE slug = ?').get('acme/beta');
+    closeDb();
+    expect(stillThere).toBeDefined();
+  });
+
+  it('delete_repo with confirm=true deletes and echoes canonical slug + cascaded_rows', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'delete_repo', args: { slug: 'acme/beta', confirm: true } },
+    ]);
+    const out = toolJson(responses.get(1)) as { deleted: boolean; slug: string; cascaded_rows: number };
+    expect(out.deleted).toBe(true);
+    expect(out.slug).toBe('acme/beta');
+    expect(typeof out.cascaded_rows).toBe('number');
+
+    openDb(dbPath);
+    const gone = getDb().prepare('SELECT 1 FROM repos WHERE slug = ?').get('acme/beta');
+    closeDb();
+    expect(gone).toBeUndefined();
+  });
+
+  // ── MCP-005: repo_versions read (no network refresh) ──
+  it('repo_versions returns recorded published versions for the canonical slug, filtered by channel', () => {
+    // Seed two published-version rows on different channels.
+    openDb(dbPath);
+    const repoId = getDb().prepare('SELECT id FROM repos WHERE slug = ?').get('acme/alpha') as { id: number };
+    const insert = getDb().prepare(`
+      INSERT INTO repo_published_versions (repo_id, channel, version, published_at, synced_at, source)
+      VALUES (?, ?, ?, ?, datetime('now'), 'test')
+    `);
+    insert.run(repoId.id, 'npm', '1.2.3', '2026-06-01');
+    insert.run(repoId.id, 'pypi', '0.9.0', '2026-05-01');
+    closeDb();
+
+    const { responses } = exchange([
+      { id: 1, name: 'repo_versions', args: { slug: 'acme/alpha' } },
+      { id: 2, name: 'repo_versions', args: { slug: 'acme/alpha', channel: 'npm' } },
+    ]);
+
+    const all = toolJson(responses.get(1)) as { slug: string; count: number; versions: { channel: string }[] };
+    expect(all.slug).toBe('acme/alpha');
+    expect(all.count).toBe(2);
+
+    const npmOnly = toolJson(responses.get(2)) as { channel: string; count: number; versions: { channel: string }[] };
+    expect(npmOnly.channel).toBe('npm');
+    expect(npmOnly.count).toBe(1);
+    expect(npmOnly.versions.every(v => v.channel === 'npm')).toBe(true);
+  });
+
+  // ── MCP-006: audit_failing over a seeded failing control ──
+  it('audit_failing lists repos with failing controls in the given domain', () => {
+    // Seed the canonical control catalog + an audit run with a FAILING secrets
+    // control on acme/alpha, so the domain_failing query has a row to return.
+    openDb(dbPath);
+    seedControls(getDb());
+    importAuditInline({
+      run: {
+        slug: 'acme/alpha',
+        overall_status: 'fail',
+        overall_posture: 'critical',
+        summary: 'seeded failing audit',
+      },
+      controls: [
+        { control_id: 'SCR-002', result: 'fail', notes: 'token found' },
+      ],
+      findings: [
+        { domain: 'secrets', title: 'Live token', severity: 'critical', status: 'open' },
+      ],
+    });
+    closeDb();
+
+    const { responses } = exchange([
+      { id: 1, name: 'audit_failing', args: { domain: 'secrets' } },
+    ]);
+    const out = toolJson(responses.get(1)) as { domain: string; count: number; failing: { slug: string }[] };
+    expect(out.domain).toBe('secrets');
+    expect(out.count).toBeGreaterThan(0);
+    expect(out.failing.some(f => f.slug === 'acme/alpha')).toBe(true);
+  });
+
+  it('audit_failing rejects an out-of-enum domain (Zod enum enforcement)', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'audit_failing', args: { domain: 'totally_made_up_domain' } },
+    ]);
+    const bad = responses.get(1);
+    expect(bad?.result?.isError).toBe(true);
+    expect(bad?.result?.content?.[0]?.text ?? '').toMatch(/Invalid|validation|domain/i);
+  });
+
+  // ── MCP-006: suggest_dogfood mutual-exclusion guard ──
+  it('suggest_dogfood rejects both repo and surface set, and rejects neither set', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'suggest_dogfood', args: { repo: 'acme/alpha', surface: 'cli' } },
+      { id: 2, name: 'suggest_dogfood', args: {} },
+    ]);
+    expect(responses.get(1)?.result?.content?.[0]?.text ?? '').toMatch(/only one of repo or surface/i);
+    expect(responses.get(2)?.result?.content?.[0]?.text ?? '').toMatch(/specify repo .* or surface/i);
+  });
+
+  it('suggest_dogfood with only surface set returns a structured result (happy path)', () => {
+    const out = toolJson((exchange([{ id: 1, name: 'suggest_dogfood', args: { surface: 'cli' } }]).responses).get(1));
+    // Empty suggestions are fine on a corpus with no dogfood facts — the
+    // contract is a parseable structured result, not a thrown error.
+    expect(out).toBeTypeOf('object');
+  });
+
+  // ── MCP-001/002 registration-only tools: behavioral shape assertions ──
+  it('health_portfolio returns {count, rows} over the seeded catalog', () => {
+    const out = toolJson((exchange([{ id: 1, name: 'health_portfolio', args: {} }]).responses).get(1)) as { count: number; rows: unknown[] };
+    expect(typeof out.count).toBe('number');
+    expect(Array.isArray(out.rows)).toBe(true);
+  });
+
+  it('repo_diff returns a structured diff for a seeded slug', () => {
+    const out = toolJson((exchange([{ id: 1, name: 'repo_diff', args: { slug: 'acme/alpha' } }]).responses).get(1));
+    expect(out).toBeTypeOf('object');
+  });
+
+  it('ops_runs returns a structured runs payload', () => {
+    const out = toolJson((exchange([{ id: 1, name: 'ops_runs', args: {} }]).responses).get(1));
+    expect(out).toBeTypeOf('object');
   });
 });
 

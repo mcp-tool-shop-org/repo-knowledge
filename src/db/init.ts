@@ -3,8 +3,8 @@
  */
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 
 // Resolve a SQL asset by name across all bundled layouts. import.meta.dirname
 // varies by entry point:
@@ -193,6 +193,56 @@ function execMigrationStrict(db: DatabaseType, sql: string, label: string): void
 }
 
 /**
+ * PR-002: auto-snapshot the pre-migration DB before the migration ladder
+ * runs.
+ *
+ * The migration ladder is the highest-blast-radius operation in the whole
+ * system — it ALTERs / DROPs+RECREATEs tables in place. If a migration
+ * corrupts data (or the process dies mid-recreate on a pre-fix binary), the
+ * operator wants a byte-for-byte copy of the DB as it was the instant
+ * BEFORE rk touched it. This takes exactly that copy.
+ *
+ * Snapshot mechanism: SQLite's `VACUUM INTO '<path>'` writes a clean,
+ * consistent, fully-checkpointed copy of the live DB to a new file —
+ * including data sitting in the WAL — without us having to coordinate file
+ * copies around the WAL/SHM sidecars. It is synchronous and runs inside
+ * better-sqlite3's single-threaded handle, so the snapshot is taken before
+ * any migration statement executes.
+ *
+ * Destination: `<dir-of-dbPath>/backups/pre-migration-<from>-to-<head>-<ts>.db`.
+ * Anchoring the backups dir to the DB file's own directory means the real
+ * `data/knowledge.db` snapshots into `data/backups/`, while a test DB in a
+ * temp dir snapshots into that temp dir's `backups/` — the real
+ * `data/backups` is never touched by tests that point dbPath elsewhere.
+ *
+ * The ISO timestamp is made filesystem-safe by replacing every `:` (illegal
+ * in Windows filenames) and `.` with `-`.
+ *
+ * Returns the snapshot file path for the caller to log. The decision of
+ * WHETHER to snapshot (the three-condition guard) lives at the call site in
+ * openDb; this helper unconditionally writes when called.
+ */
+function snapshotPreMigration(
+  db: DatabaseType,
+  dbPath: string,
+  fromVersion: number
+): string {
+  const backupsDir = join(dirname(dbPath), 'backups');
+  // Create the backups dir first — VACUUM INTO will not create parent dirs.
+  mkdirSync(backupsDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const snapshotPath = join(
+    backupsDir,
+    `pre-migration-${fromVersion}-to-${CURRENT_SCHEMA_VERSION}-${stamp}.db`
+  );
+  // VACUUM INTO takes a single-quoted string literal; the path is
+  // machine-generated (no user input) and any single quote in it is
+  // escaped by doubling per SQL string-literal rules, defensively.
+  db.exec(`VACUUM INTO '${snapshotPath.replace(/'/g, "''")}'`);
+  return snapshotPath;
+}
+
+/**
  * Open (or create) the knowledge database.
  * Returns a better-sqlite3 instance with WAL mode and foreign keys enabled.
  *
@@ -210,6 +260,14 @@ export function openDb(dbPath: string): DatabaseType {
     }
     return _db;
   }
+
+  // PR-002: capture whether the DB FILE already existed BEFORE `new Database`
+  // opens (and thereby CREATES) it. A brand-new/fresh DB has no data to
+  // protect and must NOT trigger a pre-migration snapshot; only a
+  // pre-existing file with real data is worth backing up. This MUST be read
+  // before the `new Database()` line below — afterwards the file always
+  // exists and the distinction is lost.
+  const fileExistedAtEntry = existsSync(dbPath);
 
   _db = new Database(dbPath);
   _dbPath = dbPath;
@@ -266,6 +324,34 @@ export function openDb(dbPath: string): DatabaseType {
     // infrastructure breadcrumbs there corrupt both. A human still sees
     // stderr in their terminal. Mirrors config.ts's stderr advisory tone.
     console.error('Database initialized with schema v1');
+  }
+
+  // PR-002: migration safety net. BEFORE the migration ladder mutates the
+  // schema in place, take a synchronous byte-for-byte snapshot of the
+  // pre-migration DB — but ONLY when all three conditions hold:
+  //   (a) the DB FILE already existed at openDb entry (a fresh DB has no
+  //       data to protect — captured as fileExistedAtEntry BEFORE
+  //       `new Database`);
+  //   (b) the on-disk schema_version is BELOW head, i.e. there are
+  //       migrations to run (nothing to protect against if already at head);
+  //   (c) RK_NO_MIGRATION_BACKUP is unset — an escape hatch for ephemeral
+  //       and test DBs that never want the snapshot overhead.
+  // The snapshot path is logged to STDERR (PH-DB-002: migration-progress
+  // channel — STDOUT stays clean for MCP JSON-RPC / CLI --json).
+  const preMigrationVersion = parseInt(
+    (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1',
+    10
+  );
+  if (
+    fileExistedAtEntry &&
+    preMigrationVersion < CURRENT_SCHEMA_VERSION &&
+    !process.env.RK_NO_MIGRATION_BACKUP
+  ) {
+    const snapshotPath = snapshotPreMigration(_db, dbPath, preMigrationVersion);
+    console.error(
+      `Pre-migration snapshot written to ${snapshotPath} ` +
+      `(schema v${preMigrationVersion} → v${CURRENT_SCHEMA_VERSION})`
+    );
   }
 
   // Run migrations — each block compares the current schema_version and

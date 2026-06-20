@@ -15,6 +15,7 @@ import { existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 import {
   openDb, closeDb, getDb,
   upsertRepo,
@@ -444,4 +445,277 @@ describe('rk versions / drift / bind-package (F-TS-FT2)', () => {
   // here — exercising it would fire a real `gh repo list <owner>` network call.
   // The guard condition `!opts.owners && config().owners.length === 0` makes the
   // opt-out behavior obvious from the source; we keep the suite network-free.
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// CLI-JSON-CORE: --json on the read commands (list / show)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// The contract: `rk list --json` and `rk show <slug> --json` emit a single
+// valid, parseable JSON document on stdout (no human prose mixed in), so a
+// `jq` pipeline never has to special-case the text view. We JSON.parse the
+// captured stdout — the assertion is "it parses AND has the right shape."
+
+describe('CLI-JSON-CORE: --json output (cli.ts)', () => {
+  if (!existsSync(CLI)) {
+    it.skip('dist/cli.js not built — skip CLI --json tests', () => {});
+    return;
+  }
+
+  it('rk list --json emits a parseable JSON array of repo rows', () => {
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'alpha' });
+    upsertRepo({ owner: 'o', name: 'beta' });
+    closeDb();
+
+    const { code, stdout } = runCli(['list', '--json']);
+    expect(code).toBe(0);
+
+    // The whole stdout must parse as JSON — no leading "N repos:" header.
+    const parsed = JSON.parse(stdout);
+    expect(Array.isArray(parsed)).toBe(true);
+    const slugs = parsed.map((r: { slug: string }) => r.slug);
+    expect(slugs).toContain('o/alpha');
+    expect(slugs).toContain('o/beta');
+  });
+
+  it('rk list --json emits an empty array (not a human string) when no repos match', () => {
+    // DB is initialized but empty (beforeEach pre-opens an empty schema).
+    const { code, stdout } = runCli(['list', '--json', '--owner', 'nobody']);
+    expect(code).toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed.length).toBe(0);
+  });
+
+  it('rk show <slug> --json emits a parseable repo dump including audit_posture', () => {
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'shown' });
+    closeDb();
+
+    const { code, stdout } = runCli(['show', 'o/shown', '--json']);
+    expect(code).toBe(0);
+
+    const parsed = JSON.parse(stdout);
+    expect(parsed.slug).toBe('o/shown');
+    // The aggregate the text renderer shows includes audit posture (null when
+    // unaudited) — the JSON mirror carries the same key.
+    expect(parsed).toHaveProperty('audit_posture');
+    expect(parsed.audit_posture).toBeNull();
+    // The child collections getRepo() assembles must be present in the dump.
+    expect(parsed).toHaveProperty('notes');
+    expect(parsed).toHaveProperty('relationships');
+  });
+
+  // Wave-1 verify: a not-found slug in --json mode must STILL emit parseable
+  // JSON on stdout (a structured {error:'not_found'}), not empty input that
+  // crashes jq, while keeping a non-zero exit. Pins the notFoundJson() fix for
+  // show / related / audit posture.
+  it.each([
+    ['show', ['show', 'no/such-repo', '--json']],
+    ['related', ['related', 'no/such-repo', '--json']],
+    ['audit posture', ['audit', 'posture', 'no/such-repo', '--json']],
+  ])('rk %s --json on a not-found slug emits {error:not_found} JSON + exit 1', (_name, args) => {
+    const { code, stdout } = runCli(args);
+    expect(code).toBe(1);
+    const parsed = JSON.parse(stdout); // must NOT throw on empty input
+    expect(parsed.error).toBe('not_found');
+    expect(parsed.slug).toBe('no/such-repo');
+  });
+
+  // Parametric coverage for the remaining --json read surfaces: each must emit
+  // valid parseable JSON (array/object) for the empty/clean case — never empty
+  // stdout, never a human string mixed in.
+  it.each([
+    ['stats', ['stats', '--json'], 'object'],
+    ['find', ['find', 'zznomatch', '--json'], 'object'],
+    ['audit findings', ['audit', 'findings', '--json'], 'array'],
+    ['audit controls', ['audit', 'controls', '--json'], 'array'],
+    ['audit unaudited', ['audit', 'unaudited', '--json'], 'array'],
+  ])('rk %s --json emits parseable %s JSON', (_name, args, shape) => {
+    const { code, stdout } = runCli(args);
+    expect(code).toBe(0);
+    const parsed = JSON.parse(stdout); // must parse — no empty stdout, no prose
+    if (shape === 'array') expect(Array.isArray(parsed)).toBe(true);
+    else expect(typeof parsed).toBe('object');
+  });
+
+  // Wave-1 verify (LOW-2): an unknown audit domain is a clear error, not a
+  // silently-empty result.
+  it('rk audit failing <bogus-domain> exits non-zero with a valid-domains hint', () => {
+    const { code, stderr } = runCli(['audit', 'failing', 'not-a-real-domain']);
+    expect(code).not.toBe(0);
+    expect(stderr).toMatch(/unknown audit domain/i);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// CLI-PR-001: backup / restore round-trip
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Round-trip contract: backup, mutate the live DB, restore, assert the
+// mutation is gone. This pins that `VACUUM INTO` produced a faithful snapshot
+// and `restore` swapped it back atomically.
+
+describe('CLI-PR-001: backup / restore (cli.ts)', () => {
+  if (!existsSync(CLI)) {
+    it.skip('dist/cli.js not built — skip backup/restore tests', () => {});
+    return;
+  }
+
+  it('backup -> mutate -> restore restores the pre-mutation state', () => {
+    // Seed a known repo.
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'original' });
+    closeDb();
+
+    // 1. Backup. The written path is the stdout answer.
+    const backup = runCli(['backup']);
+    expect(backup.code).toBe(0);
+    const backupPath = backup.stdout.trim();
+    expect(existsSync(backupPath)).toBe(true);
+
+    // 2. Mutate the live DB — add a second repo that is NOT in the backup.
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'added-after-backup' });
+    closeDb();
+
+    // Sanity: the mutation is present before restore.
+    {
+      const { stdout } = runCli(['list', '--json']);
+      const slugs = JSON.parse(stdout).map((r: { slug: string }) => r.slug);
+      expect(slugs).toContain('o/added-after-backup');
+    }
+
+    // 3. Restore from the backup (--yes to skip the confirm prompt).
+    const restore = runCli(['restore', backupPath, '--yes']);
+    expect(restore.code).toBe(0);
+    expect(restore.stdout.toLowerCase()).toMatch(/restored/);
+
+    // 4. The mutation must be gone; the original repo must remain.
+    const { code, stdout } = runCli(['list', '--json']);
+    expect(code).toBe(0);
+    const slugs = JSON.parse(stdout).map((r: { slug: string }) => r.slug);
+    expect(slugs).toContain('o/original');
+    expect(slugs).not.toContain('o/added-after-backup');
+  });
+
+  it('restore refuses a backup whose schema_version is newer than rk head (exit 2)', () => {
+    // Snapshot a valid backup, then tamper its schema_version to a far-future
+    // value. restore must refuse BEFORE swapping the live DB.
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'keepme' });
+    closeDb();
+
+    const backup = runCli(['backup']);
+    expect(backup.code).toBe(0);
+    const backupPath = backup.stdout.trim();
+
+    // Tamper: bump the backup's schema_version to 9999 (a separate connection).
+    const tamper = new Database(backupPath);
+    tamper.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '9999')").run();
+    tamper.close();
+
+    const { code, stderr } = runCli(['restore', backupPath, '--yes']);
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/newer than this rk build/i);
+
+    // The live DB must be untouched — the original repo still present.
+    const { stdout } = runCli(['list', '--json']);
+    const slugs = JSON.parse(stdout).map((r: { slug: string }) => r.slug);
+    expect(slugs).toContain('o/keepme');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// CLI-PR-005 + CLI-PR-003: config validate + doctor preflight
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('CLI-PR-005: rk config validate (cli.ts)', () => {
+  if (!existsSync(CLI)) {
+    it.skip('dist/cli.js not built — skip config validate tests', () => {});
+    return;
+  }
+
+  it('exits non-zero when owners still contains the placeholder "your-github-org"', () => {
+    // Rewrite the isolated config to hold the placeholder owner. The dbPath
+    // dir already exists (tmpDir) so the ONLY problem is the placeholder.
+    writeFileSync(
+      configPath,
+      JSON.stringify(
+        { dbPath, owners: ['your-github-org'], localDirs: [], artifactsRoot: join(tmpDir, 'artifacts') },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const { code, stdout, stderr } = runCli(['config', 'validate']);
+    expect(code).not.toBe(0);
+    expect(stdout + stderr).toMatch(/your-github-org/);
+  });
+
+  it('exits 0 on a clean config with no problems', () => {
+    // beforeEach already wrote owners: [] / localDirs: [] with a real dbPath
+    // dir — no placeholder, no unresolvable paths.
+    const { code } = runCli(['config', 'validate']);
+    expect(code).toBe(0);
+  });
+});
+
+describe('CLI-PR-003: rk doctor preflight (cli.ts)', () => {
+  if (!existsSync(CLI)) {
+    it.skip('dist/cli.js not built — skip doctor tests', () => {});
+    return;
+  }
+
+  it('rk doctor --json returns a checks array', () => {
+    // Pre-open the DB so schema/rig/runs checks have a real DB to read.
+    openDb(dbPath);
+    closeDb();
+
+    const { code, stdout } = runCli(['doctor', '--json']);
+    // Default (non-strict) exit is 0 regardless of warn/green checks; gh-auth
+    // and rig checks degrade to 'warn', never 'red', offline.
+    expect(code).toBe(0);
+
+    const parsed = JSON.parse(stdout);
+    expect(Array.isArray(parsed.checks)).toBe(true);
+    expect(parsed.checks.length).toBeGreaterThan(0);
+    // Each check has the documented shape.
+    for (const c of parsed.checks) {
+      expect(c).toHaveProperty('name');
+      expect(c).toHaveProperty('status');
+      expect(c).toHaveProperty('detail');
+      expect(['green', 'red', 'warn']).toContain(c.status);
+    }
+    // The report carries the aggregate verdict fields.
+    expect(parsed).toHaveProperty('ok');
+    expect(parsed).toHaveProperty('red');
+    expect(parsed).toHaveProperty('warn');
+  });
+
+  it('rk doctor --strict exits non-zero when a red check is present (placeholder owner)', () => {
+    // A placeholder owner is a config problem → a red config check. --strict
+    // gates the exit on any red.
+    writeFileSync(
+      configPath,
+      JSON.stringify(
+        { dbPath, owners: ['your-github-org'], localDirs: [], artifactsRoot: join(tmpDir, 'artifacts') },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    openDb(dbPath);
+    closeDb();
+
+    const { code, stdout } = runCli(['doctor', '--json', '--strict']);
+    expect(code).toBe(2);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.red).toBeGreaterThan(0);
+    // The red check is the config:owners placeholder problem.
+    const names = parsed.checks.map((c: { name: string }) => c.name);
+    expect(names.some((n: string) => n.startsWith('config:'))).toBe(true);
+  });
 });

@@ -30,7 +30,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openDb, closeDb, getDb, CURRENT_SCHEMA_VERSION } from '../src/db/init.js';
@@ -359,5 +359,92 @@ describe('idempotent migration partial-apply recovery (db-A-003)', () => {
     );
     expect(v).toBeGreaterThanOrEqual(6);
     expect(v).toBe(CURRENT_SCHEMA_VERSION);
+  });
+});
+
+describe('pre-migration auto-snapshot (PR-002)', () => {
+  // PR-002: before the migration ladder mutates the schema in place, openDb
+  // takes a synchronous byte-for-byte snapshot of the pre-migration DB —
+  // the safety net for the highest-blast-radius operation. The snapshot
+  // lands in `<dir-of-dbPath>/backups/pre-migration-<from>-to-<head>-<ts>.db`
+  // and is taken ONLY when: (a) the DB FILE already existed at openDb entry,
+  // (b) the on-disk schema_version is below head, and (c)
+  // RK_NO_MIGRATION_BACKUP is unset.
+  //
+  // dbPath is rooted in the per-test temp dir (beforeEach above), so the
+  // backups/ dir resolves INSIDE that temp dir — the repo's real
+  // data/backups is never touched. afterEach (top of file) rmSyncs the
+  // whole temp dir, cleaning up any snapshot files created here. We also
+  // null out RK_NO_MIGRATION_BACKUP defensively in case an ambient env set
+  // it.
+  const backupsDir = () => join(tmpDir, 'backups');
+  const snapshotFiles = (): string[] => {
+    const dir = backupsDir();
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir).filter(f => f.startsWith('pre-migration-') && f.endsWith('.db'));
+  };
+
+  let savedNoBackup: string | undefined;
+  beforeEach(() => {
+    savedNoBackup = process.env.RK_NO_MIGRATION_BACKUP;
+    delete process.env.RK_NO_MIGRATION_BACKUP;
+  });
+  afterEach(() => {
+    if (savedNoBackup === undefined) delete process.env.RK_NO_MIGRATION_BACKUP;
+    else process.env.RK_NO_MIGRATION_BACKUP = savedNoBackup;
+  });
+
+  it('snapshots a PRE-EXISTING old-version DB before migrating, and still migrates to head', () => {
+    // A pre-existing DB stamped at an OLD schema_version (v1, below head).
+    // The file exists before openDb, so the snapshot guard (a) is satisfied.
+    writeMinimalV1Schema(dbPath);
+    expect(existsSync(dbPath)).toBe(true); // pre-existing file
+
+    // No snapshot exists yet.
+    expect(snapshotFiles()).toHaveLength(0);
+
+    openDb(dbPath);
+
+    // A snapshot file was created under <tmpDir>/backups/ …
+    const snaps = snapshotFiles();
+    expect(snaps.length).toBeGreaterThanOrEqual(1);
+    // …named for the from→head version transition (v1 → head).
+    expect(snaps.some(f => f.startsWith(`pre-migration-1-to-${CURRENT_SCHEMA_VERSION}-`))).toBe(true);
+
+    // …and the live DB still migrated all the way to head.
+    const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
+    expect(v).toBe(HEAD);
+  });
+
+  it('does NOT snapshot a FRESH (no-file) openDb', () => {
+    // No pre-existing file: openDb creates the DB from scratch via schema.sql
+    // then runs the ladder. A brand-new DB has no data to protect, so guard
+    // (a) (file existed at entry) is false — NO snapshot.
+    const freshPath = join(tmpDir, 'fresh.db');
+    expect(existsSync(freshPath)).toBe(false);
+
+    openDb(freshPath);
+
+    // The DB came up at head…
+    const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
+    expect(v).toBe(HEAD);
+    // …but NO snapshot was written (fresh DB → nothing to protect).
+    expect(snapshotFiles()).toHaveLength(0);
+  });
+
+  it('does NOT snapshot when RK_NO_MIGRATION_BACKUP is set, but still migrates', () => {
+    // Escape hatch for ephemeral/test DBs: a pre-existing OLD DB still
+    // migrates to head, but the snapshot is suppressed.
+    process.env.RK_NO_MIGRATION_BACKUP = '1';
+    writeMinimalV1Schema(dbPath);
+    expect(existsSync(dbPath)).toBe(true);
+
+    openDb(dbPath);
+
+    // Migrated to head…
+    const v = (getDb().prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value;
+    expect(v).toBe(HEAD);
+    // …with NO snapshot written (escape hatch honored).
+    expect(snapshotFiles()).toHaveLength(0);
   });
 });

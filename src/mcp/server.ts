@@ -16,6 +16,23 @@
  *   add_relationship  — Record a relationship between repos
  *   knowledge_stats   — Database statistics
  *   sync_repos        — Trigger a full sync
+ *
+ * Build-health (DB-only reads — no network refresh in the MCP variants):
+ *   health_feed       — change-since-last-sync feed (buildFeed)
+ *   health_doctor     — single-repo deep-dive (buildRepoDoctor)
+ *   health_portfolio  — portfolio health rollup (buildHealthTable)
+ *
+ * Operational hygiene:
+ *   db_fsck           — DB-integrity checker (runFsck; WRITES a db_health_runs row)
+ *   repo_diff         — per-repo DB-entry change history (getRepoDiff)
+ *   ops_runs          — recent fsck / sync run rows (listDbHealthRuns / listSyncRuns)
+ *
+ * Lifecycle + publish + dogfood/audit:
+ *   archive_repo      — flip lifecycle_status=archived (archiveRepoBySlug)
+ *   delete_repo       — hard-delete a repo + cascade (deleteRepoBySlug; confirm-gated)
+ *   repo_versions     — published versions per channel (listPublishedVersions)
+ *   suggest_dogfood   — dogfood intelligence by repo OR surface
+ *   audit_failing     — repos with failing controls in a domain
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -25,11 +42,15 @@ import {
   openDb, closeDb, getDb, getRepo, findRepos, getRelated,
   getAllRepos, getStats, upsertNote,
   addRelationship as addRel,
+  archiveRepoBySlug, deleteRepoBySlug,
+  listPublishedVersions,
+  listDbHealthRuns, listSyncRuns,
 } from '../db/init.js';
 import type { RepoFilters } from '../db/init.js';
 import { searchRepos } from '../search/fts.js';
 import { fullSync } from '../sync/index.js';
 import { syncDogfood } from '../sync/dogfood.js';
+import { suggestByRepo, suggestBySurface } from '../sync/dogfood-suggest.js';
 import { seedControls, DOMAINS } from '../audit/controls.js';
 import type { Domain } from '../audit/controls.js';
 import { importAuditInline } from '../audit/import.js';
@@ -37,6 +58,18 @@ import {
   getLatestAudit, getAuditPosture, getPortfolioPosture,
   findByAuditStatus, getOpenFindings,
 } from '../audit/queries.js';
+// MCP-001 / MCP-002: pure, side-effect-free build-health builders + the two
+// operational-hygiene reports. These are the SAME functions the CLU `rk health`
+// / `rk fsck` / `rk diff` surfaces wrap — we reuse them verbatim. runFsck is the
+// one exception: it WRITES a db_health_runs audit row (a named side effect,
+// documented in the db_fsck tool description below).
+import {
+  buildFeed,
+  buildRepoDoctor,
+  buildHealthTable,
+  runFsck,
+  getRepoDiff,
+} from '../health/index.js';
 import { resolveConfig } from '../config.js';
 // F-BE-022 / F-BE-011 / F-BE-021 / mcp-PH-004: shared enum tuples — single
 // source of truth lives in src/index.ts; this import keeps server.ts's Zod
@@ -778,6 +811,270 @@ server.tool(
           slug: r.slug, language: r.primary_language, shape: r.app_shape, status: r.status,
         })) }, null, 2),
       }],
+    };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUILD-HEALTH TOOLS (MCP-001) — DB-only reads, no network refresh
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── health_feed ─────────────────────────────────────────────────────────────
+server.tool(
+  'health_feed',
+  'Build-health change feed across the whole portfolio: audit deltas, newly-unpinned actions, broken CI streaks, toolchain drift. DB-only read (no registry/network refresh) — reflects state as of the last `rk sync`.',
+  {},
+  async () => {
+    const events = buildFeed();
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ count: events.length, events }, null, 2) }],
+    };
+  },
+);
+
+// ─── health_doctor ───────────────────────────────────────────────────────────
+server.tool(
+  'health_doctor',
+  'Single-repo build-health deep dive: CI, declared/observed toolchain + drift, dep-audit (with CVE IDs) and history, workflow actions + permissions. DB-only read (no network refresh).',
+  { slug: z.string().describe('Repo slug or partial name') },
+  async ({ slug }) => {
+    // Resolve the partial through the shared resolver so an ambiguous or
+    // unknown fragment doesn't silently target the wrong repo — then call
+    // buildRepoDoctor with the CANONICAL slug (it does an exact slug lookup).
+    const ref = resolveRepoRef(slug);
+    if (!ref) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    if ('ambiguous' in ref) {
+      return { content: [{ type: 'text' as const, text: ambiguousMessage(slug, ref.ambiguous) }] };
+    }
+    const report = buildRepoDoctor(ref.canonical);
+    if (!report) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    return { content: [{ type: 'text' as const, text: JSON.stringify(report, null, 2) }] };
+  },
+);
+
+// ─── health_portfolio ────────────────────────────────────────────────────────
+server.tool(
+  'health_portfolio',
+  'Portfolio health rollup — one row per repo with CI / dep / action-pin health grades + toolchain-drift flag and inline detail. DB-only read (no network refresh).',
+  {},
+  async () => {
+    const rows = buildHealthTable();
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ count: rows.length, rows }, null, 2) }],
+    };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OPERATIONAL HYGIENE TOOLS (MCP-002)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── db_fsck ─────────────────────────────────────────────────────────────────
+server.tool(
+  'db_fsck',
+  // SIDE EFFECT (named): every invocation WRITES one db_health_runs audit row.
+  // This is intentional (an operator wants a historical integrity trail "for
+  // free") but it is NOT a pure read — flagged here so an LLM client knows
+  // calling this tool mutates the DB.
+  'Run the DB-integrity checker: orphan rows, broken relationships, missing local paths, FTS row-count mismatch, invalid lifecycle status, incomplete sync runs. SIDE EFFECT: writes one db_health_runs audit row per call (the run_id is returned). Pass strict=true to make any dirty check yield exit_code=1 (CI gate).',
+  {
+    strict: z.boolean().optional().default(false)
+      .describe('When true, any non-zero check count yields exit_code=1 (default: informational, exit_code always 0)'),
+  },
+  async ({ strict }) => {
+    const report = runFsck({ strict });
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(report, null, 2) }],
+    };
+  },
+);
+
+// ─── repo_diff ───────────────────────────────────────────────────────────────
+server.tool(
+  'repo_diff',
+  'Per-repo DB-entry change history within a time window: notes added, audit runs, dep-audit severity deltas, published versions. Default window is the last 7 days. DB-only read.',
+  {
+    slug: z.string().describe('Repo slug or partial name'),
+    since: z.string().optional()
+      .describe('Lower bound (inclusive), e.g. "2026-06-01" or an ISO timestamp. Defaults to 7 days before `until`.'),
+    until: z.string().optional()
+      .describe('Upper bound (inclusive), e.g. "2026-06-20". Defaults to now. A date-only value covers the whole day.'),
+  },
+  async ({ slug, since, until }) => {
+    // Resolve through the shared resolver so an ambiguous fragment is rejected
+    // here (not mis-targeted), then hand getRepoDiff the CANONICAL slug — it
+    // does its own exact slug→id lookup.
+    const ref = resolveRepoRef(slug);
+    if (!ref) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    if ('ambiguous' in ref) {
+      return { content: [{ type: 'text' as const, text: ambiguousMessage(slug, ref.ambiguous) }] };
+    }
+    const report = getRepoDiff(ref.canonical, { since, until });
+    if (!report) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    return { content: [{ type: 'text' as const, text: JSON.stringify(report, null, 2) }] };
+  },
+);
+
+// ─── ops_runs ────────────────────────────────────────────────────────────────
+server.tool(
+  'ops_runs',
+  'List recent operational run rows: db_health_runs (fsck) and/or sync_runs. Read-only audit trail. Use kind to scope to one table.',
+  {
+    kind: z.enum(['fsck', 'sync', 'all']).optional().default('all')
+      .describe('Which run trail to return (default: all)'),
+    limit: z.number().int().min(1).max(100).optional().default(20)
+      .describe('Max rows per trail (1–100)'),
+  },
+  async ({ kind, limit }) => {
+    const out: Record<string, unknown> = {};
+    if (kind === 'all' || kind === 'fsck') out.fsck_runs = listDbHealthRuns(limit);
+    if (kind === 'all' || kind === 'sync') out.sync_runs = listSyncRuns(limit);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(out, null, 2) }] };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIFECYCLE MUTATION TOOLS (MCP-004)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── archive_repo ────────────────────────────────────────────────────────────
+server.tool(
+  'archive_repo',
+  'Mark a repo archived (lifecycle_status=archived, deprecated_at=now). Preserves all notes/findings — this is the reversible alternative to delete_repo. If reason is given it is recorded as a warning note. Re-archiving is idempotent (re-confirms deprecated_at).',
+  {
+    slug: z.string().describe('Repo slug or partial name'),
+    reason: z.string().optional().describe('Reason for archiving (recorded as a warning note)'),
+  },
+  async ({ slug, reason }) => {
+    const ref = resolveRepoRef(slug);
+    if (!ref) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    if ('ambiguous' in ref) {
+      return { content: [{ type: 'text' as const, text: ambiguousMessage(slug, ref.ambiguous) }] };
+    }
+    const result = archiveRepoBySlug(ref.canonical, { reason });
+    if (!result.archived) {
+      // Defensive: ref resolved above but the UPDATE affected 0 rows.
+      return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    }
+    // archiveRepoBySlug IGNORES its reason opt (it only flips status), so the
+    // rationale note is written HERE, not delegated — mirrors the CLI `archive`.
+    if (reason) {
+      upsertNote(ref.id, 'warning', 'Archived', `Archived: ${reason}`);
+    }
+    return {
+      // Echo the CANONICAL slug (provenance-on-display), not the fragment.
+      content: [{ type: 'text' as const, text: `Archived: ${ref.canonical}${reason ? ` (reason recorded)` : ''}` }],
+    };
+  },
+);
+
+// ─── delete_repo ─────────────────────────────────────────────────────────────
+server.tool(
+  'delete_repo',
+  'HARD-DELETE a repo and all related rows (notes, facts, docs, relationships, audit runs — FK cascade). IRREVERSIBLE. There is no interactive prompt over MCP, so `confirm` MUST be literally true to proceed; any other value refuses. Prefer archive_repo when you only want to mark a repo dead.',
+  {
+    slug: z.string().describe('Repo slug or partial name'),
+    confirm: z.boolean().describe('Must be literally true to proceed — the explicit gate for this irreversible action'),
+  },
+  async ({ slug, confirm }) => {
+    // Guarded boolean: no interactive confirm() is possible over MCP, so an
+    // explicit confirm===true arg is the only gate. Refuse before resolving.
+    if (confirm !== true) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Refused: delete_repo is irreversible and requires confirm=true. Re-call with { "slug": "${slug}", "confirm": true } to proceed, or use archive_repo to mark the repo dead without deleting it.`,
+        }],
+      };
+    }
+    const ref = resolveRepoRef(slug);
+    if (!ref) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    if ('ambiguous' in ref) {
+      return { content: [{ type: 'text' as const, text: ambiguousMessage(slug, ref.ambiguous) }] };
+    }
+    const result = deleteRepoBySlug(ref.canonical);
+    if (!result.deleted) {
+      return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    }
+    return {
+      content: [{
+        type: 'text' as const,
+        // Echo the canonical slug + the cascade blast radius.
+        text: JSON.stringify({ deleted: true, slug: ref.canonical, cascaded_rows: result.cascaded_rows }, null, 2),
+      }],
+    };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PUBLISH-VERSIONS TOOL (MCP-005)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── repo_versions ───────────────────────────────────────────────────────────
+server.tool(
+  'repo_versions',
+  'List published versions recorded for a repo, grouped per channel (npm / pypi / github-release). READ-ONLY — unlike `rk versions --refresh`, the MCP variant does NOT hit registries; it reports the rows already in the DB as of the last sync.',
+  {
+    slug: z.string().describe('Repo slug or partial name'),
+    channel: z.string().optional().describe('Filter to one channel (e.g. npm, pypi, github-release)'),
+  },
+  async ({ slug, channel }) => {
+    const ref = resolveRepoRef(slug);
+    if (!ref) return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
+    if ('ambiguous' in ref) {
+      return { content: [{ type: 'text' as const, text: ambiguousMessage(slug, ref.ambiguous) }] };
+    }
+    const rows = listPublishedVersions(ref.id);
+    const filtered = channel ? rows.filter((r) => r.channel === channel) : rows;
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ slug: ref.canonical, channel: channel ?? null, count: filtered.length, versions: filtered }, null, 2),
+      }],
+    };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DOGFOOD + AUDIT-DRILL TOOLS (MCP-006)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── suggest_dogfood ─────────────────────────────────────────────────────────
+server.tool(
+  'suggest_dogfood',
+  'Get dogfood intelligence suggestions (findings, patterns, recommendations, doctrine) for a repo OR a product surface. Specify EXACTLY ONE of repo / surface.',
+  {
+    repo: z.string().optional().describe('Repo slug (e.g. mcp-tool-shop-org/shipcheck)'),
+    surface: z.string().optional().describe('Product surface (e.g. cli, mcp-server, desktop)'),
+  },
+  async ({ repo, surface }) => {
+    // Mirror the CLI `suggest-dogfood` mutual-exclusion guard: the handler
+    // routes to exactly one branch, so both-set or neither-set is a caller
+    // mistake we surface rather than silently pick a branch.
+    if (repo && surface) {
+      return { content: [{ type: 'text' as const, text: 'Error: specify only one of repo or surface, not both.' }] };
+    }
+    if (!repo && !surface) {
+      return { content: [{ type: 'text' as const, text: 'Error: specify repo <slug> or surface <surface>.' }] };
+    }
+    const result = repo ? suggestByRepo(repo) : suggestBySurface(surface!);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ for: repo ?? surface, ...result }, null, 2) }],
+    };
+  },
+);
+
+// ─── audit_failing ───────────────────────────────────────────────────────────
+server.tool(
+  'audit_failing',
+  'List repos whose LATEST audit has failing controls in a given domain. Returns each failing control id + title + notes per repo.',
+  {
+    domain: z.enum(DOMAINS_TUPLE).describe('Audit domain to filter failing controls by'),
+  },
+  async ({ domain }) => {
+    const rows = findByAuditStatus({ domain_failing: domain });
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ domain, count: rows.length, failing: rows }, null, 2) }],
     };
   },
 );
