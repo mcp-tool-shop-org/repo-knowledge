@@ -70,6 +70,7 @@ import {
   listOwners, addOwner, removeOwner,
 } from './config.js';
 import { shouldFailStrict } from './cli-exit.js';
+import { bold, red, green, colorByStatus } from './colors.js';
 import { syncDogfood } from './sync/dogfood.js';
 import { suggestByRepo, suggestBySurface } from './sync/dogfood-suggest.js';
 import { parseWorklist } from './games/parser.js';
@@ -1462,11 +1463,11 @@ function formatRepo(repo: Record<string, any>): string {
   // Audit posture
   const posture = getAuditPosture(repo.id);
   if (posture) {
-    lines.push(`\n─── Audit Posture ───`);
+    lines.push(`\n${bold('─── Audit Posture ───')}`);
     lines.push(`  Last audited:  ${posture.last_audited} (${posture.scope_level})`);
     lines.push(`  Commit:        ${posture.commit_sha || 'n/a'}`);
-    lines.push(`  Status:        ${posture.overall_status}  |  Posture: ${posture.overall_posture}`);
-    lines.push(`  Blocking:      ${posture.blocking_release ? 'YES' : 'no'}`);
+    lines.push(`  Status:        ${colorByStatus(posture.overall_status, posture.overall_status)}  |  Posture: ${colorByStatus(posture.overall_posture, posture.overall_posture)}`);
+    lines.push(`  Blocking:      ${posture.blocking_release ? red('YES') : green('no')}`);
     lines.push(`  Pass rate:     ${posture.pass_rate != null ? (posture.pass_rate * 100).toFixed(0) + '%' : 'n/a'} (${posture.controls_passed}/${posture.controls_total})`);
     const openStr = Object.entries(posture.open_findings).map(([s, c]) => `${s}:${c}`).join(' ');
     if (openStr) lines.push(`  Open findings: ${openStr}`);

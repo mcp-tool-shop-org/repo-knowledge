@@ -6,6 +6,7 @@
  */
 
 import type { GameSummary } from './types.js';
+import { bold, cyan, green, yellow, dim } from '../colors.js';
 
 const MEDALS = ['[1st]', '[2nd]', '[3rd]'];
 const BAR_CHAR = '#';
@@ -18,9 +19,9 @@ export function renderReport(summary: GameSummary): string {
   const lines: string[] = [];
 
   lines.push('');
-  lines.push('='.repeat(60));
-  lines.push('  CLAUDE GAMES -- REMEDIATION SPEEDRUN');
-  lines.push('='.repeat(60));
+  lines.push(cyan('='.repeat(60)));
+  lines.push(bold(cyan('  CLAUDE GAMES -- REMEDIATION SPEEDRUN')));
+  lines.push(cyan('='.repeat(60)));
   lines.push('');
 
   // Overview
@@ -40,9 +41,9 @@ export function renderReport(summary: GameSummary): string {
   const completionPct = summary.totalRepos > 0
     ? Math.round(((summary.done + summary.blocked) / summary.totalRepos) * 100)
     : 0;
-  lines.push(`  Completion:   ${completionPct}%`);
+  lines.push(`  Completion:   ${bold(`${completionPct}%`)}`);
   const blocks = Math.max(0, Math.min(20, Math.round(completionPct / 5)));
-  lines.push(`  ${'#'.repeat(blocks)}${'·'.repeat(20 - blocks)}`);
+  lines.push(`  ${green('#'.repeat(blocks))}${dim('·'.repeat(20 - blocks))}`);
   lines.push('');
 
   // Leaderboard
@@ -59,11 +60,13 @@ export function renderReport(summary: GameSummary): string {
 
   for (let i = 0; i < summary.leaderboard.length; i++) {
     const p = summary.leaderboard[i];
-    const medal = i < 3 ? MEDALS[i] : `[${i + 1}th]`;
+    const medalRaw = i < 3 ? MEDALS[i] : `[${i + 1}th]`;
+    // Gold the winner, plain for the rest; pad BEFORE coloring to keep columns aligned.
+    const medal = i === 0 ? bold(yellow(medalRaw.padEnd(6))) : medalRaw.padEnd(6);
     const barLen = Math.max(1, Math.min(BAR_WIDTH, Math.round((p.totalPoints / maxPts) * BAR_WIDTH)));
-    const bar = BAR_CHAR.repeat(barLen);
+    const bar = cyan(BAR_CHAR.repeat(barLen));
 
-    lines.push(`  ${medal.padEnd(6)} ${p.player.padEnd(20)} ${String(p.totalPoints).padStart(5)} pts  ${bar}`);
+    lines.push(`  ${medal} ${p.player.padEnd(20)} ${String(p.totalPoints).padStart(5)} pts  ${bar}`);
     // F-AG-010: blocked and skipped are distinct states and now distinct
     // counters. Show both so a player who blocks 5 repos and skips 0
     // doesn't look identical to one who skips 5 and blocks 0.

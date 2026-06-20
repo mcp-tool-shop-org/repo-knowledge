@@ -15,6 +15,7 @@
  */
 import { getDb, getPortfolioHealth, getToolchainDrift, listWorkflowActions } from '../db/init.js';
 import type { PortfolioHealthRow } from '../db/init.js';
+import { bold, colorByStatus } from '../colors.js';
 
 export interface HealthTableRow {
   slug: string;
@@ -175,18 +176,23 @@ export function renderHealthTableText(rows: HealthTableRow[]): string {
   if (rows.length === 0) return 'No repos in portfolio.';
   // Build column widths. Slug is the runaway field; cap at 50 chars.
   const slugW = Math.min(50, Math.max(4, ...rows.map(r => r.slug.length)));
-  const header = pad('SLUG', slugW) + '  ' +
+  const header = bold(pad('SLUG', slugW) + '  ' +
     pad('CI', 7) + '  ' + pad('DEP', 7) + '  ' + pad('ACTIONS', 7) + '  ' +
-    pad('DRIFT', 5);
-  const sep = '─'.repeat(header.length);
+    pad('DRIFT', 5));
+  // Separator width is based on the VISIBLE header (bold() is zero-width when
+  // color is off, and the ANSI codes don't change the rendered column width).
+  const sep = '─'.repeat(pad('SLUG', slugW).length + 2 + 7 + 2 + 7 + 2 + 7 + 2 + 5);
   const lines: string[] = [header, sep];
   for (const r of rows) {
+    // Stage D: pad FIRST (alignment), then colorize the grade cell by its
+    // status word so the conventional green/yellow/red reads at a glance.
+    const drift = r.toolchain_drift ? 'yes' : 'no';
     lines.push(
       pad(r.slug.length > slugW ? r.slug.slice(0, slugW - 1) + '…' : r.slug, slugW) + '  ' +
-      pad(r.ci_health, 7) + '  ' +
-      pad(r.dep_health, 7) + '  ' +
-      pad(r.action_pin_health, 7) + '  ' +
-      pad(r.toolchain_drift ? 'yes' : 'no', 5)
+      colorByStatus(r.ci_health, pad(r.ci_health, 7)) + '  ' +
+      colorByStatus(r.dep_health, pad(r.dep_health, 7)) + '  ' +
+      colorByStatus(r.action_pin_health, pad(r.action_pin_health, 7)) + '  ' +
+      colorByStatus(r.toolchain_drift ? 'drift' : 'clean', pad(drift, 5))
     );
   }
   return lines.join('\n');
