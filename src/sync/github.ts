@@ -60,12 +60,30 @@ export interface GitHubSyncOptions {
   limit?: number;
   includeReleases?: boolean;
   includeForks?: boolean;
+  /**
+   * sync-A-006 (deepened): when true, previously-active repos absent from
+   * this sync's `gh repo list` are soft-archived (lifecycle_status='archived').
+   * DEFAULT false — a routine `rk sync` only DETECTS and reports vanished
+   * candidates; it never mutates lifecycle state on listing-absence alone.
+   * Absence is an ambiguous signal (deleted / renamed / transferred / private-
+   * but-invisible-to-an-under-scoped-token), so the destructive-leaning
+   * archival is opt-in. The operator passing this flag asserts a complete,
+   * fully-scoped view of the owner.
+   */
+  pruneVanished?: boolean;
 }
 
 export interface GitHubSyncResult {
   synced: number;
   skipped: number;
   errors: string[];
+  /**
+   * Slugs that were active before this sync but absent from the listing.
+   * Always populated (detection runs regardless of pruneVanished); when
+   * pruneVanished is false these were NOT archived — the caller surfaces
+   * them as a warning so the operator can investigate or re-run with the flag.
+   */
+  vanished: string[];
 }
 
 export interface ReleaseInfo {
@@ -290,27 +308,34 @@ function archiveVanishedRepo(slug: string, repoId: number, owner: string, name: 
 /**
  * Sync all repos for given owners into the database.
  *
- * FT-5: when a previously-active repo is not present in this sync's
- * fetch results (the owner-level `gh repo list` no longer includes it),
- * we mark `lifecycle_status='archived'` and add a warning note. Note we
- * do NOT individually 404-probe the candidate (sync-A-001) — absence
- * from the listing is the only signal, hence the guards below.
+ * FT-5: when a previously-active repo is not present in this sync's fetch
+ * results (the owner-level `gh repo list` no longer includes it), it is a
+ * VANISHED candidate. A routine sync only DETECTS and reports these (in
+ * `result.vanished`); it archives them (`lifecycle_status='archived'`) ONLY
+ * when `opts.pruneVanished` is set.
  *
- * Defense against false positives (three layers):
- *  - we only archive when the owner's fetch produced AT LEAST ONE
- *    successful repo entry. If the entire owner-level fetch failed
- *    (rate limit, network blip, auth missing), fetchGitHubRepos returns
- *    []; we treat that as "no signal" rather than "everything vanished."
- *  - sync-A-006: we NEVER archive a repo whose last-recorded visibility
- *    was private. An under-scoped token returns only public repos and
- *    silently omits private ones, so a private repo missing from the
- *    listing is "invisible to this token," not "vanished."
+ * Why archival is opt-in (sync-A-006, deepened): listing-absence is an
+ * AMBIGUOUS signal. `gh repo list` with a token lacking `repo` scope omits
+ * private repos exactly the way it omits deleted ones, and GitHub returns 404
+ * (not 403) for a private repo you can't see, so even a per-candidate probe
+ * can't tell them apart. The `repos.visibility` column is not a reliable
+ * discriminator either — local-scanned repos default to 'public'. So a routine
+ * `rk sync` must never mutate lifecycle state on absence alone; the operator
+ * opts in with `--prune-vanished` to assert a complete, fully-scoped view.
+ *
+ * Detection guards (always applied):
+ *  - we only treat repos as vanished when the owner's fetch produced AT LEAST
+ *    ONE successful repo entry. If the entire owner-level fetch failed (rate
+ *    limit, network blip, auth missing), fetchGitHubRepos returns []; we treat
+ *    that as "no signal" rather than "everything vanished."
  *  - sync-A-004: seen/snapshot membership is compared case-insensitively
- *    because GitHub identity is case-insensitive — Org/Repo and org/repo
- *    are the same repo and a casing skew must not look like a vanish.
+ *    because GitHub identity is case-insensitive — Org/Repo and org/repo are
+ *    the same repo and a casing skew must not look like a vanish.
+ * Under --prune-vanished, a row recorded as private is still never archived
+ * (defense-in-depth), and the warning note states only the observed fact.
  */
 export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitHubSyncResult {
-  const results: GitHubSyncResult = { synced: 0, skipped: 0, errors: [] };
+  const results: GitHubSyncResult = { synced: 0, skipped: 0, errors: [], vanished: [] };
 
   for (const owner of owners) {
     console.log(`Syncing ${owner}...`);
@@ -375,30 +400,42 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
     }
     console.log();
 
-    // FT-5: vanished-repo archival. Only fires when this owner-fetch
-    // produced at least one result — empty fetch = ambient failure,
-    // not signal.
+    // FT-5: vanished-repo DETECTION. Only runs when this owner-fetch
+    // produced at least one result — empty fetch = ambient failure, not
+    // signal. Archival is opt-in (see below).
     if (repos.length > 0) {
       for (const [lowerSlug, prior] of priorActive.entries()) {
         // sync-A-004: case-insensitive membership — the seenSlugs set is
         // already lowercased, and so is `lowerSlug`.
         if (seenSlugs.has(lowerSlug)) continue;
-        // sync-A-006: a repo whose last-recorded visibility was private
-        // is invisible to an under-scoped token. We refuse to soft-archive
-        // it on a listing-absence signal alone — that would stamp a live
-        // private repo "may be deleted." Only public repos (or unknown
-        // visibility) reach the archiver here.
-        if (prior.visibility === 'private') {
-          console.log(`  kept (private, absent from listing): ${prior.slug}`);
+
+        // The slug was active before this sync but not in this sync's GitHub
+        // listing — a vanished candidate. Record it regardless of whether we
+        // archive, so the caller can surface "what disappeared."
+        results.vanished.push(prior.slug);
+
+        // sync-A-006 (deepened): archival is OPT-IN. Listing-absence is an
+        // ambiguous signal — a private repo invisible to an under-scoped
+        // token is absent for the same reason a deleted one is. The visibility
+        // column is NOT a reliable discriminator (local-scanned repos default
+        // to 'public'), so a routine `rk sync` must NOT mutate lifecycle state
+        // here. Only archive when the operator explicitly opted in via
+        // --prune-vanished, asserting a complete, fully-scoped view.
+        if (!opts.pruneVanished) {
+          console.log(`  vanished (absent from gh listing, NOT archived — pass --prune-vanished to archive): ${prior.slug}`);
           continue;
         }
-        // The slug was active before this sync but not in this sync's
-        // GitHub listing — treat as a vanished candidate. Use the
-        // original-cased slug for storage/display.
+
+        // Opt-in archival. Keep the visibility guard as defense-in-depth: if a
+        // row WAS github-confirmed private, never archive it even under the flag.
+        if (prior.visibility === 'private') {
+          console.log(`  kept (recorded private, absent from listing): ${prior.slug}`);
+          continue;
+        }
         const [vOwner, vName] = prior.slug.split('/', 2);
         try {
           archiveVanishedRepo(prior.slug, prior.id, vOwner ?? owner, vName ?? prior.slug);
-          console.log(`  archived (absent from gh listing): ${prior.slug}`);
+          console.log(`  archived (--prune-vanished, absent from gh listing): ${prior.slug}`);
         } catch (e: unknown) {
           results.errors.push(`archive ${prior.slug}: ${(e as Error).message}`);
         }

@@ -67,6 +67,11 @@ export interface SyncConfig {
   localDepth?: number;
   includeReleases?: boolean;
   includeForks?: boolean;
+  /**
+   * sync-A-006 (deepened): archive previously-active repos that vanished from
+   * the GitHub listing. DEFAULT false — a routine sync only reports them.
+   */
+  pruneVanished?: boolean;
 }
 
 export interface FullSyncResult {
@@ -111,11 +116,24 @@ export async function fullSync(config: SyncConfig = {}): Promise<FullSyncResult>
     const ghResult = syncGitHub(owners, {
       includeReleases: config.includeReleases ?? false,
       includeForks: config.includeForks ?? false,
+      pruneVanished: config.pruneVanished ?? false,
     });
     console.log(`GitHub: ${ghResult.synced} synced, ${ghResult.skipped} skipped`);
     if (ghResult.errors.length) {
       console.log(`Errors: ${ghResult.errors.length}`);
       ghResult.errors.forEach(e => console.log(`  ${e}`));
+    }
+    // sync-A-006: surface vanished candidates that were NOT archived so the
+    // operator can investigate rather than discovering silent lifecycle drift.
+    if (!config.pruneVanished && ghResult.vanished.length) {
+      console.log(
+        `\n⚠ ${ghResult.vanished.length} repo(s) were active before but are absent from the GitHub listing (NOT archived):`
+      );
+      ghResult.vanished.forEach(s => console.log(`  ${s}`));
+      console.log(
+        `  These may be deleted, renamed, transferred, or private-but-invisible to your token. ` +
+        `Confirm with \`gh repo view <slug>\`, then re-run \`rk sync --prune-vanished\` (with a fully-scoped token) to archive them.`
+      );
     }
 
     console.log('\n=== Local Scan ===');

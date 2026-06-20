@@ -1,15 +1,19 @@
 /**
- * FT-5: GitHub 404 → lifecycle_status='archived' + warning note.
+ * FT-5: GitHub vanished-repo detection + (opt-in) archival.
  *
  * Strategy: vi.mock child_process so execFileSync emits canned `gh repo
- * list` output. We seed the DB with two previously-active repos, then
- * fire syncGitHub() against a mock that returns only one of them. The
- * vanished repo must flip to lifecycle_status='archived' and acquire a
- * warning note.
+ * list` output. We seed the DB with previously-active repos, then fire
+ * syncGitHub() against a mock that returns only some of them.
+ *
+ * sync-A-006 (deepened): archival is OPT-IN via `{ pruneVanished: true }`.
+ * A routine sync only DETECTS vanished repos (reports them in
+ * `result.vanished`) and NEVER mutates lifecycle state — listing-absence is
+ * an ambiguous signal (a private repo invisible to an under-scoped token is
+ * absent the same way a deleted one is). The archival tests below therefore
+ * pass pruneVanished:true; the safe-default test asserts no mutation without it.
  *
  * Defense-in-depth: a sync with an EMPTY fetch result must NOT archive
- * anything (could be a rate-limit / auth failure / network blip, not
- * signal). That ambient-failure path is exercised in the second test.
+ * anything (could be a rate-limit / auth failure / network blip, not signal).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -84,9 +88,10 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
       throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
     });
 
-    const result = syncGitHub(['org']);
+    const result = syncGitHub(['org'], { pruneVanished: true });
 
     expect(result.synced).toBe(1);
+    expect(result.vanished).toContain('org/vanished');
 
     // 'still-here' should remain active.
     const stillHere = getRepo('org/still-here');
@@ -167,7 +172,7 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
       throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
     });
 
-    syncGitHub(['org']);
+    syncGitHub(['org'], { pruneVanished: true });
 
     // 'untouched/safe' must not be archived even though it wasn't seen.
     const safe = getRepo('untouched/safe');
@@ -261,7 +266,9 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
       throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
     });
 
-    syncGitHub(['org']);
+    // Even WITH archival opted in, a recorded-private repo is never archived
+    // (defense-in-depth on top of the safe opt-in default).
+    syncGitHub(['org'], { pruneVanished: true });
 
     // The private repo must remain active — visibility=private is the
     // guard that distinguishes "invisible to this token" from "vanished."
@@ -309,7 +316,7 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
       throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
     });
 
-    syncGitHub(['Org']);
+    syncGitHub(['Org'], { pruneVanished: true });
 
     // The original-cased row must stay active — the lower-cased fetch
     // result is the SAME repo, not a vanish.
@@ -317,5 +324,44 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
     expect(stored).not.toBeNull();
     expect(stored!.lifecycle_status).toBe('active');
     expect(stored!.deprecated_at).toBeNull();
+  });
+
+  it('DEFAULT sync (no --prune-vanished) detects but never archives a vanished repo (sync-A-006 deepened)', () => {
+    // The surviving-HIGH scenario: a routine `rk sync` must not mutate
+    // lifecycle state on listing-absence. The visibility guard was inert
+    // because local-scanned repos store visibility='public' — so even a
+    // genuinely-private repo absent from an under-scoped fetch looks public
+    // here. The SAFE DEFAULT (no archival) protects it regardless of the
+    // unreliable visibility column.
+    upsertRepo({ owner: 'org', name: 'survivor', status: 'active', visibility: 'public' });
+    // A locally-scanned private repo: stored as 'public' (the default), the
+    // exact shape that defeated the old guard.
+    upsertRepo({ owner: 'org', name: 'looks-public-is-private', status: 'active', visibility: 'public' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([
+          {
+            name: 'survivor', owner: { login: 'org' }, description: 'returned',
+            url: 'https://github.com/org/survivor', isPrivate: false, isArchived: false,
+            isFork: false, defaultBranchRef: { name: 'main' }, stargazerCount: 0,
+            forkCount: 0, createdAt: null, updatedAt: null, pushedAt: null,
+            primaryLanguage: null, repositoryTopics: [], licenseInfo: null,
+          },
+        ]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    // NO pruneVanished flag — the default.
+    const result = syncGitHub(['org']);
+
+    // Detection still runs and reports the candidate...
+    expect(result.vanished).toContain('org/looks-public-is-private');
+    // ...but NOTHING is mutated: the repo stays active with no warning note.
+    const repo = getRepo('org/looks-public-is-private');
+    expect(repo!.lifecycle_status).toBe('active');
+    expect(repo!.deprecated_at).toBeNull();
+    expect((repo!.notes as Array<Record<string, unknown>>).filter(n => n.note_type === 'warning').length).toBe(0);
   });
 });

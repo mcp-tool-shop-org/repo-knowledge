@@ -191,7 +191,8 @@ program
   .option('--local-depth <n>', 'Max recursion depth for --local scan (default: 4)', (v) => parsePositiveInt(v, '--local-depth'), 4)
   .option('--releases', 'Also sync releases (slower)', false)
   .option('--forks', 'Include forked repos', false)
-  .action(async (opts: { owners?: string; local?: string; localDepth: number; releases: boolean; forks: boolean }): Promise<void> => {
+  .option('--prune-vanished', 'Archive repos absent from the GitHub listing (default: detect + warn only). Use only with a fully-scoped token.', false)
+  .action(async (opts: { owners?: string; local?: string; localDepth: number; releases: boolean; forks: boolean; pruneVanished: boolean }): Promise<void> => {
     openDb(config().dbPath);
     await fullSync({
       owners: opts.owners ? opts.owners.split(',') : undefined,
@@ -199,6 +200,7 @@ program
       localDepth: opts.localDepth,
       includeReleases: opts.releases,
       includeForks: opts.forks,
+      pruneVanished: opts.pruneVanished,
     });
     closeDb();
   });
