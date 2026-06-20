@@ -107,6 +107,15 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
       runCount++;
 
       const tx = db.transaction(() => {
+        // SYNC-PH-05: capture the pre-DELETE finding-fact count so we can log
+        // a one-line delta — a DELETE-then-reinsert with no delta record
+        // leaves the operator blind to whether a re-audit shrank, grew, or
+        // churned the finding set. We count BEFORE the DELETE; the post count
+        // is the number of findings we actually upsert below.
+        const priorFindingCount = (db.prepare(
+          "SELECT COUNT(*) AS n FROM repo_facts WHERE repo_id = ? AND fact_type = 'dogfood.swarm.finding'",
+        ).get(repoId) as { n: number }).n;
+
         // Replace, don't accumulate: a re-audit produces a new run with new
         // finding ids, and stale facts from the previous run would otherwise
         // linger beside the fresh ones.
@@ -117,8 +126,22 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
         const openBySeverity = new Map<string, number>();
         let open = 0;
         let fixed = 0;
+        let upsertedFindings = 0;
 
         for (const f of findings) {
+          // SYNC-PH-05: finding_id is the fact KEY and severity drives the
+          // open-by-severity rollup; an empty/blank value for either would
+          // upsert a keyless or unbucketed fact. Skip-with-warn instead so a
+          // drifted control-plane row doesn't silently corrupt the rollup.
+          if (typeof f.finding_id !== 'string' || f.finding_id.trim() === '' ||
+              typeof f.severity !== 'string' || f.severity.trim() === '') {
+            skipped.push(`${run.repo} — swarm finding skipped: empty finding_id or severity`);
+            console.error(
+              `[swarm-sync] ${run.repo}: skipping swarm finding with empty finding_id or severity`,
+            );
+            continue;
+          }
+
           upsertFact(repoId, 'dogfood.swarm.finding', f.finding_id, JSON.stringify({
             severity: f.severity,
             category: f.category,
@@ -130,6 +153,7 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
             run_id: run.id,
           }), 'detected', SOURCE_PATH);
           factsUpserted++;
+          upsertedFindings++;
 
           if (OPEN_STATUSES.has(f.status)) {
             open++;
@@ -138,6 +162,11 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
             fixed++;
           }
         }
+
+        // SYNC-PH-05: one-line delta to stderr (progress/diagnostic channel).
+        console.error(
+          `[swarm-sync] ${run.repo}: ${priorFindingCount} -> ${upsertedFindings} swarm findings`,
+        );
 
         const severityRollup = SEVERITY_ORDER
           .map((s) => `${s}=${openBySeverity.get(s) ?? 0}`)
@@ -148,7 +177,10 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
           ['run:status', run.status],
           ['run:created_at', run.created_at],
           ['run:commit_sha', run.commit_sha],
-          ['findings:total', String(findings.length)],
+          // SYNC-PH-05: total reflects findings actually upserted, not the
+          // raw row count — skipped (empty finding_id/severity) rows are not
+          // synced facts and would otherwise inflate the rollup.
+          ['findings:total', String(upsertedFindings)],
           ['findings:open', String(open)],
           ['findings:fixed', String(fixed)],
           ['findings:open_by_severity', severityRollup],
@@ -158,7 +190,7 @@ export function syncSwarmControlPlane(localPath: string): SwarmSyncResult | null
           factsUpserted++;
         }
 
-        findingCount += findings.length;
+        findingCount += upsertedFindings;
         openCount += open;
       });
       tx();

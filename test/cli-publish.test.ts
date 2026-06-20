@@ -119,6 +119,51 @@ describe('rk versions / drift / bind-package (F-TS-FT2)', () => {
     expect(stderr + stdout).toMatch(/not found/i);
   });
 
+  // ─── cli-PH-001: versions --refresh stderr routing + --strict ─────────────
+  //
+  // The --refresh path used to print its "Refreshing publish state..." progress
+  // AND the per-error lines to STDOUT, polluting a stdout pipe. The fix routes
+  // all refresh diagnostics to stderr (channel discipline) and adds --strict so
+  // CI can fail when the refresh surfaced errors. There is no offline seam to
+  // force a refresh *error* (every sync worker is network-graceful and returns
+  // [] on failure rather than populating summary.errors), so the forced-error
+  // exit is verified by the same exit-2-on-error logic that drift --strict pins.
+  // These tests pin the two deterministic offline contracts: (1) the refresh
+  // progress never lands on stdout, and (2) a clean refresh with --strict still
+  // exits 0 (no false-positive gate).
+
+  it('rk versions --refresh routes progress to stderr, keeping stdout to the dashboard', () => {
+    openDb(dbPath);
+    // No bindings + no real registry → the refresh is a graceful no-op, but the
+    // "Refreshing publish state..." progress line must still appear, and only
+    // on stderr. The dashboard rows are the stdout answer.
+    const repoId = upsertRepo({ owner: 'o', name: 'r' }) as number;
+    upsertPublishedVersion({ repo_id: repoId, channel: 'npm', version: '1.0.0' });
+    closeDb();
+
+    const { code, stdout, stderr } = runCli(['versions', 'o/r', '--refresh']);
+    // Progress is on stderr, NOT stdout.
+    expect(stderr).toMatch(/Refreshing publish state/i);
+    expect(stdout).not.toMatch(/Refreshing publish state/i);
+    // The dashboard (the answer) is still on stdout.
+    expect(stdout).toMatch(/1\.0\.0/);
+    // A clean refresh (no errors) exits 0 even without --strict.
+    expect(code).toBe(0);
+  });
+
+  it('rk versions --refresh --strict exits 0 when the refresh surfaced no errors (no false positive)', () => {
+    openDb(dbPath);
+    upsertRepo({ owner: 'o', name: 'clean' });
+    closeDb();
+
+    // No bindings → syncPublishStateForRepo returns { updated: 0, errors: [] }.
+    // --strict must NOT turn a clean (error-free) refresh into a non-zero exit.
+    const { code, stdout } = runCli(['versions', 'o/clean', '--refresh', '--strict']);
+    expect(code).toBe(0);
+    // Progress must not have leaked onto stdout (channel discipline).
+    expect(stdout).not.toMatch(/Refreshing publish state/i);
+  });
+
   // ─── rk drift ───────────────────────────────────────────────────────────
 
   it('rk drift reports "no drift" when source version matches registry latest', () => {
@@ -345,4 +390,58 @@ describe('rk versions / drift / bind-package (F-TS-FT2)', () => {
     expect(bound.c).toBe(0);
     closeDb();
   });
+
+  // ─── cli-PH-005: init-rig hostname-collision warning ──────────────────────
+  //
+  // resolveRigId falls back to os.hostname() with no uniqueness check, so two
+  // rigs sharing a hostname collapse onto one rigs row and their per-rig
+  // repo_local_paths collide. init-rig now warns (stderr) when a rig_id is
+  // re-registered under a DIFFERENT hostname/primary_root.
+
+  it('rk init-rig warns when a rig_id is re-registered with a different hostname', () => {
+    // First registration under an explicit id + hostname A — no warning.
+    const first = runCli(['init-rig', '--id', 'shared-rig', '--hostname', 'host-A']);
+    expect(first.code).toBe(0);
+    expect(first.stderr).not.toMatch(/different hostname/i);
+
+    // Re-register the SAME rig_id with a DIFFERENT hostname → collision warning.
+    const second = runCli(['init-rig', '--id', 'shared-rig', '--hostname', 'host-B']);
+    expect(second.code).toBe(0); // warning, not a hard failure
+    expect(second.stderr).toMatch(/rig_id shared-rig already registered/i);
+    expect(second.stderr).toMatch(/RK_RIG_ID/);
+    // The warning is diagnostic — it must be on stderr, not the stdout answer.
+    expect(second.stdout).not.toMatch(/already registered/i);
+    expect(second.stdout).toMatch(/Registered rig: shared-rig/);
+  });
+
+  it('rk init-rig does NOT warn when re-registering the SAME rig_id with the SAME hostname/root', () => {
+    // Idempotent re-registration (identical hostname + root) must stay quiet.
+    const root = join(tmpDir, 'rig-root');
+    const first = runCli(['init-rig', '--id', 'stable-rig', '--hostname', 'host-X', '--root', root]);
+    expect(first.code).toBe(0);
+    const second = runCli(['init-rig', '--id', 'stable-rig', '--hostname', 'host-X', '--root', root]);
+    expect(second.code).toBe(0);
+    expect(second.stderr).not.toMatch(/different hostname|already registered/i);
+  });
+
+  // ─── cli-PH-004: sync empty-owners warning ────────────────────────────────
+  //
+  // The beforeEach config writes owners: [] / localDirs: []. With no --owners
+  // flag, `rk sync` resolves an empty owners list and calls syncGitHub([]) —
+  // a silent no-op for the entire GitHub leg (the silent-failure class
+  // sync_runs exists to kill). The fix emits a stderr warning while letting
+  // the local scan proceed. The isolated cwd (tmpDir) + empty-owners config +
+  // isolated DB make this deterministic and keep the production DB untouched.
+
+  it('rk sync with empty owners config warns to stderr that GitHub sync was skipped', () => {
+    const { stderr, stdout } = runCli(['sync']);
+    expect(stderr).toMatch(/no GitHub owners configured/i);
+    expect(stderr).toMatch(/rk owners add|--owners/i);
+    // The warning is diagnostic — stderr only, never the stdout result channel.
+    expect(stdout).not.toMatch(/no GitHub owners configured/i);
+  });
+  // Note: the negative case (no warning when --owners is passed) is not tested
+  // here — exercising it would fire a real `gh repo list <owner>` network call.
+  // The guard condition `!opts.owners && config().owners.length === 0` makes the
+  // opt-out behavior obvious from the source; we keep the suite network-free.
 });

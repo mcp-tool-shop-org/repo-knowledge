@@ -105,3 +105,48 @@ describe('malformed rk.config.json handling (db-A-007)', () => {
     expect(r2.owners).toEqual(['first-org', 'second-org']);
   });
 });
+
+describe('non-array array-field handling (PH-DB-006)', () => {
+  const cfgPath = () => join(process.cwd(), 'rk.config.json');
+
+  it('owners set to a non-array warns on stderr and falls back to [] (no throw)', () => {
+    // Valid JSON, but owners is a string instead of an array. A later
+    // .map()/iteration over owners would throw a cryptic
+    // ".map is not a function" deep in the sync pipeline. resolveConfig must
+    // coerce it back to the DEFAULTS value (empty array) and tell the
+    // operator why.
+    writeFileSync(cfgPath(), JSON.stringify({ owners: 'my-org' }));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const config = resolveConfig();
+      expect(config.owners).toEqual([]);
+      // localDirs is still its default (one resolved entry).
+      expect(Array.isArray(config.localDirs)).toBe(true);
+      // localDirs.map() must not throw — pin that resolveConfig completed.
+      expect(() => config.localDirs.map(d => d)).not.toThrow();
+      const warned = spy.mock.calls.some(c =>
+        String(c[0]).includes('"owners" is not an array')
+      );
+      expect(warned).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('localDirs set to a non-array warns and falls back to the default', () => {
+    writeFileSync(cfgPath(), JSON.stringify({ localDirs: 42 }));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const config = resolveConfig();
+      expect(Array.isArray(config.localDirs)).toBe(true);
+      // The single default './' resolved to an absolute path — length 1.
+      expect(config.localDirs).toHaveLength(1);
+      const warned = spy.mock.calls.some(c =>
+        String(c[0]).includes('"localDirs" is not an array')
+      );
+      expect(warned).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

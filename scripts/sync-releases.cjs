@@ -27,6 +27,14 @@ const insertMany = db.transaction((releases) => {
   return inserted;
 });
 
+// PH-AHG-004: a fetch failure used to be swallowed silently — gh()
+// returned null, listRepos/listReleases returned [], and a stale sync
+// printed "Done" looking successful. We now (a) log gh's stderr so the
+// operator can see WHAT failed, and (b) bump a module-level counter so the
+// summary can report the failure and the process can exit non-zero —
+// letting CI gate on a degraded sync instead of trusting a green run.
+let ghFailures = 0;
+
 function gh(args) {
   try {
     return execSync(`gh api --paginate ${args}`, {
@@ -35,6 +43,10 @@ function gh(args) {
       timeout: 60000,
     });
   } catch (e) {
+    ghFailures++;
+    // execSync surfaces gh's stderr on e.stderr; fall back to e.message.
+    const detail = (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'unknown error';
+    console.warn(`gh failed: api --paginate ${args}\n  ${detail}`);
     return null;
   }
 }
@@ -109,3 +121,11 @@ console.log(`Inserted: ${totalInserted}, Skipped (dupes): ${totalSkipped}`);
 console.log(`Total in table: ${db.prepare('SELECT COUNT(*) as c FROM repo_releases').get().c}`);
 
 db.close();
+
+// PH-AHG-004: surface degraded-sync state. If any owner/repo fetch errored,
+// the run is incomplete (some releases may be missing) — say so loudly and
+// exit non-zero so a caller / CI does not treat a partial sync as success.
+if (ghFailures > 0) {
+  console.error(`\nWARNING: ${ghFailures} GitHub fetch(es) failed — this sync is INCOMPLETE (some releases may be missing).`);
+  process.exit(1);
+}

@@ -149,6 +149,31 @@ describe('scoreGame', () => {
     expect(p.totalPoints).toBe(0);
   });
 
+  // PH-AHG-005: a fat-fingered worklist cell (e.g. "999999H") parses to an
+  // absurd count that would silently skew the leaderboard. scoreGame clamps
+  // each parsed count to MAX_FINDINGS_PER_SEVERITY (999) before accumulating.
+  it('clamps an absurd finding count instead of accumulating it raw (PH-AHG-005)', () => {
+    const rows: WorklistRow[] = [
+      {
+        slug: 'org/fat-fingered',
+        status: { state: 'done', player: 'opus-1', timestamp: 't' },
+        findings: { high: 999999, medium: 0, low: 0 },
+        passRate: 80,
+        raw: '',
+      },
+    ];
+
+    const summary = scoreGame(rows);
+    const p = summary.leaderboard[0];
+    // The raw 999999 must NOT land in the counter — it is clamped to 999.
+    expect(p.highsFixed).toBe(999);
+    expect(p.highsFixed).not.toBe(999999);
+    // Points reflect the clamped count, plus the done HEALTHY + PERFECT_PUSH.
+    const expected =
+      999 * POINTS.HIGH_FIXED + POINTS.HEALTHY + POINTS.PERFECT_PUSH;
+    expect(p.totalPoints).toBe(expected);
+  });
+
   it('ranks players by total points', () => {
     const rows: WorklistRow[] = [
       {

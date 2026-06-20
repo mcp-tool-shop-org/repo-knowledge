@@ -155,19 +155,28 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
       .map(t => `"${t}"`)
       .join(' ');
 
-    return db.prepare(`
-      SELECT
-        slug,
-        source_type,
-        source_id,
-        title,
-        snippet(repo_search, 4, '>>>', '<<<', '...', 40) AS snippet,
-        rank
-      FROM repo_search
-      WHERE repo_search MATCH ?
-      ORDER BY rank
-      LIMIT ?
-    `).all(fallbackQuery, limit) as SearchResult[];
+    // mcp-PH-006: guard the FALLBACK query too. It runs inside the primary
+    // catch but had no guard of its own, so if even the sanitized retry threw
+    // (an exotic input the regex doesn't tame, or an FTS5/SQLite edge), the
+    // whole search() call threw. A search degrading to "no matches" is correct
+    // behavior; a crash is not. Return [] on any fallback failure.
+    try {
+      return db.prepare(`
+        SELECT
+          slug,
+          source_type,
+          source_id,
+          title,
+          snippet(repo_search, 4, '>>>', '<<<', '...', 40) AS snippet,
+          rank
+        FROM repo_search
+        WHERE repo_search MATCH ?
+        ORDER BY rank
+        LIMIT ?
+      `).all(fallbackQuery, limit) as SearchResult[];
+    } catch {
+      return [];
+    }
   }
 }
 
@@ -176,13 +185,24 @@ export function search(query: string, opts: SearchOptions = {}): SearchResult[] 
  * Returns unique repo slugs with match context.
  */
 export function searchRepos(query: string, opts: SearchOptions = {}): RepoSearchResult[] {
+  // mcp-PH-005: clamp the caller's limit for non-MCP callers (the MCP Zod
+  // schema already constrains it, but searchRepos is exported and called
+  // directly by the CLI + library consumers). A negative limit would make the
+  // final slice(0, negative) misbehave; an absurd one invites a huge scan.
+  // Clamp to [1, 100] and default to 20 when unset/non-finite.
+  const requested = opts.limit;
+  const outLimit =
+    typeof requested === 'number' && Number.isFinite(requested)
+      ? Math.min(100, Math.max(1, Math.trunc(requested)))
+      : 20;
+
   // cli-A-002: feed the caller's requested limit into the inner FTS query
   // instead of a hardcoded 50. Multiple matches can collapse onto one slug
   // during grouping, so a hardcoded inner cap of 50 silently under-delivered
   // whenever the caller asked for more than 50 repos (e.g. `--limit 80`). We
   // keep a floor of 50 rows so small-limit callers still see enough raw
-  // matches to group well, then slice to opts.limit below.
-  const innerLimit = Math.max(50, opts.limit ?? 50);
+  // matches to group well, then slice to outLimit below.
+  const innerLimit = Math.max(50, outLimit);
   const results = search(query, { ...opts, limit: innerLimit });
 
   // Group by slug
@@ -204,5 +224,5 @@ export function searchRepos(query: string, opts: SearchOptions = {}): RepoSearch
 
   return [...bySlug.values()]
     .sort((a, b) => a.best_rank - b.best_rank)
-    .slice(0, opts.limit || 20);
+    .slice(0, outLimit);
 }

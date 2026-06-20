@@ -194,14 +194,29 @@ function checkStaleLocalPath(): FsckCheck {
   `).all() as { slug: string; local_path: string }[];
 
   const stale: { slug: string; local_path: string }[] = [];
+  const skipped: { slug: string; local_path: string }[] = [];
   for (const r of rows) {
-    if (!existsSync(r.local_path)) {
-      stale.push(r);
+    // PH-AHG-009: existsSync can throw (EACCES on a permission-locked path,
+    // an unmounted/offline drive, a malformed path on some platforms). One
+    // bad path must not abort the whole check — degrade that path to
+    // "skipped-with-note" and keep going so the rest of fsck completes.
+    try {
+      if (!existsSync(r.local_path)) {
+        stale.push(r);
+      }
+    } catch {
+      skipped.push(r);
     }
+  }
+  const samples = stale.slice(0, MAX_SAMPLES).map(r => `${r.slug} → ${r.local_path}`);
+  // Surface a couple of unreadable paths too, clearly labelled, if room.
+  for (const r of skipped) {
+    if (samples.length >= MAX_SAMPLES) break;
+    samples.push(`${r.slug} → ${r.local_path} (skipped: path not readable)`);
   }
   return {
     count: stale.length,
-    samples: stale.slice(0, MAX_SAMPLES).map(r => `${r.slug} → ${r.local_path}`),
+    samples,
     description: 'repos.local_path is set but the path is missing on the current rig (informational; repo_local_paths is the multi-rig authority — try `rk verify-local`)',
   };
 }
@@ -346,9 +361,20 @@ export function runFsck(opts: FsckOptions = {}): FsckReport {
     "SELECT value FROM meta WHERE key = 'schema_version'"
   ).get() as { value: string } | undefined)?.value ?? 'unknown';
 
-  // Persist the audit-trail row. orphan_path_count maps to orphan_rows
-  // for naming brevity; the other six columns mirror the check names
-  // 1:1.
+  // Persist the audit-trail row.
+  //
+  // PH-AHG-010: the db_health_runs schema persists only a FOUR-check SUBSET
+  // (orphan_rows, broken_relationships, null_local_path_active,
+  // stale_local_path). The other three checks — fts_row_count_mismatch,
+  // invalid_lifecycle_status, incomplete_sync_runs — contribute to exit_code
+  // but are NOT columns in this table, so the persisted trail under-reports.
+  // A schema migration to add the missing columns is deliberately deferred
+  // (it touches init.ts, owned by another agent this wave). Until then, the
+  // full seven-check summary is logged to STDERR below so a run's complete
+  // result is always recoverable from logs even though the row is a subset.
+  //
+  // orphan_path_count maps to orphan_rows for naming brevity; the other three
+  // persisted columns mirror the check names 1:1.
   const run_id = insertDbHealthRun({
     run_at,
     repo_count: repoCount,
@@ -359,6 +385,21 @@ export function runFsck(opts: FsckOptions = {}): FsckReport {
     stale_local_path_count: checks.stale_local_path.count,
     exit_code,
   });
+
+  // PH-AHG-010: log the FULL seven-check summary to stderr (diagnostic
+  // channel — keeps stdout clean for the CLI/MCP result + --json payload).
+  // This makes the three non-persisted checks recoverable from logs.
+  console.error(
+    `[fsck] run #${run_id} (schema v${schema_version}, exit_code=${exit_code}) — ` +
+    `orphan_rows=${checks.orphan_rows.count} ` +
+    `broken_relationships=${checks.broken_relationships.count} ` +
+    `null_local_path_active=${checks.null_local_path_active.count} ` +
+    `stale_local_path=${checks.stale_local_path.count} ` +
+    `fts_row_count_mismatch=${checks.fts_row_count_mismatch.count} ` +
+    `invalid_lifecycle_status=${checks.invalid_lifecycle_status.count} ` +
+    `incomplete_sync_runs=${checks.incomplete_sync_runs.count} ` +
+    `(persisted trail captures the first four only)`
+  );
 
   return {
     run_at,

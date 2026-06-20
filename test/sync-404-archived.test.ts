@@ -38,21 +38,30 @@ const mockExecFileSync = execFileSync as unknown as ReturnType<typeof vi.fn>;
 
 let tmpDir: string;
 let stdoutSpy: ReturnType<typeof vi.spyOn>;
+let stderrSpy: ReturnType<typeof vi.spyOn>;
 let logSpy: ReturnType<typeof vi.spyOn>;
+let errorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), 'rk-gh404-'));
   openDb(join(tmpDir, 'test.db'));
   mockExecFileSync.mockReset();
+  // mcp-PH-001: syncGitHub progress now goes to STDERR (console.error +
+  // process.stderr.write). Spy/silence BOTH channels so the suite stays
+  // quiet; stdout must remain untouched (the JSON-RPC frame channel).
   stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   try { closeDb(); } catch { /* may not be open */ }
   rmSync(tmpDir, { recursive: true, force: true });
   stdoutSpy.mockRestore();
+  stderrSpy.mockRestore();
   logSpy.mockRestore();
+  errorSpy.mockRestore();
 });
 
 describe('syncGitHub vanished-repo archival (FT-5)', () => {
@@ -363,5 +372,91 @@ describe('syncGitHub vanished-repo archival (FT-5)', () => {
     expect(repo!.lifecycle_status).toBe('active');
     expect(repo!.deprecated_at).toBeNull();
     expect((repo!.notes as Array<Record<string, unknown>>).filter(n => n.note_type === 'warning').length).toBe(0);
+  });
+});
+
+// A minimal gh repo entry builder for the channel + truncation tests.
+function ghRepo(name: string, owner = 'org') {
+  return {
+    name, owner: { login: owner }, description: name,
+    url: `https://github.com/${owner}/${name}`, isPrivate: false, isArchived: false,
+    isFork: false, defaultBranchRef: { name: 'main' }, stargazerCount: 0,
+    forkCount: 0, createdAt: null, updatedAt: null, pushedAt: null,
+    primaryLanguage: null, repositoryTopics: [], licenseInfo: null,
+  };
+}
+
+describe('syncGitHub channel discipline — progress on STDERR not STDOUT (mcp-PH-001)', () => {
+  it('writes "Syncing <owner>..." + sync dots to stderr, never stdout', () => {
+    upsertRepo({ owner: 'org', name: 'a', status: 'active' });
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([ghRepo('a')]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['org']);
+
+    // The "Syncing org..." progress line is a console.error call (stderr).
+    const stderrLines = errorSpy.mock.calls.map(c => String(c[0]));
+    expect(stderrLines.some(l => l.includes('Syncing org...'))).toBe(true);
+
+    // The per-repo sync dot went to process.stderr.write, NOT process.stdout.write.
+    const stdoutWrites = stdoutSpy.mock.calls.map(c => String(c[0]));
+    const stderrWrites = stderrSpy.mock.calls.map(c => String(c[0]));
+    expect(stderrWrites).toContain('.');
+    expect(stdoutWrites).not.toContain('.');
+
+    // Nothing progress-y leaked onto console.log (stdout) — the JSON-RPC channel.
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncGitHub truncated-listing prune guard (SYNC-PH-04)', () => {
+  it('suppresses --prune-vanished archival + warns when the fetch hits the limit', () => {
+    // limit=2; the fetch returns exactly 2 repos → listing likely truncated.
+    // The prior-active 'vanished' repo is absent from this (truncated) page, so
+    // a naive prune would archive it. The truncation guard must prevent that.
+    upsertRepo({ owner: 'org', name: 'p1', status: 'active' });
+    upsertRepo({ owner: 'org', name: 'p2', status: 'active' });
+    upsertRepo({ owner: 'org', name: 'vanished', status: 'active' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        // Exactly `limit` rows (p1, p2) — vanished is past the cutoff.
+        return JSON.stringify([ghRepo('p1'), ghRepo('p2')]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['org'], { pruneVanished: true, limit: 2 });
+
+    // No archival happened — the truncation guard disabled prune for this owner.
+    const vanished = getRepo('org/vanished');
+    expect(vanished!.lifecycle_status).toBe('active');
+    expect(vanished!.deprecated_at).toBeNull();
+
+    // A truncation warning was emitted to stderr advising a higher --limit.
+    const stderrLines = errorSpy.mock.calls.map(c => String(c[0]));
+    expect(stderrLines.some(l => /truncated/i.test(l) && /limit/i.test(l))).toBe(true);
+  });
+
+  it('still archives when the fetch is below the limit (not truncated)', () => {
+    // limit=10; only 1 repo returned → well below the cap, listing complete.
+    upsertRepo({ owner: 'org', name: 'survivor', status: 'active' });
+    upsertRepo({ owner: 'org', name: 'gone', status: 'active' });
+
+    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'list') {
+        return JSON.stringify([ghRepo('survivor')]);
+      }
+      throw new Error(`unexpected exec: ${cmd} ${args.join(' ')}`);
+    });
+
+    syncGitHub(['org'], { pruneVanished: true, limit: 10 });
+
+    // 'gone' is archived because the listing was demonstrably complete.
+    expect(getRepo('org/gone')!.lifecycle_status).toBe('archived');
   });
 });

@@ -112,56 +112,63 @@ export async function fullSync(config: SyncConfig = {}): Promise<FullSyncResult>
   });
 
   try {
-    console.log('=== GitHub Sync ===');
+    // mcp-PH-001: ALL fullSync output here is PROGRESS / DIAGNOSTIC, not the
+    // command's result payload (the result is the returned FullSyncResult,
+    // which the CLI/MCP caller serializes). Under the MCP StdioServer
+    // transport, STDOUT is the JSON-RPC frame channel — any stray
+    // console.log here corrupts the stream. So every progress line goes to
+    // console.error (stderr); a human running `rk sync` still sees stderr
+    // in their terminal, and `--json` consumers piping stdout to jq stay clean.
+    console.error('=== GitHub Sync ===');
     const ghResult = syncGitHub(owners, {
       includeReleases: config.includeReleases ?? false,
       includeForks: config.includeForks ?? false,
       pruneVanished: config.pruneVanished ?? false,
     });
-    console.log(`GitHub: ${ghResult.synced} synced, ${ghResult.skipped} skipped`);
+    console.error(`GitHub: ${ghResult.synced} synced, ${ghResult.skipped} skipped`);
     if (ghResult.errors.length) {
-      console.log(`Errors: ${ghResult.errors.length}`);
-      ghResult.errors.forEach(e => console.log(`  ${e}`));
+      console.error(`Errors: ${ghResult.errors.length}`);
+      ghResult.errors.forEach(e => console.error(`  ${e}`));
     }
     // sync-A-006: surface vanished candidates that were NOT archived so the
     // operator can investigate rather than discovering silent lifecycle drift.
     if (!config.pruneVanished && ghResult.vanished.length) {
-      console.log(
+      console.error(
         `\n⚠ ${ghResult.vanished.length} repo(s) were active before but are absent from the GitHub listing (NOT archived):`
       );
-      ghResult.vanished.forEach(s => console.log(`  ${s}`));
-      console.log(
+      ghResult.vanished.forEach(s => console.error(`  ${s}`));
+      console.error(
         `  These may be deleted, renamed, transferred, or private-but-invisible to your token. ` +
         `Confirm with \`gh repo view <slug>\`, then re-run \`rk sync --prune-vanished\` (with a fully-scoped token) to archive them.`
       );
     }
 
-    console.log('\n=== Local Scan ===');
+    console.error('\n=== Local Scan ===');
     const localTotal: ScanResult = { scanned: 0, skipped: 0, errors: [] };
     // FT-5: localDepth=4 default propagates into scanDirectory's
     // recursive .git probe. Operator can override to 0 (legacy
     // single-level) or higher for deeper workspace trees.
     const localDepth = config.localDepth ?? 4;
     for (const dir of localDirs) {
-      console.log(`Scanning ${dir}...`);
+      console.error(`Scanning ${dir}...`);
       const result = scanDirectory(dir, { maxDepth: localDepth });
       localTotal.scanned += result.scanned;
       localTotal.skipped += result.skipped;
       localTotal.errors.push(...result.errors);
     }
-    console.log(`Local: ${localTotal.scanned} scanned, ${localTotal.skipped} skipped`);
+    console.error(`Local: ${localTotal.scanned} scanned, ${localTotal.skipped} skipped`);
     if (localTotal.errors.length) {
-      console.log(`Errors: ${localTotal.errors.length}`);
-      localTotal.errors.slice(0, 10).forEach(e => console.log(`  ${e}`));
+      console.error(`Errors: ${localTotal.errors.length}`);
+      localTotal.errors.slice(0, 10).forEach(e => console.error(`  ${e}`));
     }
 
-    console.log('\n=== Rebuilding FTS Index ===');
+    console.error('\n=== Rebuilding FTS Index ===');
     const indexed = rebuildIndex();
-    console.log(`Indexed ${indexed} entries`);
+    console.error(`Indexed ${indexed} entries`);
 
-    console.log('\n=== Stats ===');
+    console.error('\n=== Stats ===');
     const stats = getStats();
-    console.log(stats);
+    console.error(stats);
 
     // FT-4: complete the row. fullSync result doesn't currently
     // distinguish added vs updated vs skipped at the repo grain (the

@@ -38,10 +38,10 @@ import {
   findByAuditStatus, getOpenFindings,
 } from '../audit/queries.js';
 import { resolveConfig } from '../config.js';
-// F-BE-022 / F-BE-011 / F-BE-021: shared enum tuples — single source of
-// truth lives in src/index.ts; this import keeps server.ts's Zod enums
-// from drifting from the CLI + DB CHECK constraints.
-import { NOTE_TYPES, RELATION_TYPES } from '../index.js';
+// F-BE-022 / F-BE-011 / F-BE-021 / mcp-PH-004: shared enum tuples — single
+// source of truth lives in src/index.ts; this import keeps server.ts's Zod
+// enums from drifting from the CLI + DB CHECK constraints.
+import { NOTE_TYPES, RELATION_TYPES, REPO_STATUSES } from '../index.js';
 
 // Resolve config at startup. RK_DB_PATH is an explicit DB-path override —
 // it wins over rk.config.json + defaults so MCP hosts and tests can point the
@@ -64,6 +64,56 @@ const server = new McpServer({
 
 // Initialize DB
 openDb(config.dbPath);
+
+// mcp-PH-002: handler-boundary observability. The MCP SDK catches a throwing
+// handler and returns it to the CLIENT only, so an operator running this stdio
+// server has ZERO server-side signal of a failing call. We wrap server.tool so
+// every handler logs tool name + a REDACTED arg summary on entry and any thrown
+// error — all on STDERR (console.error), which is safe on StdioServerTransport
+// (STDOUT is the JSON-RPC frame channel). The wrapper is cheap (key list + a
+// truncated string preview), never logs full payloads or secret-ish values, and
+// re-throws so the SDK's own error-to-client path is untouched.
+function redactArgs(args: unknown): string {
+  if (args == null || typeof args !== 'object') return '{}';
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
+    let preview: string;
+    if (typeof v === 'string') {
+      // Truncate to a short preview — never log full note/doc bodies.
+      preview = v.length > 40 ? `"${v.slice(0, 40)}…"` : `"${v}"`;
+    } else if (typeof v === 'number' || typeof v === 'boolean' || v == null) {
+      preview = String(v);
+    } else {
+      // Arrays / nested objects: log shape, not content.
+      preview = Array.isArray(v) ? `[${v.length}]` : '{…}';
+    }
+    out.push(`${k}=${preview}`);
+  }
+  return `{${out.join(', ')}}`;
+}
+
+const rawTool = server.tool.bind(server);
+// Override server.tool so the handler (always the last argument) is wrapped
+// with entry + error logging. Signature is preserved verbatim for callers.
+server.tool = ((...regArgs: unknown[]) => {
+  const name = typeof regArgs[0] === 'string' ? regArgs[0] : '<unknown>';
+  const handlerIdx = regArgs.length - 1;
+  const handler = regArgs[handlerIdx];
+  if (typeof handler === 'function') {
+    const orig = handler as (...a: unknown[]) => unknown;
+    regArgs[handlerIdx] = async (...callArgs: unknown[]) => {
+      console.error(`[mcp] tool=${name} args=${redactArgs(callArgs[0])}`);
+      try {
+        return await orig(...callArgs);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`[mcp] tool=${name} ERROR: ${message}`);
+        throw e;
+      }
+    };
+  }
+  return (rawTool as (...a: unknown[]) => unknown)(...regArgs);
+}) as typeof server.tool;
 
 // Cast DOMAINS for z.enum (requires [string, ...string[]] tuple)
 const DOMAINS_TUPLE = DOMAINS as [Domain, ...Domain[]];
@@ -131,7 +181,9 @@ server.tool(
   'Filter repos by owner, status, category, language, framework, or app shape.',
   {
     owner: z.string().optional().describe('GitHub owner'),
-    status: z.enum(['active', 'paused', 'archived', 'unknown']).optional(),
+    // mcp-PH-004: status values come from the shared REPO_STATUSES tuple
+    // (mirrors the repos.status DB CHECK) instead of a hand-duplicated enum.
+    status: z.enum(REPO_STATUSES as unknown as [string, ...string[]]).optional(),
     category: z.string().optional().describe('product | tool | library | experiment | blueprint | marketing'),
     language: z.string().optional().describe('Primary language'),
     framework: z.string().optional().describe('Framework name'),
@@ -159,7 +211,11 @@ server.tool(
   'Full-text search across all indexed content: docs, notes, repo descriptions. Use this when you remember a concept but not the repo name.',
   {
     query: z.string().describe('Search query (natural language or keywords)'),
-    limit: z.number().optional().default(10).describe('Max results'),
+    // mcp-PH-005: constrain limit to a sane integer range. A bare z.number()
+    // let a negative limit through to slice(0, negative) (misbehaves) and an
+    // unbounded one invite huge scans. searchRepos also clamps defensively for
+    // non-MCP callers.
+    limit: z.number().int().min(1).max(100).optional().default(10).describe('Max results (1–100)'),
   },
   async ({ query, limit }) => {
     const results = searchRepos(query, { limit });
@@ -190,8 +246,13 @@ server.tool(
 server.tool(
   'repos_by_stack',
   'Find repos using a specific tech stack combination. Example: "tauri react" or "python mcp".',
-  { stack: z.string().min(1).describe('Space-separated tech terms to match') },
-  async ({ stack }) => {
+  {
+    stack: z.string().min(1).describe('Space-separated tech terms to match'),
+    // mcp-PH-007: cap the result set. This does a full-table scan + JS filter;
+    // an unbounded response can flood an MCP context window. Default 100.
+    limit: z.number().int().min(1).max(100).optional().default(100).describe('Max repos to return (1–100)'),
+  },
+  async ({ stack, limit }) => {
     // mcp-A-007: split + filter empties. Without filter(Boolean) an empty or
     // whitespace-only stack yields a [''] term, and haystack.includes('') is
     // always true, so `terms.every(...)` matched EVERY repo. Short-circuit on
@@ -214,7 +275,7 @@ server.tool(
       LEFT JOIN repo_tech t ON t.repo_id = r.id
     `).all() as Record<string, any>[];
 
-    const matches = allRepos.filter((r) => {
+    const allMatches = allRepos.filter((r) => {
       const haystack = [
         r.primary_language, r.frameworks, r.runtime, r.app_shape, r.package_manager,
       ].filter(Boolean).join(' ').toLowerCase();
@@ -222,10 +283,14 @@ server.tool(
       return terms.every((term) => haystack.includes(term));
     });
 
+    // mcp-PH-007: cap the returned rows. `count` reports the true total so the
+    // caller can see when results were truncated.
+    const matches = allMatches.slice(0, limit);
+
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ stack, count: matches.length, repos: matches.map((r) => ({
+        text: JSON.stringify({ stack, count: allMatches.length, returned: matches.length, repos: matches.map((r) => ({
           slug: r.slug, description: r.description, status: r.status,
           language: r.primary_language, shape: r.app_shape,
           frameworks: tryParse(r.frameworks),
@@ -242,8 +307,12 @@ server.tool(
   {
     type: z.enum(['stale', 'unaudited', 'warnings', 'next_steps', 'all']).optional().default('all')
       .describe('What kind of work to look for'),
+    // mcp-PH-007: cap each category. These are full-table scans; an unbounded
+    // response can flood an MCP context window. Applied as a SQL LIMIT per
+    // category (so 'all' returns up to `limit` rows of EACH). Default 100.
+    limit: z.number().int().min(1).max(100).optional().default(100).describe('Max rows per category (1–100)'),
   },
-  async ({ type }) => {
+  async ({ type, limit }) => {
     const db = getDb();
     const results: Record<string, any[]> = {};
 
@@ -253,7 +322,8 @@ server.tool(
         SELECT slug, pushed_at, status FROM repos
         WHERE pushed_at < datetime('now', '-60 days') AND status = 'active'
         ORDER BY pushed_at ASC
-      `).all() as Record<string, any>[];
+        LIMIT ?
+      `).all(limit) as Record<string, any>[];
     }
 
     if (type === 'all' || type === 'unaudited') {
@@ -263,7 +333,8 @@ server.tool(
         WHERE NOT EXISTS (SELECT 1 FROM repo_audits a WHERE a.repo_id = r.id)
         AND r.status != 'archived'
         ORDER BY r.slug
-      `).all() as Record<string, any>[];
+        LIMIT ?
+      `).all(limit) as Record<string, any>[];
     }
 
     if (type === 'all' || type === 'warnings') {
@@ -272,7 +343,8 @@ server.tool(
         JOIN repos r ON r.id = n.repo_id
         WHERE n.note_type IN ('warning', 'drift_risk', 'pain_point')
         ORDER BY n.updated_at DESC
-      `).all() as Record<string, any>[];
+        LIMIT ?
+      `).all(limit) as Record<string, any>[];
     }
 
     if (type === 'all' || type === 'next_steps') {
@@ -281,7 +353,8 @@ server.tool(
         JOIN repos r ON r.id = n.repo_id
         WHERE n.note_type = 'next_step'
         ORDER BY n.updated_at DESC
-      `).all() as Record<string, any>[];
+        LIMIT ?
+      `).all(limit) as Record<string, any>[];
     }
 
     return {
@@ -431,8 +504,21 @@ server.tool(
       localDirs: syncDirs,
       includeReleases: include_releases,
     });
+    // mcp-PH-003: surface the partial-sync signals fullSync already collects.
+    // Returning only result.stats hid github.errors / local.errors and the
+    // vanished list — a PARTIAL sync looked clean to the calling LLM, which is
+    // actively misleading. Include counts (+ the vanished slug list) so the
+    // client can see a degraded sync and act (e.g. re-run --prune-vanished).
     return {
-      content: [{ type: 'text' as const, text: JSON.stringify(result.stats, null, 2) }],
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          stats: result.stats,
+          github_errors: result.github.errors.length,
+          local_errors: result.local.errors.length,
+          vanished: result.github.vanished,
+        }, null, 2),
+      }],
     };
   },
 );
@@ -511,7 +597,9 @@ server.tool(
   {
     severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
     domain: z.enum(DOMAINS_TUPLE).optional(),
-    limit: z.number().optional().default(30),
+    // mcp-PH-005: same int/min/max constraint as search_repos so a negative or
+    // oversized limit can't reach getOpenFindings' slice/LIMIT.
+    limit: z.number().int().min(1).max(100).optional().default(30),
   },
   async (filters) => {
     const findings = getOpenFindings(filters);

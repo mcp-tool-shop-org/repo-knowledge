@@ -194,6 +194,21 @@ program
   .option('--prune-vanished', 'Archive repos absent from the GitHub listing (default: detect + warn only). Use only with a fully-scoped token.', false)
   .action(async (opts: { owners?: string; local?: string; localDepth: number; releases: boolean; forks: boolean; pruneVanished: boolean }): Promise<void> => {
     openDb(config().dbPath);
+
+    // cli-PH-004: when no GitHub owners resolve (config empty) AND --owners
+    // was not passed, fullSync calls syncGitHub([]) — a silent no-op that
+    // skips the entire GitHub half of the sync with no signal. This is the
+    // exact silent-failure class sync_runs exists to kill. Warn to stderr so
+    // the operator knows the GitHub leg was skipped; the local scan still
+    // proceeds (so we don't abort). --owners callers opt out of the warning
+    // even if they pass an empty/whitespace value — they did so deliberately.
+    if (!opts.owners && config().owners.length === 0) {
+      console.error(
+        '[rk] Warning: no GitHub owners configured — GitHub sync skipped. ' +
+        'Run rk owners add <owner> or pass --owners.'
+      );
+    }
+
     await fullSync({
       owners: opts.owners ? opts.owners.split(',') : undefined,
       localDirs: opts.local ? opts.local.split(',') : undefined,
@@ -263,10 +278,22 @@ program
   .command('scan <path>')
   .description('Scan a single local repo directory')
   .action((path: string): void => {
+    // cli-PH-002: precheck the path BEFORE opening the DB so a typo'd path
+    // gets a friendly remedy hint (matching the note/delete not-found pattern)
+    // instead of a bare structured throw from ingestLocalRepo. Both go to
+    // stderr + exit 2; this just adds the actionable hint.
+    if (!existsSync(path)) {
+      console.error(`Error: path not found: ${path}`);
+      console.error('Hint: pass a directory that contains a .git repo');
+      process.exit(2);
+    }
     openDb(config().dbPath);
     const result = ingestLocalRepo(path);
     console.log(`Scanned: ${result.name} (${result.docs} docs indexed)`);
-    rebuildIndex();
+    // cli-PH-003: no rebuildIndex() — ingestLocalRepo upserts via upsertDoc /
+    // upsertRepo, whose row-level INSERT/UPDATE fire migration-005's
+    // trg_repo_search_docs_* + trg_repo_search_repos_* triggers, so the FTS
+    // index is maintained incrementally. A full rebuild here was redundant.
     closeDb();
   });
 
@@ -530,7 +557,9 @@ program
     // cli-A-001: echo the resolved canonical slug, not the user's input, so a
     // partial match makes the real target visible.
     console.log(`Note added to ${canonicalSlug(repoId, slug)}`);
-    rebuildIndex();
+    // cli-PH-003: no rebuildIndex() — migration-005's trg_repo_search_notes_insert
+    // trigger already indexes the new note incrementally (same redundancy
+    // mcp-A-006 removed MCP-side). A full FTS rebuild here was wasteful.
     closeDb();
   });
 
@@ -847,6 +876,21 @@ program
     const host = (opts.hostname && opts.hostname.trim()) || hostname() || 'unknown';
     const root = (opts.root && opts.root.trim()) || process.cwd();
 
+    // cli-PH-005: resolveRigId falls back to os.hostname() with no uniqueness
+    // check, so two rigs sharing a hostname (e.g. a default "DESKTOP-XXXX")
+    // collapse onto one rigs row — and their per-rig repo_local_paths collide.
+    // If a row already exists under this rig_id with a DIFFERENT hostname or
+    // primary_root, warn to stderr (diagnostic, not the answer) so the operator
+    // sets RK_RIG_ID to something unique before the path data piles up.
+    const existing = listRigs().find((r) => r.rig_id === rigId);
+    if (existing && ((existing.hostname && existing.hostname !== host) ||
+                     (existing.primary_root && existing.primary_root !== root))) {
+      console.error(
+        `Warning: rig_id ${rigId} already registered with a different ` +
+        `hostname; set RK_RIG_ID to a unique value to avoid path-row collisions.`
+      );
+    }
+
     upsertRig({
       rig_id: rigId,
       hostname: host,
@@ -979,8 +1023,12 @@ program
   .command('versions <slug>')
   .description('Show the cross-channel published-version dashboard for one repo')
   .option('--refresh', 'Sync from registries before rendering (network)', false)
+  // cli-PH-001: --strict turns a refresh that surfaced errors into a non-zero
+  // exit (exit 2), mirroring fsck/drift so CI can gate on a clean sync. Without
+  // it the refresh is informational and exit stays 0 even on per-channel errors.
+  .option('--strict', 'Exit non-zero (2) if the --refresh sync surfaced any errors', false)
   .option('--channel <name>', `Filter to one channel: ${PUBLISHED_VERSION_CHANNELS.join('|')}`)
-  .action(async (slug: string, opts: { refresh: boolean; channel?: string }): Promise<void> => {
+  .action(async (slug: string, opts: { refresh: boolean; strict: boolean; channel?: string }): Promise<void> => {
     if (opts.channel && !(PUBLISHED_VERSION_CHANNELS as readonly string[]).includes(opts.channel)) {
       console.error(`Error: invalid channel "${opts.channel}".`);
       console.error(`Allowed: ${PUBLISHED_VERSION_CHANNELS.join(', ')}`);
@@ -995,18 +1043,26 @@ program
       process.exit(1);
     }
 
+    // cli-PH-001: track refresh errors so --strict can gate the exit code
+    // AFTER the dashboard (the command's primary answer) has been rendered
+    // to stdout.
+    let refreshErrors = 0;
     if (opts.refresh) {
-      console.log(`Refreshing publish state for ${repo.slug}...`);
+      // cli-PH-001: refresh progress + per-error lines are DIAGNOSTIC, not the
+      // command's answer (the dashboard below is) — route them to stderr so a
+      // `rk versions --json`-style stdout pipe stays clean.
+      console.error(`Refreshing publish state for ${repo.slug}...`);
       const summary = await syncPublishStateForRepo(repo.id, {
         owner: repo.owner,
         name: repo.name,
         npm_package_name: repo.npm_package_name,
         pypi_package_name: repo.pypi_package_name,
       });
-      console.log(`  Synced ${summary.updated} row(s)${summary.errors.length ? `, ${summary.errors.length} error(s)` : ''}`);
+      console.error(`  Synced ${summary.updated} row(s)${summary.errors.length ? `, ${summary.errors.length} error(s)` : ''}`);
       if (summary.errors.length > 0) {
-        for (const err of summary.errors) console.log(`    ${err}`);
+        for (const err of summary.errors) console.error(`    ${err}`);
       }
+      refreshErrors = summary.errors.length;
     }
 
     const rows = listPublishedVersions(repo.id);
@@ -1019,6 +1075,9 @@ program
       console.log(`No published versions recorded${opts.channel ? ` on channel ${opts.channel}` : ''}.`);
       console.log(`Run with --refresh to sync from registries.`);
       closeDb();
+      // cli-PH-001: even with no rows to render, a --strict refresh that
+      // surfaced errors must still gate the exit code for CI.
+      if (opts.strict && refreshErrors > 0) process.exit(2);
       return;
     }
 
@@ -1043,6 +1102,9 @@ program
     }
 
     closeDb();
+    // cli-PH-001: the dashboard (the answer) is already on stdout; now gate
+    // the exit code on --strict so CI can fail a refresh that hit errors.
+    if (opts.strict && refreshErrors > 0) process.exit(2);
   });
 
 // ─── drift ───────────────────────────────────────────────────────────────────
@@ -1628,12 +1690,16 @@ health
   .command('feed', { isDefault: true })
   .description('Change feed since last sync (default surface)')
   .option('--refresh', 'Run build-health sync for every repo before rendering', false)
+  // cli-PH-001: --strict gates the exit code on a clean refresh (mirrors
+  // fsck/drift) so CI can fail when any repo's build-health sync errored.
+  .option('--strict', 'Exit non-zero (2) if the --refresh sync surfaced any errors', false)
   .option('--rig <id>', 'Rig id for toolchain observation (default: RK_RIG_ID env or hostname)')
   .option('--json', 'Output JSON instead of text lines', false)
-  .action(async (opts: { refresh: boolean; rig?: string; json: boolean }): Promise<void> => {
+  .action(async (opts: { refresh: boolean; strict: boolean; rig?: string; json: boolean }): Promise<void> => {
     openDb(config().dbPath);
+    let refreshErrors = 0;
     if (opts.refresh) {
-      await refreshAllRepos({ rigId: resolveRigId(opts.rig) });
+      refreshErrors = (await refreshAllRepos({ rigId: resolveRigId(opts.rig) })).errorCount;
     }
     const events = buildFeed();
     if (opts.json) {
@@ -1642,15 +1708,21 @@ health
       console.log(renderFeedText(events));
     }
     closeDb();
+    // cli-PH-001: feed (the answer) is already on stdout; gate the exit code
+    // after rendering so --strict CI runs fail on a dirty refresh.
+    if (opts.strict && refreshErrors > 0) process.exit(2);
   });
 
 health
   .command('doctor <slug>')
   .description('Single-repo deep-dive — dep audit + CI + actions + toolchain')
   .option('--refresh', 'Re-run build-health sync for this repo before rendering', false)
+  // cli-PH-001: --strict gates the exit code on a clean refresh (mirrors
+  // fsck/drift). Per-error lines already route to stderr below.
+  .option('--strict', 'Exit non-zero (2) if the --refresh sync surfaced any errors', false)
   .option('--rig <id>', 'Rig id for toolchain observation')
   .option('--json', 'Output JSON instead of text', false)
-  .action(async (slug: string, opts: { refresh: boolean; rig?: string; json: boolean }): Promise<void> => {
+  .action(async (slug: string, opts: { refresh: boolean; strict: boolean; rig?: string; json: boolean }): Promise<void> => {
     openDb(config().dbPath);
     const repoRow = resolveRepoRow(slug);
     if (!repoRow) {
@@ -1659,6 +1731,7 @@ health
       closeDb();
       process.exit(1);
     }
+    let refreshErrors = 0;
     if (opts.refresh) {
       const summary = await syncBuildHealthForRepo(repoRow.id, {
         slug: repoRow.slug,
@@ -1669,6 +1742,7 @@ health
       if (summary.errors.length > 0) {
         for (const err of summary.errors) console.error(`  ${err}`);
       }
+      refreshErrors = summary.errors.length;
     }
     const report = buildRepoDoctor(repoRow.slug);
     if (!report) {
@@ -1682,18 +1756,24 @@ health
       console.log(renderDoctorText(report));
     }
     closeDb();
+    // cli-PH-001: doctor report (the answer) is already on stdout; gate exit.
+    if (opts.strict && refreshErrors > 0) process.exit(2);
   });
 
 health
   .command('table')
   .description('Portfolio health table (JSON default per McIlroy 1978 / jq)')
   .option('--refresh', 'Run build-health sync for every repo before rendering', false)
+  // cli-PH-001: --strict gates the exit code on a clean refresh (mirrors
+  // fsck/drift). The JSON table stays the stdout answer; errors go to stderr.
+  .option('--strict', 'Exit non-zero (2) if the --refresh sync surfaced any errors', false)
   .option('--rig <id>', 'Rig id for toolchain observation')
   .option('--text', 'Pretty-text rendering instead of JSON (default: JSON)', false)
-  .action(async (opts: { refresh: boolean; rig?: string; text: boolean }): Promise<void> => {
+  .action(async (opts: { refresh: boolean; strict: boolean; rig?: string; text: boolean }): Promise<void> => {
     openDb(config().dbPath);
+    let refreshErrors = 0;
     if (opts.refresh) {
-      await refreshAllRepos({ rigId: resolveRigId(opts.rig) });
+      refreshErrors = (await refreshAllRepos({ rigId: resolveRigId(opts.rig) })).errorCount;
     }
     const rows = buildHealthTable();
     if (opts.text) {
@@ -1703,13 +1783,19 @@ health
       console.log(JSON.stringify(rows, null, 2));
     }
     closeDb();
+    // cli-PH-001: table (the answer) is already on stdout; gate exit on --strict.
+    if (opts.strict && refreshErrors > 0) process.exit(2);
   });
 
 // Helper used by --refresh paths above. Walks every repo with a
 // non-null local_path and runs syncBuildHealthForRepo against it.
 // Per Tidelift 2024 we never throw — errors are logged per-repo and
 // the walk continues so a partial result beats a crashed portfolio.
-async function refreshAllRepos(opts: { rigId?: string }): Promise<void> {
+//
+// cli-PH-001: returns the aggregate error count so callers can honor a
+// --strict flag (non-zero exit when the refresh surfaced errors). The
+// per-repo error lines already go to stderr (diagnostic, not the answer).
+async function refreshAllRepos(opts: { rigId?: string }): Promise<{ errorCount: number }> {
   const db = getDb();
   const repos = db.prepare(`
     SELECT id, slug, owner, name, local_path
@@ -1722,6 +1808,7 @@ async function refreshAllRepos(opts: { rigId?: string }): Promise<void> {
     name: string | null;
     local_path: string | null;
   }>;
+  let errorCount = 0;
   for (const r of repos) {
     try {
       const summary = await syncBuildHealthForRepo(r.id, {
@@ -1731,12 +1818,15 @@ async function refreshAllRepos(opts: { rigId?: string }): Promise<void> {
         local_path: r.local_path,
       }, opts);
       if (summary.errors.length > 0) {
+        errorCount += summary.errors.length;
         for (const err of summary.errors) console.error(`  ${r.slug}: ${err}`);
       }
     } catch (e: unknown) {
+      errorCount += 1;
       console.error(`  ${r.slug}: sync threw — ${(e as Error)?.message ?? String(e)}`);
     }
   }
+  return { errorCount };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

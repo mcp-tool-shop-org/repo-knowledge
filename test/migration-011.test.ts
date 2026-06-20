@@ -249,6 +249,16 @@ describe('migration-011 crash durability (db-A-001 / db-A-005-DB)', () => {
       expect(v).toBe(HEAD);
       const marker = db.prepare("SELECT value FROM meta WHERE key = 'cross_tool_vocab_added'").get();
       expect(marker).toBeDefined();
+
+      // PH-DB-004: a durable recovery breadcrumb is written in the SAME
+      // transaction as the restore, so rk can later surface that this DB
+      // was repaired from a stranded _new table rather than migrating
+      // cleanly. The recovery would otherwise be invisible after the fact.
+      const recovery = db.prepare(
+        "SELECT value FROM meta WHERE key = 'migration_011_recovery'"
+      ).get() as { value: string } | undefined;
+      expect(recovery).toBeDefined();
+      expect(recovery!.value).toMatch(/restored from stranded _new/);
     } finally {
       try { closeDb(); } catch { /* noop */ }
       rmSync(tmpDir2, { recursive: true, force: true });

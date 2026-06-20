@@ -262,6 +262,40 @@ describe('Swarm control-plane sync', () => {
     expect(findingKeys).not.toContain('F-LOSE-1');
   });
 
+  it('skips-with-warn a swarm finding with an empty finding_id instead of upserting it (SYNC-PH-05)', async () => {
+    const fixtureDir = join(tmpDir, 'dogfood-labs');
+    mkdirSync(fixtureDir);
+    createBaseFixtures(fixtureDir);
+    createControlPlaneDb(fixtureDir,
+      [{ id: 'swarm-1', repo: 'test-org/repo-mcp', created_at: '2026-06-01 00:00:00' }],
+      [
+        // Empty finding_id — must be skipped (keyless fact would corrupt the set).
+        { run_id: 'swarm-1', finding_id: '', severity: 'HIGH', category: 'bug', description: 'empty id', status: 'new' },
+        // A well-formed finding that must still land.
+        { run_id: 'swarm-1', finding_id: 'F-OK-1', severity: 'LOW', category: 'docs', description: 'ok', status: 'new' },
+      ],
+    );
+
+    const result = await syncDogfood({ localPath: fixtureDir });
+
+    // Only the well-formed finding was upserted; the empty-id one is skipped.
+    expect(result.swarm!.findings).toBe(1);
+    expect(result.swarm!.skipped.some(s => s.includes('empty finding_id or severity'))).toBe(true);
+
+    const db = getDb();
+    const repoId = getRepoIdBySlug('test-org/repo-mcp');
+    const findingKeys = (db.prepare(
+      "SELECT key FROM repo_facts WHERE repo_id = ? AND fact_type = 'dogfood.swarm.finding'",
+    ).all(repoId) as { key: string }[]).map(r => r.key);
+    expect(findingKeys).toEqual(['F-OK-1']);
+
+    // The rollup total reflects only the upserted finding, not the skipped one.
+    const total = (db.prepare(
+      "SELECT value FROM repo_facts WHERE repo_id = ? AND fact_type = 'dogfood.swarm' AND key = 'findings:total'",
+    ).get(repoId) as { value: string }).value;
+    expect(total).toBe('1');
+  });
+
   it('returns null when no control-plane DB exists', () => {
     const fixtureDir = join(tmpDir, 'dogfood-labs');
     mkdirSync(fixtureDir);
@@ -309,6 +343,58 @@ describe('syncDogfood index error handling', () => {
     await expect(syncDogfood({ localPath: fixtureDir })).rejects.toThrow(
       /dogfood index at .*latest-by-repo\.json is malformed:/,
     );
+  });
+
+  it('syncs other repos + records the bad one in skipped when one surface entry is malformed (SYNC-PH-01)', async () => {
+    const fixtureDir = join(tmpDir, 'dogfood-labs');
+    const indexDir = join(fixtureDir, 'indexes');
+    mkdirSync(indexDir, { recursive: true });
+
+    // Register a second repo so we can prove the walk continued past the bad one.
+    upsertRepo({ slug: 'test-org/good-repo', owner: 'test-org', name: 'good-repo' } as any);
+
+    // 'test-org/repo-mcp' carries a MALFORMED surface entry — `verified` and
+    // `run_id` are undefined (a drifted export). Without the per-entry guard
+    // this throws "SQLite3 can't bind undefined" at upsertFact and aborts the
+    // ENTIRE sync. 'test-org/good-repo' is well-formed and must still land.
+    writeFileSync(join(indexDir, 'latest-by-repo.json'), JSON.stringify({
+      'test-org/repo-mcp': {
+        'mcp-server': {
+          // no verified / run_id — only finished_at present.
+          finished_at: freshDate,
+        },
+      },
+      'test-org/good-repo': {
+        'cli': {
+          run_id: 'good-1', verified: 'pass', verification_status: 'accepted',
+          finished_at: freshDate, path: 'records/test-org/good-repo/run-1.json',
+        },
+      },
+    }));
+
+    const result = await syncDogfood({ localPath: fixtureDir });
+
+    // The good repo synced — a single malformed surface entry did not abort
+    // the walk. (Both repos enter the loop, so result.repos counts both.)
+    const goodId = getRepoIdBySlug('test-org/good-repo');
+    expect(goodId).not.toBeNull();
+    const db = getDb();
+    const goodFacts = db.prepare(
+      "SELECT key FROM repo_facts WHERE repo_id = ? AND fact_type = 'dogfood' AND key = 'surface:cli:verified'",
+    ).all(goodId) as { key: string }[];
+    expect(goodFacts.length).toBe(1);
+
+    // The malformed surface was recorded in skipped with an actionable reason.
+    const badSkip = result.skipped.find(s => s.includes('test-org/repo-mcp') && s.includes('mcp-server'));
+    expect(badSkip).toBeDefined();
+    expect(badSkip).toMatch(/malformed entry/);
+
+    // And the malformed surface did NOT write a verified fact for repo-mcp.
+    const repoMcpId = getRepoIdBySlug('test-org/repo-mcp');
+    const mcpVerified = db.prepare(
+      "SELECT key FROM repo_facts WHERE repo_id = ? AND key = 'surface:mcp-server:verified'",
+    ).all(repoMcpId) as { key: string }[];
+    expect(mcpVerified.length).toBe(0);
   });
 
   it('skips-with-warning a repo whose surfaces value is null / non-object (sync-A-003)', async () => {

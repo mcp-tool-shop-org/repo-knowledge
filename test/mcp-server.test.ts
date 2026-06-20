@@ -313,6 +313,51 @@ describe('MCP server end-to-end JSON-RPC behavior (ts-A-004)', () => {
     // Echoes the resolved canonical slug (provenance-on-display), not 'uniquely-named'.
     expect(text).toMatch(/Note added to acme\/uniquely-named-thing/);
   });
+
+  // mcp-PH-002: every tool call must leave a server-side breadcrumb on STDERR
+  // (the SDK only returns a throwing handler's error to the client, so an
+  // operator otherwise has zero signal). The handler-boundary wrapper logs
+  // `[mcp] tool=<name> args=...` on entry. STDERR is safe on the stdio server.
+  it('logs the tool name on stderr at the handler boundary (mcp-PH-002)', () => {
+    const { stderr } = exchange([
+      { id: 1, name: 'get_repo', args: { slug: 'acme/alpha' } },
+    ]);
+    // The breadcrumb names the tool. Must be on stderr (stdout is the JSON-RPC
+    // frame channel) — the exchange helper parses stdout as JSON-RPC, so a log
+    // line there would have been ignored, not captured here.
+    expect(stderr).toMatch(/\[mcp\] tool=get_repo/);
+  });
+
+  // mcp-PH-003: a sync surfaces partial-failure signals, not just stats. The
+  // response must carry github_errors / local_errors counts and the vanished
+  // list so a PARTIAL sync doesn't look clean to the calling LLM. With empty
+  // owners + a temp dir the sync is a no-op but still returns the full shape.
+  it('sync_repos response includes partial-sync signals (mcp-PH-003)', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'sync_repos', args: { owners: '', local_dirs: '.' } },
+    ]);
+    const out = toolJson(responses.get(1));
+    expect(out).toHaveProperty('stats');
+    expect(out).toHaveProperty('github_errors');
+    expect(out).toHaveProperty('local_errors');
+    expect(out).toHaveProperty('vanished');
+    expect(Array.isArray(out.vanished)).toBe(true);
+    expect(typeof out.github_errors).toBe('number');
+    expect(typeof out.local_errors).toBe('number');
+  });
+
+  // mcp-PH-005: a negative limit must be rejected by the Zod schema (it would
+  // otherwise reach slice(0, negative) / a negative LIMIT). The SDK validates
+  // the schema before the handler runs and returns isError:true — never a crash.
+  it('search_repos rejects a negative limit (mcp-PH-005)', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'search_repos', args: { query: 'quokka-token', limit: -5 } },
+    ]);
+    const bad = responses.get(1);
+    expect(bad).toBeDefined();
+    expect(bad?.result?.isError).toBe(true);
+    expect(bad?.result?.content?.[0]?.text ?? '').toMatch(/Invalid|validation|limit|greater than or equal/i);
+  });
 });
 
 describe('MCP server module is well-formed (smoke)', () => {

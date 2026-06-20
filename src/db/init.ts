@@ -141,6 +141,13 @@ function execMigrationIdempotent(db: DatabaseType, sql: string, label: string): 
       // (e.g. an ALTER form the matcher didn't recognize), treat it as a
       // fully-applied idempotent re-run. The transaction rolled back, so
       // the on-disk state is unchanged.
+      //
+      // PH-DB-005: surface the tolerated swallow on STDERR. This branch
+      // should be unreachable now that stripAppliedAddColumns pre-strips
+      // applied columns — if it fires, the matcher missed an ALTER form and
+      // an operator should know rather than have it silently absorbed.
+      // Infrastructure diagnostic → stderr (keeps STDOUT clean for MCP/JSON).
+      console.error(`migration ${label}: tolerated already-applied column, continuing`);
       return;
     }
     throw new Error(`Migration ${label} failed: ${msg}`, { cause: e });
@@ -208,6 +215,43 @@ export function openDb(dbPath: string): DatabaseType {
   _dbPath = dbPath;
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
+  // PH-DB-003: without an explicit busy_timeout better-sqlite3 installs a
+  // 0ms busy handler, so a concurrent writer (rk CLI + the MCP server
+  // sharing one DB) throws SQLITE_BUSY *instantly* on a locked WAL. Give
+  // SQLite a 5s window to wait-and-retry internally before surfacing the
+  // lock to the caller (retry-and-report rather than fail-fast).
+  _db.pragma('busy_timeout = 5000');
+
+  // PH-DB-001: forward-compat guard. The migration ladder below only
+  // *lower-bound* gates (if version < N). A DB written by a NEWER rk build
+  // (schema_version > CURRENT_SCHEMA_VERSION) would otherwise be opened and
+  // silently treated as current — running this older code against a schema
+  // shape it doesn't understand. Refuse loudly so the operator upgrades rk
+  // instead of corrupting a forward-migrated DB. The meta table only exists
+  // once schema.sql has been applied, so guard the read on its presence
+  // (a brand-new file has no meta row yet and is handled by the fresh-DB
+  // path below).
+  const hasMeta = _db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'"
+  ).get();
+  if (hasMeta) {
+    const onDisk = (_db.prepare(
+      "SELECT value FROM meta WHERE key = 'schema_version'"
+    ).get() as { value: string } | undefined)?.value;
+    if (onDisk !== undefined && parseInt(onDisk, 10) > CURRENT_SCHEMA_VERSION) {
+      // Reset the singleton before throwing so the module is not left in a
+      // half-open state — otherwise a retry would hit the `if (_db)`
+      // early-return above and silently hand back the newer-schema DB we
+      // just refused.
+      _db.close();
+      _db = null;
+      _dbPath = null;
+      throw new Error(
+        `Database schema_version ${onDisk} is newer than this rk build ` +
+        `(head ${CURRENT_SCHEMA_VERSION}). Upgrade rk before opening.`
+      );
+    }
+  }
 
   // Check if schema exists
   const hasRepos = _db.prepare(
@@ -217,7 +261,11 @@ export function openDb(dbPath: string): DatabaseType {
   if (!hasRepos) {
     const schema = readFileSync(SCHEMA_PATH, 'utf-8');
     _db.exec(schema);
-    console.log('Database initialized with schema v1');
+    // PH-DB-002: init/migration progress goes to STDERR. STDOUT is the
+    // MCP JSON-RPC frame channel and the CLI --json payload channel;
+    // infrastructure breadcrumbs there corrupt both. A human still sees
+    // stderr in their terminal. Mirrors config.ts's stderr advisory tone.
+    console.error('Database initialized with schema v1');
   }
 
   // Run migrations — each block compares the current schema_version and
@@ -228,21 +276,21 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version) < 2) {
     const migration = readFileSync(MIGRATION_002, 'utf-8');
     execMigrationIdempotent(_db, migration, '002 (audit evidence layer)');
-    console.log('Applied migration 002: audit evidence layer');
+    console.error('Applied migration 002: audit evidence layer');
   }
 
   const version2 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version2) < 3) {
     const migration = readFileSync(MIGRATION_003, 'utf-8');
     execMigrationIdempotent(_db, migration, '003 (metrics v2)');
-    console.log('Applied migration 003: metrics v2');
+    console.error('Applied migration 003: metrics v2');
   }
 
   const version3 = (_db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value || '1';
   if (parseInt(version3) < 4) {
     const migration = readFileSync(MIGRATION_004, 'utf-8');
     execMigrationIdempotent(_db, migration, '004 (findings idempotency)');
-    console.log('Applied migration 004: findings idempotency (UNIQUE constraint + dedup)');
+    console.error('Applied migration 004: findings idempotency (UNIQUE constraint + dedup)');
   }
 
   // Migration 005 — FTS5 incremental triggers. This is additive over the
@@ -306,7 +354,7 @@ export function openDb(dbPath: string): DatabaseType {
       `).run();
     }
 
-    console.log('Applied migration 006: lifecycle status + cross-rig paths');
+    console.error('Applied migration 006: lifecycle status + cross-rig paths');
   }
 
   // Migration 007 — publish state (npm/pypi package bindings + version
@@ -317,7 +365,7 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version6) < 7) {
     const migration = readFileSync(MIGRATION_007, 'utf-8');
     execMigrationIdempotent(_db, migration, '007 (publish state)');
-    console.log('Applied migration 007: publish state (package bindings + version registry)');
+    console.error('Applied migration 007: publish state (package bindings + version registry)');
   }
 
   // Migration 008 — build/dep/CI health (FT-3). Gated on schema_version:
@@ -328,7 +376,7 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version7) < 8) {
     const migration = readFileSync(MIGRATION_008, 'utf-8');
     execMigrationIdempotent(_db, migration, '008 (build/dep/CI health)');
-    console.log('Applied migration 008: build/dep/CI health (toolchain + audit state + workflow actions)');
+    console.error('Applied migration 008: build/dep/CI health (toolchain + audit state + workflow actions)');
   }
 
   // Migration 009 — build/dep/CI health extensions (FT-3.5). Gated on
@@ -348,7 +396,7 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version8) < 9) {
     const migration = readFileSync(MIGRATION_009, 'utf-8');
     execMigrationIdempotent(_db, migration, '009 (build health extensions)');
-    console.log('Applied migration 009: build health extensions (CVE IDs + history + pin quality + workflow permissions + observed toolchain)');
+    console.error('Applied migration 009: build health extensions (CVE IDs + history + pin quality + workflow permissions + observed toolchain)');
   }
 
   // Migration 010 — operational hygiene run tables (FT-4). Gated on
@@ -363,7 +411,7 @@ export function openDb(dbPath: string): DatabaseType {
   if (parseInt(version9) < 10) {
     const migration = readFileSync(MIGRATION_010, 'utf-8');
     execMigrationIdempotent(_db, migration, '010 (operational runs)');
-    console.log('Applied migration 010: operational runs (db_health_runs + sync_runs)');
+    console.error('Applied migration 010: operational runs (db_health_runs + sync_runs)');
   }
 
   // Migration 011 — cross-tool vocabulary (FT-5). Gated on schema_version:
@@ -446,12 +494,23 @@ export function openDb(dbPath: string): DatabaseType {
             }
             db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
             db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('cross_tool_vocab_added', datetime('now'))").run();
+            // PH-DB-004: leave a durable breadcrumb IN THE SAME transaction
+            // so a recovery is auditable after the fact (rk can surface "this
+            // DB was repaired from a stranded _new table at <time>"). Writing
+            // it inside the tx ties the breadcrumb to the restore atomically —
+            // if the restore rolls back, so does the breadcrumb.
+            db.prepare(
+              "INSERT OR REPLACE INTO meta(key, value) VALUES ('migration_011_recovery', datetime('now') || ' restored from stranded _new')"
+            ).run();
           });
           tx();
         } finally {
           db.pragma('foreign_keys = ON');
         }
-        console.log('Recovered migration 011: restored stranded repo_relationships_new from an interrupted recreate');
+        // PH-DB-002/004: recovery breadcrumb on STDERR (infrastructure
+        // progress, not a command result) — keeps STDOUT clean for the MCP
+        // JSON-RPC stream and CLI --json output.
+        console.error('Recovered migration 011: restored stranded repo_relationships_new from an interrupted recreate');
       } else if (!hasRelTable && !hasStrandedNew) {
         // Distinguish two cases that both lack repo_relationships:
         //   (a) a legitimate minimal-v1 fixture that NEVER had the table
@@ -494,7 +553,7 @@ export function openDb(dbPath: string): DatabaseType {
         }
         _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
         _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('cross_tool_vocab_added', datetime('now'))").run();
-        console.log('Applied migration 011: cross-tool vocabulary (minimal-fixture path — forge_vault_path only)');
+        console.error('Applied migration 011: cross-tool vocabulary (minimal-fixture path — forge_vault_path only)');
       } else {
         // The table exists. Probe its CREATE SQL: if the CHECK already
         // lists the extended enum (e.g. a fresh DB built from the current
@@ -521,11 +580,11 @@ export function openDb(dbPath: string): DatabaseType {
           }
           _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '11')").run();
           _db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('cross_tool_vocab_added', datetime('now'))").run();
-          console.log('Applied migration 011: cross-tool vocabulary (enum already extended — forge_vault_path only)');
+          console.error('Applied migration 011: cross-tool vocabulary (enum already extended — forge_vault_path only)');
         } else {
           const migration = readFileSync(MIGRATION_011, 'utf-8');
           execMigrationStrict(_db, migration, '011 (cross-tool vocabulary)');
-          console.log('Applied migration 011: cross-tool vocabulary (relation types + forge_vault_path)');
+          console.error('Applied migration 011: cross-tool vocabulary (relation types + forge_vault_path)');
         }
       }
     } else {

@@ -10,10 +10,32 @@
  * on — mirrors the real "legacy data pre-dating FK enforcement" case
  * that motivates checkOrphanRows.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+// PH-AHG-009: a partial mock of node:fs that keeps every real export but
+// lets a test make existsSync THROW for one sentinel path (simulating an
+// EACCES / unmounted-drive failure). All other fs calls — and existsSync on
+// every non-sentinel path — pass straight through to the real module.
+//
+// The sentinel literal is inlined inside the factory (vi.mock is hoisted
+// above module-level consts, so the factory must not close over them).
+const THROW_PATH = '__rk_existsSync_throws__';
+vi.mock('node:fs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs')>();
+  const sentinel = '__rk_existsSync_throws__';
+  return {
+    ...real,
+    existsSync: (p: import('node:fs').PathLike) => {
+      if (typeof p === 'string' && p.includes(sentinel)) {
+        throw new Error('EACCES: permission denied (simulated)');
+      }
+      return real.existsSync(p);
+    },
+  };
+});
 import {
   openDb, closeDb, getDb,
   upsertRepo, upsertNote, upsertDoc,
@@ -23,13 +45,18 @@ import { runFsck } from '../src/health/fsck.js';
 import { rebuildIndex } from '../src/search/fts.js';
 
 let tmpDir: string;
+let errSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), 'rk-fsck-'));
   openDb(join(tmpDir, 'test.db'));
+  // PH-AHG-010: runFsck now logs the full seven-check summary to stderr
+  // (diagnostic channel). Silence it so the suite output stays clean.
+  errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
+  errSpy.mockRestore();
   closeDb();
   rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -142,6 +169,35 @@ describe('runFsck — checkStaleLocalPath', () => {
 
     const report = runFsck();
     expect(report.checks.stale_local_path.count).toBe(0);
+  });
+
+  // PH-AHG-009: existsSync can throw (EACCES, unmounted drive). One bad
+  // path must degrade to skipped-with-note, NOT abort the whole check.
+  it('degrades gracefully when existsSync throws on one path (PH-AHG-009)', () => {
+    // A genuinely-missing path (counts as stale) plus a path whose
+    // existsSync throws (the mock above). The whole check must still
+    // complete and runFsck must not propagate the throw.
+    upsertRepo({
+      owner: 'o',
+      name: 'ghost',
+      local_path: join(tmpDir, 'definitely-not-a-dir'),
+    });
+    upsertRepo({
+      owner: 'o',
+      name: 'unreadable',
+      local_path: join(tmpDir, THROW_PATH, 'locked'),
+    });
+
+    let report!: ReturnType<typeof runFsck>;
+    // The throwing path must not crash the run.
+    expect(() => { report = runFsck(); }).not.toThrow();
+    // The genuinely-missing path is still counted as stale; the throwing
+    // path is skipped (not counted as stale, not crashing the check).
+    expect(report.checks.stale_local_path.count).toBe(1);
+    // The skipped path is surfaced with its note so the operator sees it.
+    expect(
+      report.checks.stale_local_path.samples.some(s => s.includes('skipped')),
+    ).toBe(true);
   });
 });
 

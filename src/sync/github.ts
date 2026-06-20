@@ -338,13 +338,27 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
   const results: GitHubSyncResult = { synced: 0, skipped: 0, errors: [], vanished: [] };
 
   for (const owner of owners) {
-    console.log(`Syncing ${owner}...`);
+    // mcp-PH-001: progress/diagnostic output goes to STDERR. Under the MCP
+    // StdioServer transport STDOUT carries the JSON-RPC frames, and `--json`
+    // CLI consumers pipe STDOUT to jq — the "Syncing X...", per-repo sync
+    // dots, and vanished/archived notices below are all progress about the
+    // sync, not its result, so they must never touch STDOUT.
+    console.error(`Syncing ${owner}...`);
     // FT-5: snapshot BEFORE we fetch so we know what was active going
     // in. Whatever's not in the fetch results is a vanished candidate.
     const priorActive = snapshotActiveSlugsByOwner(owner);
 
     const repos = fetchGitHubRepos(owner, opts);
     const seenSlugs = new Set<string>();
+
+    // SYNC-PH-04: a listing whose length exactly hits the effective limit is
+    // LIKELY TRUNCATED — `gh repo list` returns at most --limit rows and gives
+    // no "there are more" signal. A truncated page can't be distinguished from
+    // a complete one, so a repo that simply fell past the cutoff would look
+    // "vanished" and, under --prune-vanished, get wrongly archived. We mirror
+    // the same effective limit fetchGitHubRepos uses (opts.limit || 200).
+    const effectiveLimit = opts.limit || 200;
+    const listingTruncated = repos.length >= effectiveLimit;
 
     for (const repo of repos) {
       try {
@@ -393,12 +407,28 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
         // below is case-insensitive (GitHub identity is).
         seenSlugs.add(`${repo.owner}/${repo.name}`.toLowerCase());
         results.synced++;
-        process.stdout.write('.');
+        // mcp-PH-001: sync dots are progress — write them to STDERR so they
+        // don't interleave with the JSON-RPC frame channel on STDOUT.
+        process.stderr.write('.');
       } catch (e: any) {
         results.errors.push(`${repo.owner}/${repo.name}: ${e.message}`);
       }
     }
-    console.log();
+    console.error();
+
+    // SYNC-PH-04: when the listing is likely truncated, suppress the prune
+    // step for THIS owner. We still DETECT and report vanished candidates
+    // (they may be genuinely gone), but we never archive on a page we can't
+    // prove is complete — a repo past the --limit cutoff is absent for the
+    // same reason a deleted one is. Warn the operator to raise --limit first.
+    const pruneForOwner = (opts.pruneVanished ?? false) && !listingTruncated;
+    if (opts.pruneVanished && listingTruncated) {
+      console.error(
+        `  ⚠ ${owner}: fetched ${repos.length} repos — exactly the --limit cap, so the listing is likely TRUNCATED. ` +
+        `Skipping --prune-vanished archival for this owner to avoid archiving repos that merely fell past the cutoff. ` +
+        `Re-run with a higher --limit to prune safely.`
+      );
+    }
 
     // FT-5: vanished-repo DETECTION. Only runs when this owner-fetch
     // produced at least one result — empty fetch = ambient failure, not
@@ -421,21 +451,25 @@ export function syncGitHub(owners: string[], opts: GitHubSyncOptions = {}): GitH
         // to 'public'), so a routine `rk sync` must NOT mutate lifecycle state
         // here. Only archive when the operator explicitly opted in via
         // --prune-vanished, asserting a complete, fully-scoped view.
-        if (!opts.pruneVanished) {
-          console.log(`  vanished (absent from gh listing, NOT archived — pass --prune-vanished to archive): ${prior.slug}`);
+        //
+        // SYNC-PH-04: pruneForOwner folds in the truncation guard — a
+        // truncated listing disables archival for this owner even under the
+        // flag (the warning above already told the operator to raise --limit).
+        if (!pruneForOwner) {
+          console.error(`  vanished (absent from gh listing, NOT archived — pass --prune-vanished to archive): ${prior.slug}`);
           continue;
         }
 
         // Opt-in archival. Keep the visibility guard as defense-in-depth: if a
         // row WAS github-confirmed private, never archive it even under the flag.
         if (prior.visibility === 'private') {
-          console.log(`  kept (recorded private, absent from listing): ${prior.slug}`);
+          console.error(`  kept (recorded private, absent from listing): ${prior.slug}`);
           continue;
         }
         const [vOwner, vName] = prior.slug.split('/', 2);
         try {
           archiveVanishedRepo(prior.slug, prior.id, vOwner ?? owner, vName ?? prior.slug);
-          console.log(`  archived (--prune-vanished, absent from gh listing): ${prior.slug}`);
+          console.error(`  archived (--prune-vanished, absent from gh listing): ${prior.slug}`);
         } catch (e: unknown) {
           results.errors.push(`archive ${prior.slug}: ${(e as Error).message}`);
         }

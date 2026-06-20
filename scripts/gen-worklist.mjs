@@ -7,25 +7,19 @@ import Database from 'better-sqlite3';
 import { writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+// PH-AHG-006: formatPassRate now lives in one shared module so the
+// provenance (`~`-tag) rule + null behavior can't drift between the two
+// generators. This script renders rounded, no decimals (decimals: 0).
+import { formatPassRate as formatPassRateShared } from './lib/format.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, '..', 'data', 'knowledge.db');
 const outPath = join(__dirname, '..', 'REMEDIATION-WORKLIST.md');
 
-// cds-A-005: pass_rate is stored on two scales across the portfolio —
-// some rows are 0-1 fractions, others are 0-100 percentages. The old
-// `value <= 1 ? value * 100 : value` heuristic silently renders a true
-// 1% (stored as the integer 1) as "100%". We keep the heuristic (the
-// data is genuinely mixed-scale) but TAG the value with a leading `~`
-// when the fraction branch fired, so a reader can see the percent was
-// inferred from a <= 1 value rather than measured. Provenance-on-display.
+// This worklist renders rounded pass rates ("~50%"). The provenance/null
+// rule itself lives in scripts/lib/format.mjs (cds-A-005).
 export function formatPassRate(passRateRaw) {
-  if (passRateRaw <= 1) {
-    // Inferred-as-fraction branch — mark it so 1 (→ "~100%") is never
-    // mistaken for a measured 100%.
-    return '~' + Math.round(passRateRaw * 100) + '%';
-  }
-  return Math.round(passRateRaw) + '%';
+  return formatPassRateShared(passRateRaw, { decimals: 0 });
 }
 
 // Env-gated self-test (cds-A-005 regression). Runs before any DB side
@@ -60,7 +54,10 @@ const db = new Database(dbPath, { readonly: true });
 const rows = db.prepare(`
   WITH latest_runs AS (
     SELECT ar.*,
-           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.completed_at DESC) AS rn
+           -- PH-AHG-001: match the queries.ts "latest run" contract
+           -- (started_at DESC, id DESC); completed_at is nullable so an
+           -- untiebroken ORDER BY completed_at picked an arbitrary row.
+           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.started_at DESC, ar.id DESC) AS rn
     FROM audit_runs ar
   )
   SELECT

@@ -8,27 +8,19 @@ import Database from 'better-sqlite3';
 import { writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+// PH-AHG-006: formatPassRate now lives in one shared module so the
+// provenance (`~`-tag) rule + null behavior can't drift between the two
+// generators. This script renders with one decimal place (decimals: 1).
+import { formatPassRate as formatPassRateShared } from './lib/format.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, '..', 'data', 'knowledge.db');
 const outPath = join(__dirname, '..', 'audit_report.md');
 
-// cds-A-005: pass_rate is stored on two scales across the portfolio —
-// some rows are 0-1 fractions, others are 0-100 percentages. The old
-// heuristic `value <= 1 ? value * 100 : value` silently renders a true
-// 1% (stored as the integer 1) as "100.0%". We keep the heuristic (the
-// data is genuinely mixed-scale) but TAG the value with a leading `~`
-// whenever the fraction branch fired, so a reader can see the percent
-// interpretation was inferred from a <= 1 value rather than measured.
-// Provenance-on-display: the ambiguous case is now visible, not hidden.
+// This report renders pass rates with one decimal ("~50.0%"). The
+// provenance/null rule itself lives in scripts/lib/format.mjs (cds-A-005).
 export function formatPassRate(passRate) {
-  if (passRate == null) return '-';
-  if (passRate <= 1) {
-    // Inferred-as-fraction branch: mark it so 1 (→ "~100.0%") is never
-    // mistaken for a measured 100%.
-    return '~' + (passRate * 100).toFixed(1) + '%';
-  }
-  return passRate.toFixed(1) + '%';
+  return formatPassRateShared(passRate, { decimals: 1 });
 }
 
 // Env-gated self-test (cds-A-005 regression). Runs before any DB side
@@ -81,7 +73,11 @@ const unauditedRepos = totalRepos - auditedRepos;
 const postureCounts = db.prepare(`
   WITH latest AS (
     SELECT repo_id, overall_posture,
-           ROW_NUMBER() OVER (PARTITION BY repo_id ORDER BY completed_at DESC) AS rn
+           -- PH-AHG-001: match the queries.ts "latest run" contract
+           -- (started_at DESC, id DESC). completed_at is nullable, so an
+           -- ORDER BY completed_at with no tiebreak picked an arbitrary
+           -- row for in-progress/legacy runs and diverged from Stage A.
+           ROW_NUMBER() OVER (PARTITION BY repo_id ORDER BY started_at DESC, id DESC) AS rn
     FROM audit_runs
   )
   SELECT overall_posture, COUNT(*) AS c
@@ -124,7 +120,14 @@ const tableCounts = [
 ];
 push('| Table | Rows |');
 push('|-------|------|');
+// PH-AHG-007: degrade gracefully on a pre-migration DB — a table the
+// generator expects may not exist yet (e.g. running against an old DB before
+// the audit migrations ran). Probe sqlite_master so a missing table renders
+// "n/a" instead of throwing a raw "no such table" stack.
+const tableExists = (t) =>
+  db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?").get(t) != null;
 for (const t of tableCounts) {
+  if (!tableExists(t)) { push(`| ${t} | n/a (absent) |`); continue; }
   const c = db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
   push(`| ${t} | ${c} |`);
 }
@@ -358,7 +361,9 @@ const reposByPosture = db.prepare(`
   WITH latest AS (
     SELECT ar.repo_id, ar.overall_posture, ar.overall_status, ar.summary,
            am.pass_rate, am.high_count, am.medium_count, am.low_count,
-           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.completed_at DESC) AS rn
+           -- PH-AHG-001: match the queries.ts "latest run" contract
+           -- (started_at DESC, id DESC); completed_at is nullable.
+           ROW_NUMBER() OVER (PARTITION BY ar.repo_id ORDER BY ar.started_at DESC, ar.id DESC) AS rn
     FROM audit_runs ar
     LEFT JOIN audit_metrics am ON am.audit_run_id = ar.id
   )

@@ -36,8 +36,17 @@ export const RELATION_TYPES = [
   'wraps', 'collaborated_in_mission',
 ] as const;
 
+// mcp-PH-004: repo lifecycle status values — single source of truth mirroring
+// the repos.status CHECK constraint in src/db/schema.sql. Same shared-tuple
+// pattern as NOTE_TYPES / RELATION_TYPES: server.ts's find_repos Zod enum
+// imports this so the MCP filter can't drift from the DB CHECK by hand.
+export const REPO_STATUSES = [
+  'active', 'paused', 'archived', 'unknown',
+] as const;
+
 export type NoteType = (typeof NOTE_TYPES)[number];
 export type RelationType = (typeof RELATION_TYPES)[number];
+export type RepoStatus = (typeof REPO_STATUSES)[number];
 
 // Database
 export {

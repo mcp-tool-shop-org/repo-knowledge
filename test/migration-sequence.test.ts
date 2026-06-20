@@ -282,6 +282,27 @@ describe('Migration sequence (F-TS-007)', () => {
   });
 });
 
+describe('forward-compat guard (PH-DB-001)', () => {
+  // A DB written by a NEWER rk build carries a schema_version above this
+  // build's head. The migration ladder only lower-bound-gates (if version
+  // < N), so without an explicit upper-bound check the newer DB would be
+  // opened and silently treated as current — running old code against a
+  // schema shape it doesn't understand. openDb must refuse loudly.
+  it('refuses to open a DB whose schema_version is newer than CURRENT_SCHEMA_VERSION', () => {
+    // Build a healthy head DB, then stamp a version one past head.
+    openDb(dbPath);
+    closeDb();
+
+    const raw = new Database(dbPath);
+    raw.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(
+      String(CURRENT_SCHEMA_VERSION + 1)
+    );
+    raw.close();
+
+    expect(() => openDb(dbPath)).toThrow(/newer than this rk build|Upgrade rk/i);
+  });
+});
+
 describe('idempotent migration partial-apply recovery (db-A-003)', () => {
   // The bug: execMigrationIdempotent swallowed "duplicate column name" with
   // an early return that ABORTED the rest of the migration script — so a

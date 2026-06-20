@@ -43,6 +43,15 @@ describe('openDb', () => {
     const mode = db.pragma('journal_mode') as { journal_mode: string }[];
     expect(mode[0].journal_mode).toBe('wal');
   });
+
+  it('sets a 5s busy_timeout so concurrent writers wait-and-retry (PH-DB-003)', () => {
+    // Without an explicit busy_timeout better-sqlite3 installs a 0ms busy
+    // handler — a concurrent writer (rk CLI + MCP server on one DB) throws
+    // SQLITE_BUSY instantly. openDb must set it to 5000ms.
+    const db = getDb();
+    const timeout = db.pragma('busy_timeout', { simple: true }) as number;
+    expect(timeout).toBe(5000);
+  });
 });
 
 describe('upsertRepo', () => {
@@ -267,5 +276,54 @@ describe('getRepoIdBySlug', () => {
 
   it('returns null for missing', () => {
     expect(getRepoIdBySlug('x/y')).toBeNull();
+  });
+});
+
+describe('FTS trigger coverage (PH-DB-007)', () => {
+  // Every table that feeds repo_search (the FTS5 search index) MUST have
+  // its full insert/update/delete maintenance trigger set, or edits to
+  // that table silently drift the index between full-sync rebuilds. This
+  // test enumerates the source tables + the expected trigger names from
+  // migration-005 so that adding a NEW searchable table — or dropping a
+  // trigger — without its maintenance triggers fails CI here instead of
+  // surfacing as missing/stale search results in production.
+  const TRIGGER_EXPECTATIONS: Record<string, string[]> = {
+    repos: [
+      'trg_repo_search_repos_insert',
+      'trg_repo_search_repos_update',
+      'trg_repo_search_repos_delete',
+    ],
+    repo_notes: [
+      'trg_repo_search_notes_insert',
+      'trg_repo_search_notes_update',
+      'trg_repo_search_notes_delete',
+    ],
+    repo_docs: [
+      'trg_repo_search_docs_insert',
+      'trg_repo_search_docs_update',
+      'trg_repo_search_docs_delete',
+    ],
+  };
+
+  it('every repo_search source table has its insert/update/delete triggers', () => {
+    const db = getDb();
+    const triggers = (db.prepare(
+      "SELECT name, tbl_name FROM sqlite_master WHERE type='trigger'"
+    ).all() as { name: string; tbl_name: string }[]);
+    const byTable = new Map<string, Set<string>>();
+    for (const t of triggers) {
+      if (!byTable.has(t.tbl_name)) byTable.set(t.tbl_name, new Set());
+      byTable.get(t.tbl_name)!.add(t.name);
+    }
+
+    for (const [table, expected] of Object.entries(TRIGGER_EXPECTATIONS)) {
+      const present = byTable.get(table) ?? new Set<string>();
+      for (const trigName of expected) {
+        expect(
+          present.has(trigName),
+          `missing FTS maintenance trigger ${trigName} on ${table} — repo_search would drift`
+        ).toBe(true);
+      }
+    }
   });
 });

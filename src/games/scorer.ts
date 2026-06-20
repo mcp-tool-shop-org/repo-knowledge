@@ -23,6 +23,17 @@ export const POINTS = {
   CI_FAIL_TWICE: -50,
 } as const;
 
+// PH-AHG-005: a fat-fingered worklist cell (e.g. "999999H") parses to a
+// huge count that silently skews the leaderboard. No single repo realistically
+// has more than a few hundred findings of one severity, so clamp each parsed
+// count to a sane ceiling before it accumulates. NaN / negative collapse to 0.
+const MAX_FINDINGS_PER_SEVERITY = 999;
+
+function clampFindingCount(n: number): number {
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, MAX_FINDINGS_PER_SEVERITY);
+}
+
 /**
  * Score a completed worklist.
  */
@@ -53,14 +64,20 @@ export function scoreGame(rows: WorklistRow[]): GameSummary {
     switch (status.state) {
       case 'done': {
         p.reposDone++;
+        // PH-AHG-005: clamp each count so an absurd parsed value (e.g.
+        // "999999H") can't skew the board. Done once, then both the
+        // counters and the points use the bounded values.
+        const high = clampFindingCount(findings.high);
+        const medium = clampFindingCount(findings.medium);
+        const low = clampFindingCount(findings.low);
         // Assume all findings were fixed for done repos
-        p.highsFixed += findings.high;
-        p.mediumsFixed += findings.medium;
-        p.lowsFixed += findings.low;
+        p.highsFixed += high;
+        p.mediumsFixed += medium;
+        p.lowsFixed += low;
         // Points for findings
-        p.totalPoints += findings.high * POINTS.HIGH_FIXED;
-        p.totalPoints += findings.medium * POINTS.MEDIUM_FIXED;
-        p.totalPoints += findings.low * POINTS.LOW_FIXED;
+        p.totalPoints += high * POINTS.HIGH_FIXED;
+        p.totalPoints += medium * POINTS.MEDIUM_FIXED;
+        p.totalPoints += low * POINTS.LOW_FIXED;
         // Healthy bonus
         p.totalPoints += POINTS.HEALTHY;
         // Assume perfect push (we can't detect CI fails from the worklist alone)

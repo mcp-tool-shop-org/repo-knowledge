@@ -35,6 +35,22 @@ export function resolveConfig(overrides?: Partial<RkConfig>): RkConfig {
     }
   }
 
+  // PH-DB-006: array-typed fields are trusted downstream (config.localDirs
+  // is .map()'d below; owners is iterated by sync). A config that sets one
+  // of them to a non-array (e.g. owners: "my-org" instead of ["my-org"])
+  // would otherwise throw a cryptic ".map is not a function" deep in the
+  // pipeline. Validate the shape here and fall back to DEFAULTS for any
+  // field whose JSON type is wrong, with the same stderr advisory tone as
+  // the malformed-JSON branch above so the operator sees WHY it didn't take.
+  for (const k of ['localDirs', 'owners'] as const) {
+    if (!Array.isArray(config[k])) {
+      console.error(
+        `[rk] Warning: rk.config.json "${k}" is not an array (got ${typeof config[k]}); using default.`
+      );
+      config[k] = [...DEFAULTS[k]];
+    }
+  }
+
   // 3. Apply explicit overrides — but only fields the caller explicitly
   //    passed. The naive `{ ...config, ...overrides }` clobbered any
   //    field set to `undefined` in the overrides object (e.g. when CLI
