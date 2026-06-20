@@ -3,8 +3,10 @@ dist/
 *.db
 *.db-shm
 *.db-wal
+*.db.bak-*
 .env
 *.tgz
+rk.config.json
 site/.astro/
 site/dist/
 site/node_modules/
