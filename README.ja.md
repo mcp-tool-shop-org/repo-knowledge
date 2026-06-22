@@ -79,7 +79,7 @@ rk audit seed-controls
 | `rk list` | すべてのリポジトリをリスト（ステータス、言語、形状でフィルタリング可能） |
 | `rk find <query>` | インデックス化されたすべてのコンテンツに対する全文検索 |
 | `rk related <slug>` | 特定のレポジトリに関連するレポジトリを表示します。 |
-| `rk note <slug>` | `--type`と`--content`（オプションで`--title`）を使用して、型付きのメモ（基本理念、アーキテクチャ、警告など）を追加します。 |
+| `rk note <slug>` | `--type` と `--content` を使用して、注釈（論文、アーキテクチャ、警告など）を追加します（オプションで `--title` も使用できます）。`--delete` を使用すると、`--type` + `--title` で指定した注釈を削除できます。 |
 | `rk relate <from> <type> <to>` | リポジトリ間の関係を記録します（オプションで`--note`）。 |
 | `rk stats` | データベース統計を表示します。 |
 | `rk reindex` | FTSインデックスを再構築します。 |
@@ -134,6 +134,12 @@ rk audit seed-controls
 | `rk doctor [--json] [--strict]` | 環境事前チェック：構成、DB、スキーマバージョン、`gh`認証、現在のリグ、最近の同期/fsck実行。 |
 | `rk config [--json]` | フィールドごとのソースを表示して、解決された有効な構成を表示します。 |
 | `rk config validate [--json]` | `rk.config.json`を検証します。プレースホルダーのオーナー、無効な形状、または解決できないパスがある場合、ゼロ以外の値で終了します。 |
+
+### 分類（バージョン2.1.1）
+
+| コマンド | 説明 |
+|---------|-------------|
+| `rk classify <slug> [--status <s>] [--stage <s>] [--category <c>]` | 管理されたライフサイクルフィールドを設定します。これには、`status`（`active`/`paused`/`archived`/`unknown`）、自由形式の `stage`（例：`shipped`、`Phase 1`）、および `category`（`product`/`tool`/`library`/`experiment`/`blueprint`/`marketing`）が含まれます。これらは `sync` または `scan` によって自動的に入力されるものではありません。`stage`/`category` をクリアするには、`""` を渡します。 |
 
 ### 監査コマンド
 

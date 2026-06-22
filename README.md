@@ -79,7 +79,7 @@ rk audit seed-controls
 | `rk list` | List all repos (filterable by status, language, shape) |
 | `rk find <query>` | Full-text search across all indexed content |
 | `rk related <slug>` | Show repos related to a given repo |
-| `rk note <slug>` | Add a typed note (thesis, architecture, warning, etc.) with `--type` and `--content` (optional `--title`) |
+| `rk note <slug>` | Add a typed note (thesis, architecture, warning, etc.) with `--type` and `--content` (optional `--title`); `--delete` retires a note by `--type` + `--title` |
 | `rk relate <from> <type> <to>` | Record a relationship between repos (optional `--note`) |
 | `rk stats` | Show database statistics |
 | `rk reindex` | Rebuild the FTS index |
@@ -134,6 +134,12 @@ rk audit seed-controls
 | `rk doctor [--json] [--strict]` | Environment preflight: config, DB, schema version, `gh` auth, current rig, recent sync/fsck runs |
 | `rk config [--json]` | Show the resolved effective config with per-field provenance |
 | `rk config validate [--json]` | Validate `rk.config.json` — exits non-zero on placeholder owners, bad shapes, or unresolvable paths |
+
+### Classification (v2.1.1)
+
+| Command | Description |
+|---------|-------------|
+| `rk classify <slug> [--status <s>] [--stage <s>] [--category <c>]` | Set the curated lifecycle fields — `status` (`active`/`paused`/`archived`/`unknown`), free-form `stage` (e.g. `shipped`, `Phase 1`), and `category` (`product`/`tool`/`library`/`experiment`/`blueprint`/`marketing`). These are not populated by `sync` or `scan`; pass `""` to clear `stage`/`category` |
 
 ### Audit Commands
 

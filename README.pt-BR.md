@@ -79,7 +79,7 @@ rk audit seed-controls
 | `rk list` | Listar todos os repositórios (filtrável por status, linguagem, formato). |
 | `rk find <query>` | Pesquisa de texto completo em todo o conteúdo indexado. |
 | `rk related <slug>` | Mostrar os repositórios relacionados a um determinado repositório. |
-| `rk note <slug>` | Adicionar uma anotação tipada (tese, arquitetura, aviso, etc.) com `--type` e `--content` (opcionalmente, `--title`). |
+| `rk note <slug>` | Adicione uma nota digitada (tese, arquitetura, aviso, etc.) com `--type` e `--content` (opcionalmente `--title`); `--delete` remove uma nota por meio de `--type` + `--title`. |
 | `rk relate <from> <type> <to>` | Registrar um relacionamento entre os repositórios (opcionalmente, `--note`). |
 | `rk stats` | Mostrar as estatísticas do banco de dados. |
 | `rk reindex` | Reconstruir o índice FTS. |
@@ -134,6 +134,12 @@ rk audit seed-controls
 | `rk doctor [--json] [--strict]` | Pré-verificação do ambiente: configuração, banco de dados, versão do esquema, autenticação `gh`, rig atual, execuções recentes de sincronização/fsck. |
 | `rk config [--json]` | Mostrar a configuração efetiva resolvida com a origem por campo. |
 | `rk config validate [--json]` | Validar `rk.config.json` — sai com código diferente de zero em caso de proprietários de espaço reservado, formatos incorretos ou caminhos irresolvíveis. |
+
+### Classificação (v2.1.1)
+
+| Comando | Descrição |
+|---------|-------------|
+| `rk classify <slug> [--status <s>] [--stage <s>] [--category <c>]` | Defina os campos do ciclo de vida selecionados: `status` (`ativo`/`pausado`/`arquivado`/`desconhecido`), `stage` em formato livre (por exemplo, `enviado`, `Fase 1`) e `category` (`produto`/`ferramenta`/`biblioteca`/`experimento`/`modelo`/`marketing`). Estes campos não são preenchidos por `sync` ou `scan`; use `""` para limpar `stage`/`category`. |
 
 ### Comandos de auditoria
 

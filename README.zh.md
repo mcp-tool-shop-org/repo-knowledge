@@ -79,7 +79,7 @@ rk audit seed-controls
 | `rk list` | 列出所有仓库（可按状态、语言、类型进行筛选） |
 | `rk find <query>` | 对所有索引内容进行全文搜索 |
 | `rk related <slug>` | 显示与给定仓库相关的仓库 |
-| `rk note <slug>` | 添加带有 `--type` 和 `--content` 的类型化注释（例如：理念、架构、警告等）（可选的 `--title`） |
+| `rk note <slug>` | 使用 `--type` 和 `--content` 添加带类型的注释（例如：论文、架构、警告等），并可选择添加 `--title`；使用 `--delete` 通过指定 `--type` + `--title` 来删除注释。 |
 | `rk relate <from> <type> <to>` | 记录仓库之间的关系（可选的 `--note`） |
 | `rk stats` | 显示数据库统计信息 |
 | `rk reindex` | 重建 FTS 索引 |
@@ -134,6 +134,12 @@ rk audit seed-controls
 | `rk doctor [--json] [--strict]` | 环境预检：配置、数据库、架构版本、`gh` 认证、当前运行环境、最近的同步/fsck 运行。 |
 | `rk config [--json]` | 显示已解析的有效配置，并提供每个字段的出处。 |
 | `rk config validate [--json]` | 验证 `rk.config.json`——如果存在占位符所有者、错误的类型或无法解析的路径，则以非零状态退出。 |
+
+### 分类（v2.1.1）
+
+| 命令 | 描述 |
+|---------|-------------|
+| `rk classify <slug> [--status <s>] [--stage <s>] [--category <c>]` | 设置策划好的生命周期字段，包括：`status`（`active`/`paused`/`archived`/`unknown`）、自由格式的 `stage`（例如：`shipped`、`Phase 1`）和 `category`（`product`/`tool`/`library`/`experiment`/`blueprint`/`marketing`）。这些字段不会由 `sync` 或 `scan` 自动填充；如果需要清除 `stage`/`category`，请传递空字符串 `""`。 |
 
 ### 审计命令
 
