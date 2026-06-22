@@ -33,7 +33,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { hostname } from 'node:os';
 import {
   openDb, getDb, closeDb, getRepo, findRepos, getRelated, getAllRepos, getStats,
-  upsertNote, addRelationship,
+  upsertNote, deleteNote, addRelationship,
   // F-BE-FT1: lifecycle + cross-rig helpers (provided by DB agent in
   // migration-006 + init.ts extensions). CLI assumes these signatures;
   // coordinator reconciles if mismatched.
@@ -46,6 +46,9 @@ import {
   // at the CLI layer surfaces a friendlier exit-2 error than a raw throw.
   setRepoPackageNames, listPublishedVersions, getLatestPublishedVersion,
   PUBLISHER_METHODS, PUBLISHED_VERSION_CHANNELS,
+  // `classify` command — curated lifecycle/category setter (status/stage/category).
+  setRepoClassification, REPO_STATUSES, REPO_CATEGORIES,
+  type RepoStatus, type RepoCategory,
   // CLI-PR-001 / PR-003: schema-version guard for backup/restore validation
   // and the doctor preflight on-disk-vs-head check.
   CURRENT_SCHEMA_VERSION,
@@ -610,7 +613,7 @@ program
 // ─── note ────────────────────────────────────────────────────────────────────
 program
   .command('note <slug>')
-  .description('Add a note to a repo')
+  .description('Add (or --delete) a note on a repo')
   // F-BE-011: --type is validated against NOTE_TYPES in the action body
   // below. The underlying CHECK constraint in repo_notes would reject
   // invalid values anyway; the action-body guard surfaces a friendlier
@@ -619,14 +622,24 @@ program
     '-t, --type <type>',
     `Note type: ${NOTE_TYPES.join('|')}`,
   )
-  .requiredOption('-c, --content <content>', 'Note content')
-  .option('--title <title>', 'Optional note title')
-  .action((slug: string, opts: { type: string; content: string; title?: string }): void => {
+  // --content is required when ADDING but not when --delete-ing; the action
+  // body enforces "content required unless --delete" so Commander doesn't
+  // demand it for a deletion.
+  .option('-c, --content <content>', 'Note content (required unless --delete)')
+  .option('--title <title>', 'Optional note title (defaults to the note type)')
+  .option('--delete', 'Delete the note identified by --type + --title instead of adding one')
+  .action((slug: string, opts: { type: string; content?: string; title?: string; delete?: boolean }): void => {
     // F-BE-011: validate the enum before opening the DB.
     if (!(NOTE_TYPES as readonly string[]).includes(opts.type)) {
       console.error(`Error: invalid note type "${opts.type}".`);
       console.error(`Allowed: ${NOTE_TYPES.join(', ')}`);
       console.error(`Example: rk note <slug> --type thesis --content "..."`);
+      process.exit(2);
+    }
+    if (!opts.delete && opts.content === undefined) {
+      console.error(`Error: --content is required when adding a note.`);
+      console.error(`Example: rk note ${slug} --type thesis --content "..."`);
+      console.error(`Or:      rk note ${slug} --type ${opts.type} --title "..." --delete`);
       process.exit(2);
     }
     openDb(config().dbPath);
@@ -639,7 +652,26 @@ program
       process.exit(1);
     }
 
-    upsertNote(repoId, opts.type, opts.title || opts.type, opts.content);
+    // The (type, title) key is the same one upsertNote dedupes on; title
+    // defaults to the type, matching the add path.
+    const title = opts.title || opts.type;
+
+    if (opts.delete) {
+      const removed = deleteNote(repoId, opts.type, title);
+      if (removed === 0) {
+        console.error(
+          `Error: no ${opts.type} note titled "${title}" on ${canonicalSlug(repoId, slug)}.`
+        );
+        console.error(`Run: rk show ${slug}  (to see existing notes)`);
+        closeDb();
+        process.exit(1);
+      }
+      console.log(`Deleted ${opts.type} note "${title}" from ${canonicalSlug(repoId, slug)}`);
+      closeDb();
+      return;
+    }
+
+    upsertNote(repoId, opts.type, title, opts.content as string);
     // cli-A-001: echo the resolved canonical slug, not the user's input, so a
     // partial match makes the real target visible.
     console.log(`Note added to ${canonicalSlug(repoId, slug)}`);
@@ -1431,6 +1463,90 @@ program
     if (opts.pypi !== undefined) parts.push(`pypi=${opts.pypi === null || opts.pypi === '' ? '(cleared)' : opts.pypi}`);
     if (opts.publisherMethod !== undefined) parts.push(`publisher_method=${opts.publisherMethod}`);
     console.log(`Bound ${repo.slug}: ${parts.join(' ')}`);
+    closeDb();
+  });
+
+// ─── classify ────────────────────────────────────────────────────────────────
+// Curated lifecycle/category setter. status / stage / category are NOT
+// populated by `sync` or `scan` — the GitHub metadata shape carries none of
+// them — so without this command every repo sits at the status='unknown' /
+// stage=NULL / category=NULL default. Wraps setRepoClassification with enum
+// validation surfaced at the CLI layer (friendlier than a raw thrown error).
+program
+  .command('classify <slug>')
+  .description('Set curated status / stage / category on a repo')
+  .option('--status <status>', `Lifecycle status: ${REPO_STATUSES.join('|')}`)
+  .option('--stage <stage>', 'Free-form milestone (e.g. "shipped", "Phase 1"); "" clears')
+  .option('--category <category>', `Category: ${REPO_CATEGORIES.join('|')}; "" clears`)
+  .action((slug: string, opts: { status?: string; stage?: string; category?: string }): void => {
+    if (
+      opts.status !== undefined &&
+      !(REPO_STATUSES as readonly string[]).includes(opts.status)
+    ) {
+      console.error(`Error: invalid status "${opts.status}".`);
+      console.error(`Allowed: ${REPO_STATUSES.join(', ')}`);
+      console.error(`Example: rk classify ${slug} --status active`);
+      process.exit(2);
+    }
+    if (
+      opts.category !== undefined &&
+      opts.category !== '' &&
+      !(REPO_CATEGORIES as readonly string[]).includes(opts.category)
+    ) {
+      console.error(`Error: invalid category "${opts.category}".`);
+      console.error(`Allowed: ${REPO_CATEGORIES.join(', ')}`);
+      console.error(`Example: rk classify ${slug} --category tool`);
+      process.exit(2);
+    }
+    if (
+      opts.status === undefined &&
+      opts.stage === undefined &&
+      opts.category === undefined
+    ) {
+      console.error(`Error: specify at least one of --status, --stage, --category.`);
+      console.error(`Example: rk classify ${slug} --status active --stage shipped --category tool`);
+      process.exit(2);
+    }
+
+    openDb(config().dbPath);
+    const repo = resolveRepoRow(slug);
+    if (!repo) {
+      console.error(`Error: repo not found: ${slug}`);
+      console.error(`Run: rk list  (to see all indexed repos)`);
+      closeDb();
+      process.exit(1);
+    }
+
+    try {
+      const result = setRepoClassification(repo.slug, {
+        status: opts.status as RepoStatus | undefined,
+        // "" clears stage / category to NULL; an unset flag leaves them intact.
+        stage: opts.stage === undefined ? undefined : (opts.stage === '' ? null : opts.stage),
+        category:
+          opts.category === undefined
+            ? undefined
+            : opts.category === ''
+              ? null
+              : (opts.category as RepoCategory),
+      });
+      if (!result.updated) {
+        // Defensive: row existed above but UPDATE affected 0 rows.
+        console.error(`Error: failed to update classification for ${repo.slug}`);
+        closeDb();
+        process.exit(1);
+      }
+    } catch (e: unknown) {
+      // setRepoClassification throws on bad enum, but we already validated.
+      console.error(`Error: ${(e as Error).message}`);
+      closeDb();
+      process.exit(1);
+    }
+
+    const parts: string[] = [];
+    if (opts.status !== undefined) parts.push(`status=${opts.status}`);
+    if (opts.stage !== undefined) parts.push(`stage=${opts.stage === '' ? '(cleared)' : opts.stage}`);
+    if (opts.category !== undefined) parts.push(`category=${opts.category === '' ? '(cleared)' : opts.category}`);
+    console.log(`Classified ${repo.slug}: ${parts.join(' ')}`);
     closeDb();
   });
 
