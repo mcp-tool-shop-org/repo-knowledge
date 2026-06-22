@@ -79,17 +79,26 @@ afterEach(() => {
 // ─── syncNpmVersion ────────────────────────────────────────────────────────
 
 describe('syncNpmVersion (F-TS-FT2)', () => {
-  it('parses npm view --json output, skips created/modified, returns versions newest-first', () => {
-    const npmJson = JSON.stringify({
+  // npm version history now comes from the registry packument's `time` object
+  // (https://registry.npmjs.org/<name>), NOT a `npm view` subprocess — the
+  // subprocess was unspawnable on Windows. These tests mock global.fetch,
+  // mirroring the syncPyPIVersion suite below.
+  const packument = (time: Record<string, string>) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ name: '@scope/pkg', time }),
+  }) as Response;
+
+  it('parses the registry `time` object, skips created/modified, returns versions newest-first', async () => {
+    fetchSpy.mockResolvedValueOnce(packument({
       created: '2026-01-01T00:00:00Z',
       modified: '2026-03-25T00:00:00Z',
       '1.0.0': '2026-01-01T00:00:00Z',
       '1.0.1': '2026-02-01T00:00:00Z',
       '1.0.2': '2026-03-25T00:00:00Z',
-    });
-    mockExecFileSync.mockReturnValue(npmJson);
+    }));
 
-    const versions = syncNpmVersion('@mcptoolshop/repo-knowledge');
+    const versions = await syncNpmVersion('@mcptoolshop/repo-knowledge');
 
     expect(versions.length).toBe(3);
     // Most recent first (sorted DESC by published_at)
@@ -100,37 +109,80 @@ describe('syncNpmVersion (F-TS-FT2)', () => {
     expect(versions.map(v => v.version)).not.toContain('modified');
     // Channel field stamped on every row
     expect(versions.every(v => v.channel === 'npm')).toBe(true);
-    // Source field stamped on every row
+    // Source field stamped on every row (retained label)
     expect(versions.every(v => v.source === 'npm_view')).toBe(true);
   });
 
-  it('returns [] and logs to stderr on npm view failure', () => {
-    mockExecFileSync.mockImplementation(() => {
-      throw new Error('npm ERR! 404 Not Found');
-    });
+  it('hits the registry HTTP API, not a subprocess', async () => {
+    fetchSpy.mockResolvedValueOnce(packument({
+      created: '2026-01-01T00:00:00Z',
+      modified: '2026-01-01T00:00:00Z',
+      '1.0.0': '2026-01-01T00:00:00Z',
+    }));
 
-    const versions = syncNpmVersion('@nonexistent/package');
-    expect(versions).toEqual([]);
-    expect(stderrSpy).toHaveBeenCalled();
-  });
+    await syncNpmVersion('@dogfood-lab/ai-crucible');
 
-  it('handles empty registry response (no versions yet)', () => {
-    mockExecFileSync.mockReturnValue(
-      JSON.stringify({ created: '2026-01-01T00:00:00Z', modified: '2026-01-01T00:00:00Z' })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://registry.npmjs.org/@dogfood-lab/ai-crucible',
+      expect.any(Object),
     );
-    const versions = syncNpmVersion('@brand-new/package');
-    expect(versions).toEqual([]);
+    // The npm path must NOT shell out anymore.
+    expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid npm package name shape with stderr log', () => {
-    const versions = syncNpmVersion('bad name with spaces');
+  it('returns [] and logs to stderr on registry HTTP error (404)', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'Not found' }),
+    } as Response);
+
+    const versions = await syncNpmVersion('@nonexistent/package');
     expect(versions).toEqual([]);
     expect(stderrSpy).toHaveBeenCalled();
   });
 
-  it('handles malformed JSON from npm view (treats as empty)', () => {
-    mockExecFileSync.mockReturnValue('not json');
-    const versions = syncNpmVersion('@scope/pkg');
+  it('returns [] and logs to stderr when fetch itself throws', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    const versions = await syncNpmVersion('@scope/pkg');
+    expect(versions).toEqual([]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it('handles a packument whose time map has no real versions yet', async () => {
+    fetchSpy.mockResolvedValueOnce(packument({
+      created: '2026-01-01T00:00:00Z',
+      modified: '2026-01-01T00:00:00Z',
+    }));
+    const versions = await syncNpmVersion('@brand-new/package');
+    expect(versions).toEqual([]);
+  });
+
+  it('handles a packument missing the `time` object entirely (placeholder)', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: '@scope/pkg' }),
+    } as Response);
+    const versions = await syncNpmVersion('@scope/pkg');
+    expect(versions).toEqual([]);
+  });
+
+  it('rejects invalid npm package name shape with stderr log (no fetch)', async () => {
+    const versions = await syncNpmVersion('bad name with spaces');
+    expect(versions).toEqual([]);
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('handles malformed JSON from the registry (treats as empty)', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => { throw new Error('Unexpected token'); },
+    } as unknown as Response);
+    const versions = await syncNpmVersion('@scope/pkg');
     expect(versions).toEqual([]);
     expect(stderrSpy).toHaveBeenCalled();
   });
@@ -280,16 +332,23 @@ describe('syncPublishStateForRepo (F-TS-FT2)', () => {
       npm: '@mcptoolshop/repo-knowledge',
     });
 
-    const npmJson = JSON.stringify({
-      created: '2026-01-01T00:00:00Z',
-      modified: '2026-03-25T00:00:00Z',
-      '1.0.5': '2026-03-25T00:00:00Z',
-    });
-    mockExecFileSync.mockImplementation((file: string, args: readonly string[]) => {
+    mockExecFileSync.mockImplementation((_file: string, args: readonly string[]) => {
       if (args.includes('release')) return '[]';            // gh release list
-      return npmJson;                                        // npm view
+      return '';                                            // npm no longer shells out
     });
-    fetchSpy.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) } as Response);
+    // npm version history now comes from the registry packument's `time` map.
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        name: '@mcptoolshop/repo-knowledge',
+        time: {
+          created: '2026-01-01T00:00:00Z',
+          modified: '2026-03-25T00:00:00Z',
+          '1.0.5': '2026-03-25T00:00:00Z',
+        },
+      }),
+    } as Response);
 
     const summary = await syncPublishStateForRepo(repoId, {
       owner: 'mcp-tool-shop-org',
@@ -358,11 +417,13 @@ describe('syncPublishStateForRepo (F-TS-FT2)', () => {
 
   it('collects per-channel errors without throwing when one channel fails', async () => {
     const repoId = upsertRepo({ owner: 'o', name: 'r' }) as number;
-    // npm view throws; gh release list returns valid empty.
-    mockExecFileSync.mockImplementation((file: string, args: readonly string[]) => {
+    // npm registry fetch fails; gh release list returns valid empty. Each
+    // channel degrades gracefully (returns [] + stderr) without throwing.
+    mockExecFileSync.mockImplementation((_file: string, args: readonly string[]) => {
       if (args.includes('release')) return '[]';
-      throw new Error('npm broken');
+      return '';
     });
+    fetchSpy.mockRejectedValue(new Error('npm registry unreachable'));
 
     const summary = await syncPublishStateForRepo(repoId, {
       owner: 'o',
@@ -382,17 +443,23 @@ describe('syncPublishStateForRepo (F-TS-FT2)', () => {
 describe('Sync end-to-end writes (F-TS-FT2)', () => {
   it('listPublishedVersions reflects rows written by syncPublishStateForRepo', async () => {
     const repoId = upsertRepo({ owner: 'mcp-tool-shop-org', name: 'r' }) as number;
-    const npmJson = JSON.stringify({
-      created: '2026-01-01T00:00:00Z',
-      modified: '2026-03-25T00:00:00Z',
-      '1.0.0': '2026-01-01T00:00:00Z',
-      '1.0.1': '2026-02-01T00:00:00Z',
-    });
-    mockExecFileSync.mockImplementation((file: string, args: readonly string[]) => {
+    mockExecFileSync.mockImplementation((_file: string, args: readonly string[]) => {
       if (args.includes('release')) return '[]';
-      return npmJson;
+      return '';
     });
-    fetchSpy.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) } as Response);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        name: '@mcptoolshop/r',
+        time: {
+          created: '2026-01-01T00:00:00Z',
+          modified: '2026-03-25T00:00:00Z',
+          '1.0.0': '2026-01-01T00:00:00Z',
+          '1.0.1': '2026-02-01T00:00:00Z',
+        },
+      }),
+    } as Response);
 
     await syncPublishStateForRepo(repoId, {
       owner: 'mcp-tool-shop-org',
