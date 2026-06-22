@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-06-22
+
+Patch release: a cross-platform fix for npm version sync plus two CLI gap-closers. No breaking changes.
+
+### Fixed
+
+- **`rk versions --refresh` now syncs the npm channel on Windows.** The npm version worker shelled out to `npm view`, which is unspawnable via `execFileSync` on Windows — npm is a `.cmd` shim, so a bare name throws `ENOENT` (PATHEXT resolves only through a shell) and naming `npm.cmd` throws `EINVAL` under the Node CVE-2024-27980 mitigation. The npm channel therefore only ever refreshed on POSIX. It now reads the registry packument's `time` object over HTTP (`registry.npmjs.org/<name>`) with the shared transient-retry helper — no subprocess, no PATH/CLI dependency — matching the existing PyPI worker. `rk health`'s `npm audit` + `npx` toolchain probes (which genuinely need the CLI) now spawn through a shell on Windows only, while POSIX keeps its no-shell, injection-proof path.
+
+### Added
+
+- **`rk classify <slug>`** — set the curated lifecycle fields `--status` (`active`/`paused`/`archived`/`unknown`), `--stage` (free-form, e.g. `shipped`), and `--category` (`product`/`tool`/`library`/`experiment`/`blueprint`/`marketing`). These columns are populated by neither `sync` nor `scan` (the GitHub metadata shape carries none of them), so without this command every repo sat at `status='unknown'`. Status and category are enum-validated; `""` clears `stage`/`category`.
+- **`rk note --delete`** — retire a superseded note by its `--type` + `--title` key (the same key `note` dedupes on). Notes were previously append/replace-only with no removal path. `--content` is now optional (required only when adding).
+
 ## [2.1.0] - 2026-06-20
 
 Dogfood-swarm release: a full four-stage health pass (bug/security → proactive → humanization → visual) plus a feature wave. No breaking changes — every v2.0.0 callsite continues to work. Tests **377 → 515**.

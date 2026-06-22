@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   openDb, closeDb, getDb,
-  upsertRepo, upsertTech, upsertFact, upsertDoc, upsertNote,
+  upsertRepo, upsertTech, upsertFact, upsertDoc, upsertNote, deleteNote,
   setTopics, upsertRelease, addRelationship,
   getRepo, findRepos, getRelated, getRepoIdBySlug, getAllRepos, getStats,
 } from '../src/db/init.js';
@@ -138,6 +138,29 @@ describe('upsertNote', () => {
     const repo = getRepo('o/r');
     expect(repo!.notes).toHaveLength(1);
     expect(repo!.notes[0].content).toBe('Updated thesis');
+  });
+});
+
+describe('deleteNote', () => {
+  it('removes the note matching (type, title) and returns the row count', () => {
+    const id = upsertRepo({ owner: 'o', name: 'r' });
+    upsertNote(id, 'next_step', 'next_step', 'stale plan');
+    upsertNote(id, 'thesis', 'thesis', 'keep me');
+
+    const removed = deleteNote(id, 'next_step', 'next_step');
+    expect(removed).toBe(1);
+
+    const repo = getRepo('o/r');
+    expect(repo!.notes).toHaveLength(1);
+    expect(repo!.notes[0].note_type).toBe('thesis');
+  });
+
+  it('returns 0 when no matching note exists (no throw)', () => {
+    const id = upsertRepo({ owner: 'o', name: 'r' });
+    upsertNote(id, 'thesis', 'thesis', 'body');
+    // Wrong title — must not delete the thesis note.
+    expect(deleteNote(id, 'thesis', 'nope')).toBe(0);
+    expect(getRepo('o/r')!.notes).toHaveLength(1);
   });
 });
 

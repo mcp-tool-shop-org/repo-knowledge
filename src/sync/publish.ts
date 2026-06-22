@@ -226,17 +226,29 @@ function validatePypiName(value: string): void {
 
 /**
  * Sync npm version history for a package. Returns one record per real
- * version (skipping the `created` / `modified` meta keys that `npm view
- * time` interleaves with version timestamps).
+ * version (skipping the `created` / `modified` meta keys that the npm
+ * registry's `time` object interleaves with version timestamps).
  *
  * Sorted by published_at DESC so callers can take the head for "latest"
  * without a follow-up sort. Versions with null published_at sink to the
  * tail.
  *
- * On any failure (missing npm CLI, network timeout, malformed JSON,
- * non-object payload) returns [] and logs to stderr. NEVER throws.
+ * Sourced from the npm registry HTTP API (https://registry.npmjs.org/<name>),
+ * NOT a `npm view` subprocess. The packument's top-level `time` object carries
+ * the exact same per-version timestamp map the old `npm view time --json` did,
+ * so the parsing is unchanged — but the fetch path is cross-platform and has no
+ * PATH/CLI dependency. The subprocess form was unspawnable on Windows (npm is a
+ * `.cmd` shim — see exec-bin.ts) so `versions --refresh` only ever synced the
+ * npm channel on POSIX; this also brings npm into line with the PyPI sibling,
+ * which already used `fetch`.
+ *
+ * On any failure (network timeout, non-2xx, malformed JSON, non-object
+ * payload) returns [] and logs to stderr. NEVER throws.
  */
-export function syncNpmVersion(npm_name: string): PublishedVersionRecord[] {
+export async function syncNpmVersion(
+  npm_name: string,
+  opts?: { retry?: RetryOptions }
+): Promise<PublishedVersionRecord[]> {
   try {
     validateNpmName(npm_name);
   } catch (e: unknown) {
@@ -245,24 +257,53 @@ export function syncNpmVersion(npm_name: string): PublishedVersionRecord[] {
     return [];
   }
 
-  let raw: string;
+  // The registry accepts a scoped name's `/` as a literal path segment
+  // (`@scope/name`); validateNpmName already constrains the charset to a
+  // URL-safe set, so no further encoding is required.
+  const url = `https://registry.npmjs.org/${npm_name}`;
+
+  // SYNC-PH-03: retry the fetch on transient signals only (mirrors
+  // syncPyPIVersion). A 429/503 is thrown INSIDE the retried fn so it triggers
+  // a retry; a deterministic non-2xx (404) is handled below.
+  let response: Response;
   try {
-    raw = execFileSync('npm', ['view', npm_name, 'time', '--json'], {
-      encoding: 'utf-8',
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 30000,
-    });
+    const outcome = await withTransientRetry<Response>(async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+        if (res.status === 429 || res.status === 503) {
+          throw new Error(`${res.status} transient from npm registry for ${npm_name}`);
+        }
+        return res;
+      } finally {
+        clearTimeout(timer);
+      }
+    }, opts?.retry);
+    if (!outcome.ok) {
+      console.error(
+        `syncNpmVersion: ${npm_name} transient failure after ${outcome.attempts} attempts: ${outcome.lastError}`
+      );
+      return [];
+    }
+    response = outcome.value as Response;
   } catch (e: unknown) {
     const msg = (e as Error)?.message ?? String(e);
-    console.error(`syncNpmVersion: failed to fetch ${npm_name}: ${msg}`);
+    console.error(`syncNpmVersion: fetch ${npm_name} failed: ${msg}`);
     return [];
   }
 
-  if (!raw.trim()) return [];
+  if (!response.ok) {
+    console.error(`syncNpmVersion: ${npm_name} returned HTTP ${response.status}`);
+    return [];
+  }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = await response.json();
   } catch (e: unknown) {
     const msg = (e as Error)?.message ?? String(e);
     console.error(`syncNpmVersion: malformed JSON for ${npm_name}: ${msg}`);
@@ -270,13 +311,20 @@ export function syncNpmVersion(npm_name: string): PublishedVersionRecord[] {
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    console.error(`syncNpmVersion: expected object for ${npm_name}, got ${typeof parsed}`);
+    console.error(`syncNpmVersion: expected object for ${npm_name}, got ${Array.isArray(parsed) ? 'array' : typeof parsed}`);
+    return [];
+  }
+
+  const time = (parsed as { time?: unknown }).time;
+  if (!time || typeof time !== 'object' || Array.isArray(time)) {
+    // A reserved-but-never-published name (placeholder packument) can lack a
+    // `time` map. Treat as "no versions yet" rather than an error.
     return [];
   }
 
   const records: PublishedVersionRecord[] = [];
-  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-    // npm view time returns: { created, modified, "<version>": "<iso>", ... }
+  for (const [key, value] of Object.entries(time as Record<string, unknown>)) {
+    // The `time` object is { created, modified, "<version>": "<iso>", ... }.
     // Skip the two meta keys; everything else is a version → timestamp.
     if (key === 'created' || key === 'modified') continue;
     if (typeof value !== 'string') continue;
@@ -284,6 +332,7 @@ export function syncNpmVersion(npm_name: string): PublishedVersionRecord[] {
       channel: 'npm',
       version: key,
       published_at: value,
+      // Retained label for continuity with rows the old `npm view` path wrote.
       source: 'npm_view',
     });
   }
@@ -561,7 +610,7 @@ export async function syncPublishStateForRepo(
   // npm
   if (repo.npm_package_name) {
     try {
-      const npmRecords = syncNpmVersion(repo.npm_package_name);
+      const npmRecords = await syncNpmVersion(repo.npm_package_name);
       for (const r of npmRecords) apply(r, 'npm');
     } catch (e: unknown) {
       const msg = (e as Error)?.message ?? String(e);

@@ -936,6 +936,26 @@ export function upsertNote(
   return r.lastInsertRowid;
 }
 
+/**
+ * Delete the note identified by (repo_id, note_type, title) — the same key
+ * upsertNote dedupes on, so the deletion target is exactly the note a prior
+ * `note` write would have replaced. Returns the number of rows removed (0 when
+ * no matching note exists). Used by `rk note --delete` to retire superseded
+ * notes (the only supported note-removal path; notes were previously
+ * append/replace-only).
+ */
+export function deleteNote(
+  repoId: number | bigint,
+  noteType: string,
+  title: string
+): number {
+  const db = getDb();
+  const r = db.prepare(
+    'DELETE FROM repo_notes WHERE repo_id = ? AND note_type = ? AND title = ?'
+  ).run(repoId, noteType, title);
+  return r.changes;
+}
+
 export interface ReleaseData {
   tag: string;
   title: string;
@@ -1650,6 +1670,92 @@ export function setRepoPackageNames(
   if (names.publisher_method !== undefined) {
     sets.push('publisher_method = ?');
     params.push(names.publisher_method);
+  }
+
+  if (sets.length === 0) return { updated: false };
+
+  params.push(slug);
+  const r = db.prepare(
+    `UPDATE repos SET ${sets.join(', ')} WHERE slug = ?`
+  ).run(...params);
+  return { updated: r.changes > 0 };
+}
+
+/**
+ * Valid `repos.status` values — the product-lifecycle column (distinct from
+ * `lifecycle_status`, which tracks GitHub-listing presence active/archived).
+ * Enforced by a DB CHECK constraint in the repos schema AND re-checked at the
+ * app layer so callers get a clear message instead of a terse SQLITE_CONSTRAINT.
+ */
+export const REPO_STATUSES = ['active', 'paused', 'archived', 'unknown'] as const;
+export type RepoStatus = typeof REPO_STATUSES[number];
+
+/**
+ * Valid `repos.category` values. The DB column is free text (no CHECK), but the
+ * catalog convention is this closed set; enforcing it at the app layer keeps a
+ * typo'd category from silently breaking `list --category` filtering.
+ */
+export const REPO_CATEGORIES = [
+  'product',
+  'tool',
+  'library',
+  'experiment',
+  'blueprint',
+  'marketing',
+] as const;
+export type RepoCategory = typeof REPO_CATEGORIES[number];
+
+/**
+ * Set the human-curated classification fields on a repo: `status` (lifecycle),
+ * `stage` (free-form milestone, e.g. "shipped" / "Phase 1"), and `category`.
+ * These are NOT populated by `sync` or `scan` — the GitHub metadata shape
+ * carries none of them — so without this setter every repo sits at the
+ * `status='unknown'` / `stage=NULL` / `category=NULL` default. Mirrors
+ * setRepoPackageNames: undefined leaves a column intact; an explicit null
+ * clears `stage` / `category` (status has no null — its floor is 'unknown').
+ *
+ * Throws on an out-of-enum status or category. Returns { updated:false } when
+ * the slug is unknown or no fields were supplied.
+ */
+export function setRepoClassification(
+  slug: string,
+  fields: { status?: RepoStatus; stage?: string | null; category?: RepoCategory | null }
+): { updated: boolean } {
+  if (
+    fields.status !== undefined &&
+    !(REPO_STATUSES as readonly string[]).includes(fields.status)
+  ) {
+    throw new Error(
+      `Invalid status: ${JSON.stringify(fields.status)} — must be one of ${REPO_STATUSES.join(', ')}`
+    );
+  }
+  if (
+    fields.category !== undefined &&
+    fields.category !== null &&
+    !(REPO_CATEGORIES as readonly string[]).includes(fields.category)
+  ) {
+    throw new Error(
+      `Invalid category: ${JSON.stringify(fields.category)} — must be one of ${REPO_CATEGORIES.join(', ')}`
+    );
+  }
+
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM repos WHERE slug = ?').get(slug) as { id: number } | undefined;
+  if (!existing) return { updated: false };
+
+  const sets: string[] = [];
+  const params: (string | null)[] = [];
+  if (fields.status !== undefined) {
+    sets.push('status = ?');
+    params.push(fields.status);
+  }
+  if (fields.stage !== undefined) {
+    sets.push('stage = ?');
+    params.push(fields.stage);
+  }
+  if (fields.category !== undefined) {
+    sets.push('category = ?');
+    params.push(fields.category);
   }
 
   if (sets.length === 0) return { updated: false };

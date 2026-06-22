@@ -14,6 +14,7 @@
  * notifications — a noisy partial result beats a crashed sync.
  */
 import { execFileSync } from 'child_process';
+import { needsShellFor } from './exec-bin.js';
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 // SYNC-PH-03: shared transient-retry helper lives in publish.ts (the other
@@ -133,6 +134,9 @@ export function syncNpmAudit(
       maxBuffer: 25 * 1024 * 1024,
       timeout: 60000,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: npm is a `.cmd` shim, unspawnable without a shell (see
+      // exec-bin.ts). Static args here — no injection surface.
+      shell: needsShellFor('npm'),
     });
   } catch (e: unknown) {
     // npm audit exits 1 when findings exist — stdout still carries
@@ -745,6 +749,9 @@ function runVersion(cmd: string, args: string[], cwd: string): string | null {
       timeout: 10000,
       maxBuffer: 256 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: npx (and other shim CLIs) need a shell; node/python/rustc
+      // resolve directly and stay no-shell. Args are static — no injection.
+      shell: needsShellFor(cmd),
     });
     return raw.trim();
   } catch {
