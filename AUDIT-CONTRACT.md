@@ -237,6 +237,15 @@ backup_dr, monitoring, compliance_privacy, supply_chain,
 integrations
 ```
 
+**Unknown-domain handling on import.** A finding whose `domain` is present but
+outside this enum is **normalized to `code_quality`** and reported as a warning
+in the import result (and on stderr) — it is *not* rejected. This keeps one
+drifted finding from failing the whole atomic import and dropping the entire
+evidence bundle. Producers should still emit a domain from the list above;
+normalization is a safety net, not a license to drift. A finding with a
+**missing** `domain` is still a hard error (a structurally malformed finding,
+not enum drift).
+
 ---
 
 ## Workflow for Claude Auditors

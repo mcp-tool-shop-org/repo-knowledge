@@ -1874,6 +1874,10 @@ audit
       console.log(`  Controls: ${result.controls}`);
       console.log(`  Findings: ${result.findings}`);
       console.log(`  Artifacts: ${result.artifacts}`);
+      if (result.warnings?.length) {
+        console.log(`  Warnings: ${result.warnings.length}`);
+        for (const w of result.warnings) console.log(`    - ${w}`);
+      }
     } catch (e: unknown) {
       console.error(`Error: audit import failed: ${(e as Error).message}`);
       console.error(`Hint: verify <dir> contains run.json, controls.json, findings.json, metrics.json`);

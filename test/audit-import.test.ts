@@ -490,9 +490,13 @@ describe('unknown control_id (db-A-001-audit)', () => {
 
 // ─── db-A-002-audit: shared domain/severity validation on the inline path ──────
 // importAuditInline relied solely on validateInputs, which omitted finding
-// domain/severity presence + the domain-enum check. A missing domain reached
-// .run() as a bind-undefined TypeError; a bogus domain surfaced as a raw CHECK
-// failure. The checks now live in validateInputs so both import paths share them.
+// domain/severity PRESENCE checks. A missing domain reached .run() as a
+// bind-undefined TypeError; a missing severity likewise. Those presence checks
+// now live in validateInputs so both import paths share them.
+//
+// NOTE (ai-rpg-engine v2.8): a present-but-UNKNOWN domain enum value is no
+// longer rejected — it normalizes to code_quality + warns (see the
+// "normalized, not dropped" block below). Missing domain/severity still throw.
 describe('inline finding domain/severity validation (db-A-002-audit)', () => {
   it('rejects a finding missing domain with a clear validation error', () => {
     expect(() => importAuditInline({
@@ -507,8 +511,12 @@ describe('inline finding domain/severity validation (db-A-002-audit)', () => {
     })).toThrow(/missing required field: domain/);
   });
 
-  it('rejects a finding with an invalid domain enum value', () => {
-    expect(() => importAuditInline({
+  it('normalizes a finding with an unknown domain enum value instead of throwing', () => {
+    // Behavior change (ai-rpg-engine v2.8): a present-but-unknown domain used to
+    // fail the whole import; it now normalizes to code_quality + warns so one
+    // drifted row can't drop the bundle. A MISSING domain still throws (the
+    // sibling test above), because that is a structurally malformed finding.
+    const result = importAuditInline({
       run: {
         slug: 'test-org/sample-test-repo',
         overall_status: 'fail',
@@ -517,7 +525,15 @@ describe('inline finding domain/severity validation (db-A-002-audit)', () => {
       findings: [
         { domain: 'not_a_real_domain', title: 'Bad domain', severity: 'high' } as any,
       ],
-    })).toThrow('Invalid findings[0] ("Bad domain") domain');
+    });
+
+    expect(result.findings).toBe(1);
+    expect(result.warnings?.[0]).toMatch(/not_a_real_domain/);
+
+    const row = getDb()
+      .prepare("SELECT domain FROM audit_findings WHERE title = 'Bad domain'")
+      .get() as { domain: string } | undefined;
+    expect(row?.domain).toBe('code_quality');
   });
 
   it('rejects a finding missing severity with a clear validation error', () => {
@@ -573,5 +589,85 @@ describe('malformed metrics.json (db-A-005-audit)', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// ─── unknown finding domain: normalize, don't drop the batch (ai-rpg-engine v2.8) ──
+// `swarm persist` historically emitted `documentation` for docs-category
+// findings — a domain outside rk's fixed 19-value enum. Pre-fix, that failed the
+// ENTIRE atomic import (`Invalid findings[N] ... domain: "documentation"`), so
+// one drifted row dropped every finding in the bundle and the audit evidence
+// never landed (the real incident, 2026-07-22). The import now normalizes an
+// unknown-but-present domain to `code_quality` and reports a warning, mirroring
+// the skip-with-note resilience in sync/dogfood.ts. A MISSING domain stays a
+// hard error — that's a structurally malformed finding, not enum drift.
+describe('unknown finding domain is normalized, not dropped (ai-rpg-engine v2.8)', () => {
+  it('inline: a documentation-domain finding imports (as code_quality) instead of failing the batch', () => {
+    const result = importAuditInline({
+      run: {
+        slug: 'test-org/sample-test-repo',
+        overall_status: 'pass_with_findings',
+        overall_posture: 'needs_attention',
+      },
+      findings: [
+        { domain: 'documentation', title: 'JSDoc @param range mismatch', severity: 'low', status: 'open' },
+        { domain: 'secrets', title: 'Live token', severity: 'critical', status: 'open' },
+      ],
+    });
+
+    // Pre-fix: importAuditInline THREW here and NEITHER finding landed.
+    expect(result.findings).toBe(2);
+    expect(result.warnings ?? []).toHaveLength(1);
+    expect(result.warnings?.[0]).toMatch(/documentation/);
+
+    const rows = getDb()
+      .prepare('SELECT domain, title FROM audit_findings ORDER BY title')
+      .all() as { domain: string; title: string }[];
+    expect(rows).toHaveLength(2);
+    // The unknown-domain finding landed under the neutral fallback...
+    expect(rows.find(r => r.title.startsWith('JSDoc'))?.domain).toBe('code_quality');
+    // ...and a valid domain passed through untouched.
+    expect(rows.find(r => r.title === 'Live token')?.domain).toBe('secrets');
+  });
+
+  it('directory: a persist bundle carrying a documentation finding imports cleanly', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rk-audit-docdomain-'));
+    try {
+      // Mirror a real `swarm persist` bundle: run.json + findings.json (no
+      // controls.json — the bridge emits none). Reuse the fixture run.json so
+      // repo resolution passes.
+      cpSync(join(FIXTURES, 'run.json'), join(dir, 'run.json'));
+      writeFileSync(join(dir, 'findings.json'), JSON.stringify([
+        {
+          domain: 'documentation', title: 'README status block stale',
+          severity: 'low', status: 'open', tool_source: 'swarm-control-plane',
+        },
+        { domain: 'code_quality', title: 'Missing null check', severity: 'medium', status: 'open' },
+      ]), 'utf-8');
+
+      const result = importAudit(dir);
+      expect(result.findings).toBe(2);
+      expect(result.warnings?.some(w => /documentation/.test(w))).toBe(true);
+
+      const docRow = getDb()
+        .prepare("SELECT domain FROM audit_findings WHERE title = 'README status block stale'")
+        .get() as { domain: string } | undefined;
+      expect(docRow?.domain).toBe('code_quality');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still hard-errors a finding with NO domain (structural, not enum drift)', () => {
+    expect(() => importAuditInline({
+      run: {
+        slug: 'test-org/sample-test-repo',
+        overall_status: 'fail',
+        overall_posture: 'critical',
+      },
+      findings: [
+        { title: 'No domain at all', severity: 'high' } as any,
+      ],
+    })).toThrow(/missing required field: domain/);
   });
 });
