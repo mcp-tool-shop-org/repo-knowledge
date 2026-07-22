@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`rk audit import` no longer drops the whole bundle over one unknown finding domain.** `audit_findings.domain` carries a fixed 19-value CHECK enum; a finding whose domain fell outside it (e.g. the dogfood swarm's persist bridge emitting `documentation` for docs-category findings — the ai-rpg-engine v2.8 incident, 2026-07-22) tripped the shared validator and aborted the entire atomic import, so a single drifted row dropped every finding in the bundle and the audit evidence never landed. An unknown-but-present domain now normalizes to `code_quality` and is surfaced as a warning (in the `ImportResult`, on stderr, and in the `rk audit import` summary), mirroring the skip-with-note resilience already in `sync/dogfood.ts`. A **missing** domain still hard-errors — that is a structurally malformed finding, not enum drift. The producer half (the swarm persist bridge mapping `docs` → `inventory` instead of the invalid `documentation`) ships separately in `dogfood-lab/testing-os`.
+
 ## [2.1.1] - 2026-06-22
 
 Patch release: a cross-platform fix for npm version sync plus two CLI gap-closers. No breaking changes.

@@ -172,6 +172,9 @@ export interface ImportResult {
   controls: number;
   findings: number;
   artifacts?: number;
+  /** Non-fatal notes surfaced during import (e.g. an unknown finding domain
+   *  normalized to the fallback rather than dropping the whole batch). */
+  warnings?: string[];
 }
 
 // ─── Validation helpers ──────────────────────────────────────────────────────
@@ -190,6 +193,48 @@ function validate(value: string | undefined, allowed: string[], field: string): 
     // so the operator doesn't have to grep the source to find the enum.
     throw new Error(`Invalid ${field}: "${value}". Must be one of: ${allowed.join(', ')}`);
   }
+}
+
+/** The neutral fallback domain an unknown finding domain normalizes to. It is
+ *  itself a member of DOMAINS (the CHECK enum), so the insert always lands. */
+const FALLBACK_DOMAIN = 'code_quality';
+
+/**
+ * Normalize unknown-but-present finding domains instead of failing the batch.
+ *
+ * `audit_findings.domain` carries a fixed 19-value CHECK enum (migration-002).
+ * A producer that emits a domain outside it — e.g. the dogfood swarm's persist
+ * bridge historically emitted `documentation` for docs-category findings —
+ * would otherwise trip `validate()` and abort the ENTIRE atomic import,
+ * dropping every finding in the bundle over one drifted row (the real
+ * ai-rpg-engine v2.8 incident, 2026-07-22). Mirroring the skip-with-note
+ * resilience in sync/dogfood.ts, an unknown domain is remapped to
+ * FALLBACK_DOMAIN and reported as a warning, so the evidence still lands and
+ * the operator still learns the producer drifted.
+ *
+ * Only a PRESENT string domain outside the enum is remapped. A missing / empty
+ * / non-string domain is left untouched so validateInputs still hard-errors it
+ * — that's a structurally malformed finding, not recoverable enum drift.
+ *
+ * Pure: returns a new array (unknown-domain rows shallow-copied with the
+ * corrected domain); the caller's finding objects are never mutated.
+ */
+function normalizeFindingDomains(
+  findings?: FindingInput[],
+): { findings: FindingInput[] | undefined; warnings: string[] } {
+  if (!findings?.length) return { findings, warnings: [] };
+  const validDomains = DOMAINS as readonly string[];
+  const warnings: string[] = [];
+  const normalized = findings.map((f) => {
+    if (f && typeof f.domain === 'string' && f.domain !== '' && !validDomains.includes(f.domain)) {
+      warnings.push(
+        `finding "${f.title}" has unknown domain "${f.domain}" — normalized to "${FALLBACK_DOMAIN}"`,
+      );
+      return { ...f, domain: FALLBACK_DOMAIN };
+    }
+    return f;
+  });
+  return { findings: normalized, warnings };
 }
 
 /**
@@ -394,6 +439,14 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
   const repoId = getRepoIdBySlug(run.slug);
   if (!repoId) throw new Error(`Repo not found: ${run.slug}. Run 'rk sync' first.`);
 
+  // Normalize unknown-but-present finding domains to the neutral fallback so a
+  // single drifted domain can't fail the whole atomic import (ai-rpg-engine
+  // v2.8: the persist bridge emitted `documentation`, dropping the entire
+  // bundle). Reported as warnings; mirrors sync/dogfood.ts's skip-with-note.
+  const domainNorm = normalizeFindingDomains(findings);
+  findings = domainNorm.findings;
+  for (const w of domainNorm.warnings) console.error(`[audit-import] ${run.slug}: ${w}`);
+
   // F-AG-004: shared validation contract — same enum rules cover both
   // controls + findings on inline and directory paths.
   const { overallStatus, overallPosture } = validateInputs(run, controls, findings);
@@ -533,7 +586,7 @@ export function importAudit(auditDir: string, _artifactsRoot?: string): ImportRe
   // to the source tables.
   rebuildIndex();
 
-  return { runId, controls: controlCount, findings: findingCount, artifacts: artifactCount };
+  return { runId, controls: controlCount, findings: findingCount, artifacts: artifactCount, warnings: domainNorm.warnings };
 }
 
 /**
@@ -633,11 +686,16 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
   const repoId = getRepoIdBySlug(run.slug);
   if (!repoId) throw new Error(`Repo not found: ${run.slug}`);
 
-  const { overallStatus, overallPosture } = validateInputs(run, controls, findings);
+  // Normalize unknown-but-present finding domains (see normalizeFindingDomains):
+  // a single drifted domain must not fail the whole atomic import.
+  const { findings: normFindings, warnings: domainWarnings } = normalizeFindingDomains(findings);
+  for (const w of domainWarnings) console.error(`[audit-import] ${run.slug}: ${w}`);
+
+  const { overallStatus, overallPosture } = validateInputs(run, controls, normFindings);
 
   // db-A-001-audit: reject unknown control_ids BEFORE the transaction so a
   // typo yields a clear error instead of an opaque FK-constraint rollback.
-  validateControlIds(db, controls, findings);
+  validateControlIds(db, controls, normFindings);
 
   let controlCount = 0, findingCount = 0;
   let runId: number | bigint = 0;
@@ -672,7 +730,7 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
       }
     }
 
-    if (findings?.length) {
+    if (normFindings?.length) {
       const ins = db.prepare(`
         INSERT INTO audit_findings (
           audit_run_id, repo_id, domain, control_id, title, description,
@@ -691,7 +749,7 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
           cve_id = excluded.cve_id,
           cvss_score = excluded.cvss_score
       `);
-      for (const f of findings) {
+      for (const f of normFindings) {
         ins.run(
           runId, repoId, f.domain, f.control_id || null, f.title,
           f.description || null, f.severity, f.confidence || 'high',
@@ -713,5 +771,5 @@ export function importAuditInline({ run, controls, findings, metrics, artifacts:
   // Rebuild FTS5 index AFTER commit
   rebuildIndex();
 
-  return { runId, controls: controlCount, findings: findingCount };
+  return { runId, controls: controlCount, findings: findingCount, warnings: domainWarnings };
 }
