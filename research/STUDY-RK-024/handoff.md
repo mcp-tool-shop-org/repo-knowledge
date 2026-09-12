@@ -11,10 +11,10 @@
 
 **Coding PR plan:** dedicated test/github.test.ts + test/dogfood-suggest.test.ts (or CONVENTIONS-matching) with mocked gh metadata / local DB facts only; keep sync-404-archived + dogfood-* as integration or migrate; no invented module %.
 
-**Outcome:** Research packs landed. Coding PR (pending).
+**Outcome:** Research packs landed. Coding PR open: https://github.com/mcp-tool-shop-org/repo-knowledge/pull/15 (do not merge). CI green on branch.
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-024/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `b8524e8`
-**PR:** (pending)
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/15
