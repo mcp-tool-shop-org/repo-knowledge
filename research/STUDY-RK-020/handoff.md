@@ -12,4 +12,4 @@
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-020/{coverage,grounding,handoff}.md`
 
-**sha:** (pending commit)
+**sha:** `ef48fd2`
