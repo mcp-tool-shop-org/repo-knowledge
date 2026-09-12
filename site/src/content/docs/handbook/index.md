@@ -14,7 +14,7 @@ repo-knowledge is a local-first knowledge system built on SQLite and FTS5. It ca
 - **Maps relationships** between repos: depends_on, related_to, supersedes, shares_domain_with
 - **Runs audits** with 80 controls across 19 domains, tracking findings, metrics, and posture over time
 - **Searches everything** with FTS5 full-text search across READMEs, changelogs, notes, and descriptions
-- **Serves AI agents** via 19 MCP tools that let Claude query, annotate, and audit repos conversationally
+- **Serves AI agents** via 30 MCP tools that let Claude query, annotate, and audit repos conversationally
 
 ## Who it's for
 
