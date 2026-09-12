@@ -270,7 +270,7 @@ Once connected, Claude can use tools like `get_repo`, `search_repos`, `audit_pos
 Everything lives in a single SQLite file at the path set in `rk.config.json` (default: `data/knowledge.db`). No data is sent to external services.
 
 **Does it read my source code from GitHub?**
-No. It only reads metadata via the `gh` CLI: repo names, descriptions, topics, stars, languages, and license info. Local scanning reads manifest files (package.json, Cargo.toml, etc.) and documentation files (README, CHANGELOG) from your disk.
+No. It only reads metadata via the `gh` CLI: repo names, descriptions, topics, stars, primary language (`primaryLanguage`), and license info. GitHub sync does not store a language-bytes map (`languages` is an empty stub). Local scanning reads manifest files (package.json, Cargo.toml, etc.) and documentation files (README, CHANGELOG) from your disk.
 
 **What if my search results are stale?**
 Run `rk reindex` to rebuild the full-text search index from current data.

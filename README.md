@@ -49,6 +49,7 @@ npm install -g @mcptoolshop/repo-knowledge
 ```bash
 # Initialize workspace — creates config, database, seeds audit controls
 rk init
+# rk audit seed-controls is an optional catalog refresh — not required immediately after init
 
 # Sync repos from your GitHub org
 rk sync --owners my-org
@@ -61,9 +62,6 @@ rk show my-org/my-repo
 
 # Search across everything
 rk find "authentication middleware"
-
-# Seed the 80-control audit framework
-rk audit seed-controls
 ```
 
 ## CLI Reference
@@ -145,7 +143,7 @@ rk audit seed-controls
 
 | Command | Description |
 |---------|-------------|
-| `rk audit seed-controls` | Seed/update the 80-control canonical catalog |
+| `rk audit seed-controls` | Refresh/update the 80-control canonical catalog (already seeded by `rk init`) |
 | `rk audit import <dir>` | Import audit results from JSON contract files |
 | `rk audit posture [slug]` | Show audit posture for one repo or full portfolio |
 | `rk audit findings` | List open findings across the portfolio |
