@@ -11,9 +11,11 @@
 
 **Docs PR plan:** strip/rephrase absolutes in KNOWLEDGE-CONTRACT.md, THE-CLAUDE-GAMES.md, REMEDIATION-INSTRUCTIONS.md, ROADMAP.md; relative or `<workspace>` placeholders; label multi-rig as operator narrative; keep README/handbook portable.
 
-**Outcome:** Research packs landed. Docs PR (pending).
+**Outcome:** Research packs landed. Docs PR open (#20).
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-029/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `af75b3e`
+
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/20 (open; do not merge; do not publish)
