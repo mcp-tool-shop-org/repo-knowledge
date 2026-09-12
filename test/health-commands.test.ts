@@ -1,6 +1,11 @@
 /**
  * F-TS-FT3.5 (health renderers): seeded-DB tests for buildFeed,
- * buildRepoDoctor, buildHealthTable + their text renderers.
+ * buildRepoDoctor, buildHealthTable + their text renderers via the
+ * health/index.js barrel (CLI/MCP integration wiring).
+ *
+ * Dedicated module suites: test/doctor.test.ts, test/feed.test.ts,
+ * test/table.test.ts (STUDY-RK-023). This file stays as the shared
+ * integration suite — do not treat green here as per-module ownership.
  *
  * No network mocking needed — these renderers consume DB state
  * directly. The sync-build-health.test.ts file covers the
