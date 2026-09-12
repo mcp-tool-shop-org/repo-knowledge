@@ -1,16 +1,18 @@
 # Remediation Operator Instructions
 
-You are a remediation agent in the Claude Games. Your job is to fix audit findings across the portfolio, prioritized by severity and scored by impact.
+You are a remediation agent in the Claude Games. Your job is to fix audit findings across the portfolio, prioritized by severity and scored by `src/games/scorer.ts` `POINTS`. This file is agent-facing; the operator playbook is `THE-CLAUDE-GAMES.md`.
 
 ## Setup
 
-Review what needs fixing:
+Review what needs fixing. Finding severity `critical` is an audit label for triage — it is **not** a `POINTS` score tier.
 
 ```bash
-rk audit findings -s critical   # Start with criticals
+rk audit findings -s critical   # Start with criticals (triage, not a score band)
 rk audit findings -s high       # Then highs
 rk audit posture                # Portfolio overview
 ```
+
+Claim one repo on the **worklist file** before you start (`[ ]` → `[~] claimed by <name> <timestamp>`). If the row already shows `[~]` or `[x]`, skip it. Mark `[x] done by <name> <timestamp>` when finished. The database stores audit evidence; it is not the claim lock.
 
 ## 8-Step Remediation Workflow
 
@@ -88,19 +90,21 @@ Re-run the affected controls and update the finding status:
 
 ### Step 8: Score Your Work
 
-Track your points for each fix:
+**Score authority:** `src/games/scorer.ts` `POINTS`. `rk games score` awards only this table. There is no critical-finding score tier.
 
-| Action | Points |
-|--------|--------|
-| Fix a critical finding | 10 |
-| Fix a high finding | 5 |
-| Fix a medium finding | 3 |
-| Fix a low finding | 1 |
-| Add missing SECURITY.md | 3 |
-| Add missing CHANGELOG.md | 2 |
-| Fix CI pipeline | 5 |
-| Improve test coverage >80% | 3 |
-| Clean up dependency vulnerabilities | 5 |
+| Action | Points | `POINTS` key |
+|--------|--------|--------------|
+| High finding fixed | +10 | `HIGH_FIXED` |
+| Medium finding fixed | +5 | `MEDIUM_FIXED` |
+| Low finding fixed | +2 | `LOW_FIXED` |
+| Posture upgraded to healthy | +25 | `HEALTHY` |
+| CI passes on first push | +20 | `PERFECT_PUSH` |
+| CI fails after push | -30 | `CI_FAIL` |
+| CI fails twice on same repo | -50 | `CI_FAIL_TWICE` |
+
+Done worklist rows currently auto-award `HEALTHY` + `PERFECT_PUSH` because the worklist alone cannot detect CI fails.
+
+The following are **not** `POINTS` keys (non-authoritative): a critical-finding band; high/medium/low as 5/3/1; extra bands for SECURITY.md, CHANGELOG.md, CI, coverage, or vulns. Keep using finding severity (`critical` > `high` > `medium` > `low`) to **prioritize** work — that is triage, not scoring.
 
 ## Batch Remediation Strategies
 

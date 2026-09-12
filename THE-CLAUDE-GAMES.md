@@ -4,7 +4,9 @@ A reusable workflow for running parallel multi-Claude operations across the enti
 
 **What this is:** A playbook for the operator (you) to kick off coordinated sweeps where multiple Claude instances work through every repo in the portfolio — auditing, enriching, remediating, or any future pass you define.
 
-**What this is not:** Instructions for the Claudes themselves. Those live in the pass-specific instruction files generated for each run.
+**What this is not:** Instructions for the Claudes themselves. Reusable agent-facing templates live in `templates/claude-games/`. Per-run copy lives in the pass-specific instruction files generated for each sweep.
+
+**Three layers (keep separate):** this playbook ≠ `templates/claude-games/` (agent-facing) ≠ `src/games/scorer.ts` `POINTS` (sole score authority). Do not collapse playbook and templates into one file.
 
 ---
 
@@ -33,6 +35,7 @@ Every sweep follows the same three-pass structure. You can run one, two, or all 
 - `AUDIT-CONTRACT.md` — the full audit standard (controls, posture rules, submission format)
 - `data/control-registry.json` — machine-readable control catalog
 - `AUDIT-WORKLIST.md` — generated claim table (one row per repo)
+- `templates/claude-games/audit-instructions.md` — reusable agent-facing copy (do not treat this playbook as agent instructions)
 
 **Generate the worklist:**
 ```bash
@@ -57,7 +60,7 @@ One repo at a time. Every control gets a result. Every non-pass needs evidence.
 
 **Operator files:**
 - `ENRICHMENT-WORKLIST.md` — generated claim table
-- `ENRICHMENT-INSTRUCTIONS.md` — what to populate and quality bar
+- `ENRICHMENT-INSTRUCTIONS.md` — what to populate and quality bar (starter: `templates/claude-games/enrichment-instructions.md`)
 
 **Generate the worklist:**
 ```bash
@@ -81,7 +84,7 @@ One repo at a time.
 **Purpose:** Fix every repo that didn't pass clean. Move needs_attention to healthy. Green CI required.
 
 **Operator files:**
-- `REMEDIATION-INSTRUCTIONS.md` — the 8-step workflow + scoring
+- `REMEDIATION-INSTRUCTIONS.md` — the 8-step workflow + scoring (starter: `templates/claude-games/remediation-instructions.md`; scores still come only from `POINTS`)
 - `REMEDIATION-WORKLIST.md` — generated claim table (needs_attention repos only)
 - `REMEDIATION-CHECKLIST.md` — detailed per-repo findings and fix sheets
 
@@ -167,34 +170,57 @@ Output: `audit_report.md` — full portfolio snapshot from live DB data.
 
 Scoring keeps quality up when multiple Claudes work unsupervised. The key insight: **CI failure is the most expensive mistake**, so Claudes learn to test locally first.
 
-| Action | Points |
-|--------|--------|
-| High finding fixed | +10 |
-| Medium finding fixed | +5 |
-| Low finding fixed | +2 |
-| Failing control flipped to pass | +3 |
-| CI passes on first push | +20 (PERFECT PUSH) |
-| Posture upgraded to healthy | +25 |
-| **CI fails after push** | **-30** |
-| **CI fails twice on same repo** | **-50** |
-| Skipped high finding without justification | -15 |
-| Abandoned repo before finishing | -40 |
+**Score authority:** `src/games/scorer.ts` `POINTS`. That object is the only table `rk games score` awards. There is no critical-finding score tier in `POINTS`. Audit finding severity `critical` is a findings label, not a points band.
 
-Scoring is self-reported per repo in the worklist. Trust but verify — the DB has the real numbers.
+| Action | Points | `POINTS` key |
+|--------|--------|--------------|
+| High finding fixed | +10 | `HIGH_FIXED` |
+| Medium finding fixed | +5 | `MEDIUM_FIXED` |
+| Low finding fixed | +2 | `LOW_FIXED` |
+| Posture upgraded to healthy | +25 | `HEALTHY` |
+| CI passes on first push | +20 | `PERFECT_PUSH` |
+| **CI fails after push** | **-30** | `CI_FAIL` |
+| **CI fails twice on same repo** | **-50** | `CI_FAIL_TWICE` |
+
+The scorer reads completed worklist rows (`[x] done by …` plus `NH NM NL` findings). Done rows currently auto-award `HEALTHY` + `PERFECT_PUSH` because the worklist alone cannot detect CI fails (see `scoreGame` in `scorer.ts`). Blocked and skipped rows increment counters only; they do not apply a penalty key.
+
+Scoring is recorded per repo on the worklist. Trust but verify — the DB has the audit evidence; `POINTS` has the score.
+
+### Non-authoritative operator notes (not in `POINTS`)
+
+These rows appear in some operator write-ups. They are **not** awarded by `rk games score` and must not be treated as score tiers:
+
+| Operator note | Why it is not a score |
+|---------------|------------------------|
+| Failing control flipped to pass (+3) | Absent from `POINTS` |
+| Skipped high finding without justification (-15) | Absent from `POINTS` |
+| Abandoned repo before finishing (-40) | Absent from `POINTS` |
+| Critical-finding score band | No critical tier in `POINTS` |
 
 ---
 
 ## The Coordination Model
 
-Multiple Claudes work from the same worklist file. Collision avoidance is simple:
+Multiple Claudes work from the same **worklist file**. The scorer (`src/games/parser.ts`) reads these status cells — this is the claim lock, not a database lease:
+
+| Cell | Meaning |
+|------|---------|
+| `[ ]` | open — unclaimed |
+| `[~] claimed by <name> <timestamp>` | claimed |
+| `[x] done by <name> <timestamp>` | done |
+| `[x] BLOCKED …` / `[x] skipped by …` | blocked / skipped (counters only) |
+
+Collision avoidance:
 
 1. Claude opens worklist
 2. Finds first `[ ]` row
-3. Changes it to `[~]` with name + timestamp
+3. Changes it to `[~] claimed by <name> <timestamp>`
 4. Saves immediately
 5. Then starts work
 
 If a row already shows `[~]` or `[x]`, skip it. This is optimistic locking — rare collisions are possible but harmless (two Claudes fix the same repo, one overwrites the other's worklist entry, both submit audits, DB keeps the latest).
+
+The database stores audit submissions, notes, and relationships (**results**). It is not the claim lock. A 30-minute “fair-game” lease is **not** implemented in the scorer or worklist parser — do not treat it as a game rule.
 
 **One repo at a time. Finish before claiming another. Keep rolling after each completion.**
 
