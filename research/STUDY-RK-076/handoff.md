@@ -10,3 +10,5 @@
 **Coding PR:** none. **PR #19/#20:** do not merge.
 
 **Outcome:** Research packs landed. No coding PR.
+
+Landed sha: `18df65d` · tip `7d1d690`
