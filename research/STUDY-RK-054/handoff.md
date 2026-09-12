@@ -18,5 +18,5 @@
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-054/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
-**sha:** (pending commit)
+**sha:** `a35bfe6`
 **docs PR:** (pending)
