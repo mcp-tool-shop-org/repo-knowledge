@@ -2,8 +2,8 @@
 
 **Purpose:** Populate the knowledge layer of repo-knowledge — notes, releases, and relationships — for every repo in the portfolio. This is the most important part of the database. Do not half-ass it.
 
-**Database:** `F:\AI\repo-knowledge\data\knowledge.db`
-**Worklist:** `F:\AI\repo-knowledge\KNOWLEDGE-WORKLIST.md`
+**Database:** `data/knowledge.db`
+**Worklist:** `KNOWLEDGE-WORKLIST.md`
 
 ---
 
@@ -85,7 +85,7 @@ Relation types:
 For each repo:
 
 1. **Read the repo.** Not just the README — look at the code, package files, docs, tests, CI config. Understand what it actually does.
-2. **Check for existing memory files** at `F:\AI\memory\` — some repos have detailed memory files that contain thesis, architecture, and state information. Use these as input but verify against the actual repo.
+2. **Check for existing memory files** if the operator keeps them (studio memory trees are operator inputs, not a product layout) — some repos have detailed memory files that contain thesis, architecture, and state information. Use these as input but verify against the actual repo.
 3. **Write the thesis note.** One paragraph. Why does this exist?
 4. **Write the architecture note.** Technical shape — languages, frameworks, key modules, how it fits together.
 5. **Add warning/next_step/drift_risk/convention/pain_point/command notes** as appropriate. Not every repo needs all of these. Use judgment.
@@ -113,5 +113,5 @@ For each repo:
 - **Notes must demonstrate understanding.** If you can't tell what a repo does after reading it, say so honestly — don't fabricate.
 - **Relationships must have a note explaining why.** No bare edges.
 - **Do not invent information.** If you don't know the release history, don't guess.
-- **Check memory files** at `F:\AI\memory\` — they contain authored truth about many repos.
+- **Check operator memory files** when present — they contain authored truth about many repos. Those trees are operator inputs, not a required product path.
 - **Read the actual code.** README alone is not sufficient.
