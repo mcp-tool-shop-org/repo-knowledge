@@ -11,9 +11,11 @@
 
 **Docs PR plan:** dual path prebuild-install || node-gyp rebuild; sync beginners Prerequisites; link WiseLibs troubleshooting in README/getting-started/operations; note engines; no coverage table.
 
-**Outcome:** Research packs landed. Docs PR (pending).
+**Outcome:** Research packs landed. Docs PR open (#19).
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-028/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `1b716df`
+
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/19 (open; do not merge; do not npm publish)
