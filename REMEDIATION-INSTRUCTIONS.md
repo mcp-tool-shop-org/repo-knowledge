@@ -6,7 +6,7 @@ You are fixing repos. There are 71 repos that need attention. You are one of sev
 
 ## Step 1: Claim a repo
 
-Open `F:\AI\repo-knowledge\REMEDIATION-WORKLIST.md`. It's a table. Find a row where Status is `[ ]`. Change it to `[~]` with your name and save the file **before doing anything else**. If a row already shows `[~]` or `[x]`, skip it — another Claude has it.
+Open `REMEDIATION-WORKLIST.md`. It's a table. Find a row where Status is `[ ]`. Change it to `[~]` with your name and save the file **before doing anything else**. If a row already shows `[~]` or `[x]`, skip it — another Claude has it.
 
 Only claim ONE repo at a time. Finish it completely before claiming another.
 
@@ -14,11 +14,11 @@ Only claim ONE repo at a time. Finish it completely before claiming another.
 
 Run `audit_detail` (MCP tool) with the repo's slug. This gives you everything: every control result, every finding, every metric. Read it. Understand what failed and why.
 
-The detailed checklist for your repo is also in `F:\AI\repo-knowledge\REMEDIATION-CHECKLIST.md` — search for the repo's slug. It lists every failing control, every open finding with remediation guidance, and which of the 5 programs apply.
+The detailed checklist for your repo is also in `REMEDIATION-CHECKLIST.md` — search for the repo's slug. It lists every failing control, every open finding with remediation guidance, and which of the 5 programs apply.
 
 ## Step 3: Open the repo
 
-The repo lives at `F:\AI\<repo-name>`. If it's not there, clone it.
+The repo lives at `<workspace>/<repo-name>`. If it's not there, clone it.
 
 ## Step 4: Fix the issues
 
@@ -71,7 +71,7 @@ After CI is green, submit an updated audit via `audit_submit` (MCP tool). Follow
 
 ## Step 8: Mark done and move on
 
-Go back to `F:\AI\repo-knowledge\REMEDIATION-WORKLIST.md`. Change your `[~]` row to:
+Go back to `REMEDIATION-WORKLIST.md`. Change your `[~]` row to:
 ```
 [x] done by <your-name> <timestamp> | posture: healthy | CI: green
 ```
@@ -101,9 +101,9 @@ The most expensive mistake is a CI failure. Build locally first. A perfect push 
 
 ## Reference files (read if you need detail)
 
-- Control catalog: `audit_controls_list` MCP tool, or `F:\AI\repo-knowledge\data\control-registry.json`
-- Full audit standard: `F:\AI\repo-knowledge\AUDIT-CONTRACT.md`
-- Detailed per-repo checklists: `F:\AI\repo-knowledge\REMEDIATION-CHECKLIST.md`
+- Control catalog: `audit_controls_list` MCP tool, or `data/control-registry.json`
+- Full audit standard: `AUDIT-CONTRACT.md`
+- Detailed per-repo checklists: `REMEDIATION-CHECKLIST.md`
 
 ## Key MCP tools
 
