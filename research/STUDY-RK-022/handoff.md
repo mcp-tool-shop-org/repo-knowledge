@@ -11,10 +11,10 @@
 
 **Coding PR plan:** dedicated `test/errors.test.ts`, `test/audit-controls.test.ts`, `test/audit-queries.test.ts` (or CONVENTIONS-matching names) locking behaviors in grounding; reuse audit-import coverage; do not invent module %.
 
-**Outcome:** Research packs landed. Coding PR (pending).
+**Outcome:** Research packs landed. Coding PR open: https://github.com/mcp-tool-shop-org/repo-knowledge/pull/13 (do not merge). npm test 554 passed / 1 skipped; npm run verify passed.
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-022/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `adb946c`
-**PR:** (pending)
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/13
