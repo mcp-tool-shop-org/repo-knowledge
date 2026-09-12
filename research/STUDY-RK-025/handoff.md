@@ -11,10 +11,10 @@
 
 **Docs PR plan:** New branch from tip; edit mcp-server.md prose+tables to 30 names from server.ts/README only (add 11 omissions with descriptions from README/server help — never invent); prefer not entangling open PR #12.
 
-**Outcome:** Research packs landed. Docs PR (pending).
+**Outcome:** Research packs landed. Docs PR open: https://github.com/mcp-tool-shop-org/repo-knowledge/pull/16 (do not merge). npm test/verify passed. PR #12 left alone.
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-025/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `d977cca`
-**PR:** (pending)
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/16
