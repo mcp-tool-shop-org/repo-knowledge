@@ -10,3 +10,5 @@
 **Coding/docs PR:** none. **PR #16:** do not merge. **PR #12:** KEEP OPEN (overlap).
 
 **Outcome:** Research packs landed. No coding PR.
+
+Landed sha: `5457cc0` · tip `c3f4f27`
