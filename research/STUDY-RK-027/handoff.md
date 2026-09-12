@@ -11,9 +11,11 @@
 
 **Docs PR plan:** handbook callout that publish-state sync reads registries only and never publishes; MCP repo_versions is DB-only unlike CLI --refresh. Do not invent commands. No publish APIs.
 
-**Outcome:** Research packs landed. Docs PR (pending).
+**Outcome:** Research packs landed. Docs PR open (#18).
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-027/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `d537696`
+
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/18 (open; do not merge; do not npm publish)
