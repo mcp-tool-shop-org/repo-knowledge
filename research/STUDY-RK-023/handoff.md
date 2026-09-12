@@ -11,10 +11,10 @@
 
 **Coding PR plan:** dedicated test/doctor.test.ts, test/feed.test.ts, test/table.test.ts (or CONVENTIONS-matching) locking buildRepoDoctor+renderDoctorText, buildFeed(+kevList)+renderFeedText, buildHealthTable+renderHealthTableText including thin branches; keep/migrate health-commands asserts; no invented module %.
 
-**Outcome:** Research packs landed. Coding PR (pending).
+**Outcome:** Research packs landed. Coding PR open: https://github.com/mcp-tool-shop-org/repo-knowledge/pull/14 (do not merge). npm test 559 passed / 1 skipped; npm run verify passed.
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-023/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `1254049`
-**PR:** (pending)
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/14
