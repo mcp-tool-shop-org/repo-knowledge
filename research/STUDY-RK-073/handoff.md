@@ -10,3 +10,5 @@
 **Coding PR:** none.
 
 **Outcome:** Research packs landed. No coding PR.
+
+Landed sha: `7dbc720` · tip `6ca036c`
