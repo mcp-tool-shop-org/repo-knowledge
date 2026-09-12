@@ -11,9 +11,11 @@
 
 **Coding PR plan:** CLI integration tests for `rk note --delete` only; keep explicit --delete; no mandatory confirm/--yes; npm test; open PR; do not merge.
 
-**Outcome:** Research packs landed. Coding/test PR (pending).
+**Outcome:** Research packs landed. Coding/test PR open (#22).
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-035/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `a1bf7a1`
+
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/22 (open; do not merge; do not publish)
