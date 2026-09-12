@@ -71,6 +71,16 @@ The MCP server reads `rk.config.json` from the working directory at startup. Ens
 | `audit_controls_list` | List canonical controls by domain |
 | `audit_unaudited` | List repos with no audit runs |
 
+## Publish-state
+
+:::caution
+**Publish-state ≠ npm publish.** Inventory sync (`src/sync/publish.ts`) GETs npm / PyPI / GitHub Releases and upserts `repo_published_versions` only. The filename is not a registry mutator.
+:::
+
+| Tool | Description |
+|------|-------------|
+| `repo_versions` | READ-ONLY list of published versions already stored in the DB, grouped per channel. Unlike CLI `rk versions --refresh` (which may GET registries), MCP does **not** hit the network or refresh inventory. |
+
 ## Multi-agent workflows
 
 repo-knowledge is designed for parallel multi-Claude operations. Multiple agents can:
