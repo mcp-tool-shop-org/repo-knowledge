@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Claude Games score tables now defer to `src/games/scorer.ts` `POINTS`.** The operator playbook (`THE-CLAUDE-GAMES.md`) and agent templates (`templates/claude-games/`) listed extra bands (`+3` control-flip, `-15` skip, `-40` abandon) and a critical-finding score tier that `POINTS` does not award (`HIGH_FIXED` 10 / `MEDIUM_FIXED` 5 / `LOW_FIXED` 2 / `HEALTHY` 25 / `PERFECT_PUSH` 20 / `CI_FAIL` -30 / `CI_FAIL_TWICE` -50; no critical tier). Playbook and templates now sync the awarded table to `POINTS` and label leftover operator notes as non-authoritative. Claim coordination is the worklist file (`[ ]` / `[~]` / `[x]`) the scorer parses; the DB stores results, not the claim lock. Enrichment pass gains a minimal `templates/claude-games/enrichment-instructions.md` so the three-pass set matches audit/remediation. Playbook ≠ templates ≠ scorer stay separate files. STUDY-RK-030; Scholar #7/#8 remain unverified.
+
 ### Fixed
 
 - **`rk audit import` no longer drops the whole bundle over one unknown finding domain.** `audit_findings.domain` carries a fixed 19-value CHECK enum; a finding whose domain fell outside it (e.g. the dogfood swarm's persist bridge emitting `documentation` for docs-category findings — the ai-rpg-engine v2.8 incident, 2026-07-22) tripped the shared validator and aborted the entire atomic import, so a single drifted row dropped every finding in the bundle and the audit evidence never landed. An unknown-but-present domain now normalizes to `code_quality` and is surfaced as a warning (in the `ImportResult`, on stderr, and in the `rk audit import` summary), mirroring the skip-with-note resilience already in `sync/dogfood.ts`. A **missing** domain still hard-errors — that is a structurally malformed finding, not enum drift. The producer half (the swarm persist bridge mapping `docs` → `inventory` instead of the invalid `documentation`) ships separately in `dogfood-lab/testing-os`.

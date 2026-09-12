@@ -17,10 +17,10 @@ For each repo on your worklist:
 
 ### 1. Claim the Repo
 
-Check that no other agent is working on it, then begin.
+Claim on the **worklist file** (`[ ]` → `[~] claimed by <name> <timestamp>`). If the row already shows `[~]` or `[x]`, skip it. The database is the results store (`rk show` / `audit_submit`), not the claim lock. A 30-minute “fair-game” lease is not a game rule.
 
 ```bash
-rk show <slug>           # Review existing knowledge
+rk show <slug>           # Review existing knowledge (results, not the claim)
 rk audit posture <slug>  # Check if already audited
 ```
 
