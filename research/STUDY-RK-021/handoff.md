@@ -7,10 +7,10 @@
 - owner: builder
 - fallback: Missing pack text → stop; inventing commands → stop; verify fail → fix or stop. Do not invent STUDY-RK-051.
 
-**Outcome:** Research packs landed. Coding PR for handbook sync (pending). Invented gates: 0.
+**Outcome:** Research packs landed. Coding PR open: https://github.com/mcp-tool-shop-org/repo-knowledge/pull/12 (do not merge). Invented gates: 0.
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-021/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `2f09c0f`
-**PR:** (pending)
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/12
