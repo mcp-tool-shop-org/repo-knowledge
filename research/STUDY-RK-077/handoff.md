@@ -10,3 +10,5 @@
 **Coding/docs PR:** leftover usage.md only. **PR #12/#16:** do not merge.
 
 **Outcome:** Research packs landed + leftover docs PR opened (unmerged).
+
+Landed sha: `e951ec0` · tip `1941649`
