@@ -11,9 +11,11 @@
 
 **Docs PR plan:** update site/src/content/docs/handbook/operations.md Database backup section to `rk backup`/`rk restore`; keep local-only; no npm publish.
 
-**Outcome:** Research packs landed. Docs PR (pending).
+**Outcome:** Research packs landed. Docs PR open (#23).
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-037/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `4581731`
+
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/23 (open; do not merge; do not npm publish)
