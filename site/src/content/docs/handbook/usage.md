@@ -45,6 +45,8 @@ Display full knowledge for a repo: metadata, tech stack, notes, relationships, a
 rk show my-org/my-repo
 ```
 
+The Relationships section always appears. When no edges are stored it prints `No relationships recorded` — that is engine state (nothing mapped yet), not a verdict that the repo is isolated or enrichment-complete. `rk show` never invents relationship edges.
+
 ### `rk list`
 
 List all repos with optional filters:
@@ -71,7 +73,12 @@ Show repos related to a given repo via mapped relationships.
 
 ```bash
 rk related my-org/my-repo
+rk related my-org/my-repo --json
 ```
+
+When no edges are recorded, the text path prints `No relationships recorded for: <slug>` and exits successfully. `--json` emits `[]` so machine consumers never hit the human sentinel. Both are honest engine state (zero stored rows), not Isolated-OK folklore and not a finished enrichment signal.
+
+MCP `related_repos` keeps the same empty collection as `{ "slug": "<slug>", "relationships": [] }` so agents can treat `[]` as incompleteness without a schema break.
 
 ### `rk note <slug>`
 

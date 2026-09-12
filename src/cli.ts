@@ -1646,12 +1646,18 @@ function formatRepo(repo: Record<string, any>): string {
     }
   }
 
-  if (repo.relationships?.length) {
-    lines.push(`\n─── Relationships ───`);
-    for (const r of repo.relationships) {
+  // STUDY-RK-026: empty getRelated is engine state, not Isolated-OK and not
+  // enrichment-complete. Always print the Relationships section so `rk show`
+  // is not silent on zero edges. Never invent relationship rows.
+  const relationships = Array.isArray(repo.relationships) ? repo.relationships : [];
+  lines.push(`\n─── Relationships ───`);
+  if (relationships.length) {
+    for (const r of relationships) {
       lines.push(`  ${r.relation_type} → ${r.target_slug}`);
       if (r.note) lines.push(`    ${r.note}`);
     }
+  } else {
+    lines.push(`  No relationships recorded`);
   }
 
   if (repo.facts?.length) {

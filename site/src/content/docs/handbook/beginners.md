@@ -136,7 +136,10 @@ View relationships for a repo:
 
 ```bash
 rk related your-org/auth-service
+rk related your-org/auth-service --json
 ```
+
+If nothing has been mapped yet, `rk related` prints `No relationships recorded for: <slug>`. `--json` prints `[]`. That empty result means no relationship rows are stored — not that the repo is complete or isolated-OK. `rk show` also keeps a Relationships section in that case (`No relationships recorded`) instead of hiding it, and it never invents edges.
 
 ## Understanding the data model
 
