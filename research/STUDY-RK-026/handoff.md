@@ -18,3 +18,5 @@
 
 **sha:** `8d14678`
 **PR:** (pending)
+
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/17 (open; do not merge)
