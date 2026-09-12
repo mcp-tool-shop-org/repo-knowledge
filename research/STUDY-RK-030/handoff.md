@@ -11,9 +11,11 @@
 
 **Docs/templates PR plan:** POINTS = score authority (src/games/scorer.ts); sync or label score tables in THE-CLAUDE-GAMES.md and templates/claude-games/; align claim prose; keep playbook ≠ templates ≠ scorer; enrichment instructions if three-pass.
 
-**Outcome:** Research packs landed. Docs/templates PR (pending).
+**Outcome:** Research packs landed. Docs/templates PR open (#21).
 
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-030/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
 **sha:** `8461d81`
+
+**PR:** https://github.com/mcp-tool-shop-org/repo-knowledge/pull/21 (open; do not merge; do not publish)
