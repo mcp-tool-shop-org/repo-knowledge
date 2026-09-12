@@ -23,9 +23,10 @@ It has two interfaces: a CLI (`rk`) for terminal use, and an MCP server that let
 
 Before installing, make sure you have:
 
-1. **Node.js 20 or later** -- check with `node --version`
+1. **Node.js 20 or later** -- check with `node --version`. This package's `engines.node` is `>=20`. Locked `better-sqlite3@12.8.0` lists `20.x || 22.x || 23.x || 24.x || 25.x` (vendor majors, not a prebuild-coverage claim).
 2. **GitHub CLI (`gh`)** -- install from [cli.github.com](https://cli.github.com/) and authenticate with `gh auth login`
 3. **A GitHub org or user account** with repositories to catalog
+4. **C/C++ build tools** when a `better-sqlite3` prebuild is missing. Install is dual-path: `prebuild-install || node-gyp rebuild --release`. A matching prebuild is used when one is available; otherwise `node-gyp` compiles from source and you need a C/C++ toolchain. That is not universal platform coverage. If install fails, see the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
 
 The `gh` CLI is needed to fetch repository metadata from GitHub. repo-knowledge never reads source code from GitHub -- only names, descriptions, topics, stars, and similar metadata.
 
