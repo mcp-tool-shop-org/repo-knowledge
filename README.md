@@ -246,7 +246,7 @@ repo-knowledge includes templates for parallel multi-Claude operations across la
 2. **Enrichment Pass** — Agents add thesis, architecture notes, and relationship mappings
 3. **Remediation Pass** — Agents fix findings using a scored 8-step workflow
 
-See [`templates/claude-games/`](templates/claude-games/) for the full playbook.
+See [`THE-CLAUDE-GAMES.md`](THE-CLAUDE-GAMES.md) for the operator playbook and [`templates/claude-games/`](templates/claude-games/) for agent-facing pass instructions. Scores: `src/games/scorer.ts` `POINTS`.
 
 ## Data Model
 
