@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-The MCP server exposes 19 tools over stdio, enabling Claude and other AI agents to query, annotate, and audit repos conversationally.
+The MCP server exposes 30 tools over stdio, enabling Claude and other AI agents to query, annotate, and audit repos conversationally.
 
 ## Configuration
 
@@ -70,6 +70,39 @@ The MCP server reads `rk.config.json` from the working directory at startup. Ens
 | `audit_detail` | Full audit report for a repo |
 | `audit_controls_list` | List canonical controls by domain |
 | `audit_unaudited` | List repos with no audit runs |
+
+## Build-health tools
+
+DB-only reads, no network refresh — the same grouping as the README MCP Tools list.
+
+| Tool | Description |
+|------|-------------|
+| `health_feed` | Build-health change feed across the whole portfolio: audit deltas, newly-unpinned actions, broken CI streaks, toolchain drift. DB-only read (no registry/network refresh) — reflects state as of the last `rk sync`. |
+| `health_doctor` | Single-repo build-health deep dive: CI, declared/observed toolchain + drift, dep-audit (with CVE IDs) and history, workflow actions + permissions. DB-only read (no network refresh). |
+| `health_portfolio` | Portfolio health rollup — one row per repo with CI / dep / action-pin health grades + toolchain-drift flag and inline detail. DB-only read (no network refresh). |
+
+## Operational hygiene tools
+
+| Tool | Description |
+|------|-------------|
+| `db_fsck` | Run the DB-integrity checker: orphan rows, broken relationships, missing local paths, FTS row-count mismatch, invalid lifecycle status, incomplete sync runs. SIDE EFFECT: writes one db_health_runs audit row per call. |
+| `repo_diff` | Per-repo DB-entry change history within a time window: notes added, audit runs, dep-audit severity deltas, published versions. Default window is the last 7 days. DB-only read. |
+| `ops_runs` | List recent operational run rows: db_health_runs (fsck) and/or sync_runs. Read-only audit trail. Use kind to scope to one table. |
+
+## Lifecycle and publish tools
+
+| Tool | Description |
+|------|-------------|
+| `archive_repo` | Mark a repo archived (lifecycle_status=archived). Preserves all notes/findings — the reversible alternative to delete_repo. If reason is given it is recorded as a warning note. |
+| `delete_repo` | HARD-DELETE a repo and all related rows (notes, facts, docs, relationships, audit runs — FK cascade). IRREVERSIBLE. `confirm` MUST be literally true to proceed. Prefer archive_repo when you only want to mark a repo dead. |
+| `repo_versions` | List published versions recorded for a repo, grouped per channel (npm / pypi / github-release). READ-ONLY — the MCP variant does NOT hit registries; it reports the rows already in the DB as of the last sync. |
+
+## Dogfood and audit-drill tools
+
+| Tool | Description |
+|------|-------------|
+| `suggest_dogfood` | Get dogfood intelligence suggestions (findings, patterns, recommendations, doctrine) for a repo OR a product surface. Specify EXACTLY ONE of repo / surface. |
+| `audit_failing` | List repos whose LATEST audit has failing controls in a given domain. Returns each failing control id + title + notes per repo. |
 
 ## Multi-agent workflows
 
