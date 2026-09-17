@@ -20,21 +20,29 @@ rk stats
 
 ## Database backup
 
-The database is a single SQLite file running in WAL mode.
+The knowledge database is a local SQLite file (default: `data/knowledge.db`). Snapshot and restore it with the first-class CLI — `rk backup` writes a vacuumed copy; do not treat a live-file `cp` as the primary path.
 
 ```bash
-# Flush the WAL to the main database file
-sqlite3 data/knowledge.db "PRAGMA wal_checkpoint(FULL);"
+# Vacuumed snapshot under data/backups/
+rk backup
 
-# Copy the database file
-cp data/knowledge.db data/knowledge-backup-$(date +%Y%m%d).db
+# Or write the snapshot to an explicit path
+rk backup --out /path/to/knowledge-backup.db
 ```
 
-Only the `.db` file is needed — the `-wal` and `-shm` files are transient and will be recreated.
+`rk backup [--out <path>]` uses SQLite `VACUUM INTO` to write a consistent single-file snapshot under `data/backups/` (or `--out`).
+
+```bash
+# Schema-validated restore (confirm-gated; --yes skips the prompt)
+rk restore data/backups/<timestamp>.db
+rk restore data/backups/<timestamp>.db --yes
+```
+
+`rk restore <path> [--yes]` schema-validates the snapshot, is confirm-gated, swaps the live database atomically (temp-then-rename), and clears WAL sidecars so a stale WAL cannot replay over the restored file. It refuses a backup whose `schema_version` is newer than this rk build.
 
 ## Recovery
 
-If the database becomes corrupt or you need a fresh start:
+If you have a snapshot, restore it with `rk restore <path>` (see above). If the database becomes corrupt and you have no snapshot, or you need a fresh start:
 
 ```bash
 # Delete the corrupt database
