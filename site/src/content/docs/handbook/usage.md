@@ -175,6 +175,34 @@ rk games score REMEDIATION-WORKLIST.md --json
 rk games score REMEDIATION-WORKLIST.md --markdown
 ```
 
+## Publish-state commands
+
+:::caution
+**Publish-state ≠ npm publish.** `src/sync/publish.ts` GETs npm, PyPI, and GitHub Releases, then upserts local `repo_published_versions` rows only. The filename is inventory, not a mutator — it never publishes packages.
+:::
+
+These commands read the local published-version catalog. They do not upload to any registry.
+
+### `rk versions <slug>`
+
+Cross-channel published-version dashboard (`npm` / `pypi` / `github_release`). Reads `repo_published_versions`. `--refresh` GETs registry/list inventory first, then upserts local rows. `--channel <name>` filters to one channel.
+
+```bash
+rk versions my-org/my-repo
+rk versions my-org/my-repo --refresh
+rk versions my-org/my-repo --channel npm
+```
+
+MCP `repo_versions` is a DB-only read of the same table — no network refresh. Use CLI `rk versions --refresh` when you need a GET inventory update.
+
+### `rk drift <slug>`
+
+Compare the source-of-truth version (local `package.json` / `pyproject.toml`) against the latest registry version recorded in `repo_published_versions`. `--strict` exits non-zero if any drift is detected. Does not publish.
+
+### `rk bind-package <slug>`
+
+Set local npm / PyPI package-name bindings (and optional publisher method) used by publish-state sync. Does not publish.
+
 ## Global options
 
 | Option | Description |

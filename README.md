@@ -100,6 +100,8 @@ rk audit seed-controls
 
 ### Publish-State Commands (v2.0.0)
 
+Publish-state sync reads registries only (GET / list) and upserts `repo_published_versions` — it never publishes packages. The `publish.ts` filename is inventory, not a mutator.
+
 | Command | Description |
 |---------|-------------|
 | `rk versions <slug> [--refresh] [--channel <name>]` | Cross-channel published-version dashboard (npm/pypi/github_release) |
