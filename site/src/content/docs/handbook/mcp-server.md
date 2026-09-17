@@ -49,7 +49,7 @@ The MCP server reads `rk.config.json` from the working directory at startup. Ens
 | `get_repo` | Full knowledge dump for a repo |
 | `find_repos` | Filter repos by owner, status, language, framework, shape |
 | `search_repos` | Full-text search across all indexed content |
-| `related_repos` | Show repos related to a given repo |
+| `related_repos` | Show repos related to a given repo. Empty payload is `{ "relationships": [] }` — engine state (nothing recorded), not enrichment-complete |
 | `repos_by_stack` | Find repos using a specific tech stack combination |
 | `repos_needing_work` | Find repos that need attention: stale, unaudited, warnings |
 | `repo_summary` | One-paragraph summary of a repo |
