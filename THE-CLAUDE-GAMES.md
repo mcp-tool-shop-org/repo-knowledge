@@ -41,9 +41,9 @@ node scripts/gen-audit-worklist.mjs
 
 **Claude instructions (copy-paste to each Claude):**
 ```
-You are auditing repos. Read these files in order, then start:
-1. F:\AI\repo-knowledge\AUDIT-CONTRACT.md
-2. F:\AI\repo-knowledge\AUDIT-WORKLIST.md
+You are auditing repos. Read these files in order (from <repo-root>), then start:
+1. AUDIT-CONTRACT.md
+2. AUDIT-WORKLIST.md
 
 Worklist is a table. Claim a repo by changing [ ] to [~] with your name and timestamp.
 Submit results via the audit_submit MCP tool.
@@ -66,9 +66,9 @@ node scripts/gen-enrichment-worklist.mjs
 
 **Claude instructions (copy-paste to each Claude):**
 ```
-You are enriching repo knowledge. Read these files in order, then start:
-1. F:\AI\repo-knowledge\ENRICHMENT-INSTRUCTIONS.md
-2. F:\AI\repo-knowledge\ENRICHMENT-WORKLIST.md
+You are enriching repo knowledge. Read these files in order (from <repo-root>), then start:
+1. ENRICHMENT-INSTRUCTIONS.md
+2. ENRICHMENT-WORKLIST.md
 
 Worklist is a table. Claim a repo by changing [ ] to [~] with your name and timestamp.
 Every repo gets: thesis note, architecture note, relationships mapped, releases synced.
@@ -92,8 +92,8 @@ node scripts/gen-worklist.mjs
 
 **Claude instructions (copy-paste to each Claude):**
 ```
-Read F:\AI\repo-knowledge\REMEDIATION-INSTRUCTIONS.md then start.
-Worklist is at F:\AI\repo-knowledge\REMEDIATION-WORKLIST.md.
+Read REMEDIATION-INSTRUCTIONS.md (from <repo-root>) then start.
+Worklist is at REMEDIATION-WORKLIST.md.
 ```
 
 ---
@@ -118,7 +118,7 @@ Pick which passes to run. You don't always need all three.
 Run the generator script for each pass you're running. The scripts query the live DB and produce clean claim tables.
 
 ```bash
-cd F:\AI\repo-knowledge
+cd <repo-root>
 
 # For audit pass (all repos, or only unaudited/stale)
 node scripts/gen-audit-worklist.mjs
@@ -202,7 +202,7 @@ If a row already shows `[~]` or `[x]`, skip it. This is optimistic locking — r
 
 ## Infrastructure
 
-Everything lives in `F:\AI\repo-knowledge\`:
+Everything lives in this repo (`<repo-root>`):
 
 ```
 repo-knowledge/

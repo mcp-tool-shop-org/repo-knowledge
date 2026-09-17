@@ -30,7 +30,7 @@ Each row: name, type, motivation (the gap that surfaces it), source (where it ge
 | `repos.lifecycle_status` | enum: `active`, `deprecated`, `archived`, `superseded`, `marketing_wing`, `prototype` | The 112-NULLed `local_path` set is a mix of all these. Today they're indistinguishable. | Manual curation + heuristic (GitHub `archived` flag, `superseded_by` relationship presence) |
 | `repos.deprecated_at` | TEXT (ISO date) | Date `lifecycle_status` flipped — important for audit pruning | Manual + sync diff |
 | `repos.replaced_by_repo_id` | INTEGER FK repos(id) | `forkable→forkctl`, `npm-sovereignty → npm-launcher/examples/sovereignty` — both happened, both invisible in DB | Manual (one-time during cleanup), or auto-promoted from `repo_relationships` where `relation_type='supersedes'` |
-| `repo_local_paths` (NEW TABLE) | repo_id, rig_id, local_path, last_seen_at | Single `repos.local_path` column can't represent "this repo lives at `/Volumes/T9-Shared/AI/X` on Mac AND `F:\AI\X` on 5080". Cross-rig drift goes silent. | rk-bridge / `rk verify-local` per-rig run |
+| `repo_local_paths` (NEW TABLE) | repo_id, rig_id, local_path, last_seen_at | Single `repos.local_path` column can't represent the same repo at different operator-local roots on different rigs. Operator narrative (not a product path requirement): e.g. `/Volumes/T9-Shared/AI/X` on one Mac rig AND `F:\AI\X` on a Windows 5080. Cross-rig drift goes silent. | rk-bridge / `rk verify-local` per-rig run |
 | `rigs` (NEW TABLE) | rig_id, hostname, primary_root, last_seen_at | Anchors the multi-rig path table. Currently we have `mac-m5max` + `windows-5080` codified in rig-bridge memory but not in DB | One-shot insert per rig; `rk init-rig` |
 
 ### Distribution / publish state
@@ -74,7 +74,7 @@ Each row: name, type, motivation (the gap that surfaces it), source (where it ge
 | Source | Currently | Should be |
 |---|---|---|
 | GitHub orgs | Manual `--owners` list passed to `rk sync` — easy to forget tools | A registered owners list in `rk.config.json`, swarm phase verifies coverage |
-| Local trees | Single `--local <root>` passed; `motif`, `forkctl`, etc. live alongside but were never `rk scan`-ed | Recursive auto-scan from `--local` root; `rk sync --local /Volumes/T9-Shared/AI` should pick up everything that has a `.git` |
+| Local trees | Single `--local <root>` passed; `motif`, `forkctl`, etc. live alongside but were never `rk scan`-ed | Recursive auto-scan from `--local` root; operator narrative (not a product path requirement): e.g. `rk sync --local /Volumes/T9-Shared/AI` should pick up everything that has a `.git` |
 | Deletion | None — additive only | Sync should mark `lifecycle_status='archived'` (not delete) when GitHub returns 404 for an indexed repo. Hard delete remains opt-in via `rk prune` |
 | npm registry | None | Per-repo `npm view <name> version time` for entries with `npm_package_name` set |
 | PyPI | None | `pip index versions <name>` or PyPI JSON API for entries with `pypi_package_name` |
@@ -158,9 +158,11 @@ When the next dogfood-swarm reports complete, this is what should be true:
 
 ---
 
-## Companion docs
+## Companion docs (operator-only; not product requirements)
 
-- Operational details: `/Users/michaelfrilot/.claude/projects/-Volumes-T9-Shared-AI/memory/repo-knowledge.md`
-- Skill (auto-loaded): `~/.claude/skills/repo-knowledge/SKILL.md`
-- Dogfood-swarm protocol: `/Users/michaelfrilot/.claude/projects/-Volumes-T9-Shared-AI/memory/dogfood-swarm.md`
-- The "consult before assuming" rule: `/Users/michaelfrilot/.claude/projects/-Volumes-T9-Shared-AI/memory/feedback_consult_canonical_registry.md`
+These files live in the operator's Claude project memory on a given rig. They are studio inputs, not package or product documentation:
+
+- Operational details: operator Claude project memory `repo-knowledge.md`
+- Skill (auto-loaded): operator Claude skill `repo-knowledge/SKILL.md`
+- Dogfood-swarm protocol: operator Claude project memory `dogfood-swarm.md`
+- The "consult before assuming" rule: operator Claude project memory `feedback_consult_canonical_registry.md`
