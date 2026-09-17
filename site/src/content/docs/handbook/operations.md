@@ -75,12 +75,16 @@ Run `gh auth login` and follow the prompts. The `gh` CLI must be authenticated f
 Error: Could not locate the bindings file
 ```
 
-Install C/C++ build tools:
+`better-sqlite3@12.8.0` installs via the vendor dual path `prebuild-install || node-gyp rebuild --release`: use a matching prebuild when one is available, otherwise compile from source. A prebuild miss (unsupported Node ABI, arch, or runtime) is expected to fall through to `node-gyp`. That is not a claim that prebuilds cover every platform.
+
+This package's `engines.node` is `>=20`. The locked addon lists `20.x || 22.x || 23.x || 24.x || 25.x` (vendor majors, not a coverage table).
+
+Install C/C++ build tools when the compile path runs:
 - **Ubuntu:** `sudo apt install build-essential`
 - **macOS:** `xcode-select --install`
 - **Windows:** Install Visual Studio Build Tools
 
-Prebuilt binaries are used automatically on many platforms.
+See the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
 
 ### Database locked
 

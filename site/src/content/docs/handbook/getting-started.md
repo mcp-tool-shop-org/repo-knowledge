@@ -7,15 +7,17 @@ sidebar:
 
 ## Requirements
 
-- **Node.js 20+**
+- **Node.js 20+** — this package's `engines.node` is `>=20`. Locked `better-sqlite3@12.8.0` lists `20.x || 22.x || 23.x || 24.x || 25.x` (vendor majors, not a prebuild-coverage claim).
 - **`gh` CLI** (authenticated) for GitHub sync
-- C/C++ build tools for `better-sqlite3`, or prebuilt binaries will be used automatically on supported platforms
+- C/C++ build tools for `better-sqlite3` when a prebuild misses. The addon install script is dual-path: `prebuild-install || node-gyp rebuild --release`. A matching prebuild is used when one is available; otherwise `node-gyp` compiles from source. That is not universal platform coverage. If install fails, see the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
 
 ## Install
 
 ```bash
 npm install -g @mcptoolshop/repo-knowledge
 ```
+
+This package has no product-level install script. npm installs the `better-sqlite3` dependency, whose vendor script is `prebuild-install || node-gyp rebuild --release`.
 
 ## Initialize
 
