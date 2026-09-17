@@ -19,13 +19,20 @@ npm install -g @mcptoolshop/repo-knowledge
 
 ## Initialize
 
-Create a workspace config and seed the audit control catalog:
+`rk init` bootstraps the workspace. It:
+
+- Creates `rk.config.json` in the current directory when missing (prints `Already exists` if the file is already there)
+- Ensures the `data/` directory exists (same create / `Already exists` path)
+- Opens the database via `openDb` at the resolved `dbPath` (default `data/knowledge.db`), which applies migrations
+- Seeds the canonical audit control catalog
+
+The command is idempotent: a re-run is safe. Existing config and `data/` stay in place; the database is opened again and controls are re-seeded.
 
 ```bash
 rk init
 ```
 
-This creates `rk.config.json` in the current directory with default settings:
+A fresh `rk.config.json` looks like:
 
 ```json
 {
@@ -44,7 +51,7 @@ Pull repository metadata from GitHub:
 rk sync --owners my-org
 ```
 
-This fetches repo names, descriptions, topics, stars, languages, and license info via the `gh` CLI. No source code is read from GitHub.
+This fetches repo metadata via the `gh` CLI: names, descriptions, topics, stars, license info, and the repo's primary language (`primaryLanguage` on the `gh` listing; stored as `primary_language`). GitHub sync does not populate a language-bytes map — it stores `languages` as an empty stub (`{}`). No source code is read from GitHub.
 
 To also scan local directories for tech fingerprints and docs:
 

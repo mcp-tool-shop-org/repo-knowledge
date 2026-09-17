@@ -9,7 +9,7 @@ sidebar:
 
 **Data touched:**
 - Local SQLite database (created and managed by repo-knowledge)
-- GitHub API metadata via `gh` CLI: repo names, descriptions, topics, stars, languages, license info
+- GitHub API metadata via `gh` CLI: repo names, descriptions, topics, stars, primary language (`primaryLanguage`), license info — not a language-bytes map
 - Local filesystem: reads READMEs, CHANGELOGs, package manifests for indexing
 
 **Data NOT touched:**
