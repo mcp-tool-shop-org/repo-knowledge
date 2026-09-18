@@ -75,20 +75,23 @@ rk related my-org/my-repo
 
 ### `rk note <slug>`
 
-Add a typed note to a repo. Required flags: `--type` (`-t`) and `--content` (`-c`). Optional: `--title`.
+Add (or `--delete`) a note on a repo. `--type` (`-t`) is required. `--content` (`-c`) is required when adding, not when deleting. Optional: `--title` (defaults to the note type).
+
+`--delete` deletes the note identified by `--type` + `--title` (the title default is the same as when adding).
 
 Note types: `thesis`, `architecture`, `convention`, `warning`, `next_step`, `drift_risk`, `release_summary`, `command`, `pain_point`, `general`.
 
 ```bash
 rk note my-org/my-repo --type thesis --content "Core auth service for all org APIs"
 rk note my-org/my-repo -t warning -c "Rate limiter is hardcoded" --title "Rate limit config"
+rk note my-org/my-repo --type thesis --title "..." --delete
 ```
 
 ### `rk relate <from> <type> <to>`
 
 Record a relationship between two repos. Optional: `--note` to add context.
 
-Types: `depends_on`, `related_to`, `supersedes`, `shares_domain_with`, `shares_package_with`, `companion_to`.
+Types: `depends_on`, `related_to`, `supersedes`, `shares_domain_with`, `shares_package_with`, `companion_to`, `wraps`, `collaborated_in_mission`.
 
 ```bash
 rk relate my-org/api-gateway depends_on my-org/auth-service
