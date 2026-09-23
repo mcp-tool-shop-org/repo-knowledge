@@ -30,19 +30,25 @@ rk stats
 
 ## Database Backup
 
-The database is a single SQLite file (default: `data/knowledge.db`) running in WAL mode.
-
-To make a clean backup:
+The knowledge database is a local SQLite file (default: `data/knowledge.db`). Snapshot and restore it with the first-class CLI — `rk backup` writes a vacuumed copy; do not treat a live-file `cp` or a manual WAL checkpoint as the primary path.
 
 ```bash
-# 1. Flush the WAL to the main database file
-sqlite3 data/knowledge.db "PRAGMA wal_checkpoint(FULL);"
+# Vacuumed snapshot under data/backups/
+rk backup
 
-# 2. Copy the database file
-cp data/knowledge.db data/knowledge-backup-$(date +%Y%m%d).db
+# Or write the snapshot to an explicit path
+rk backup --out /path/to/knowledge-backup.db
 ```
 
-You only need to copy the `.db` file — the `-wal` and `-shm` files are transient and will be recreated.
+`rk backup [--out <path>]` uses SQLite `VACUUM INTO` to write a consistent single-file snapshot under `data/backups/` (or `--out`).
+
+```bash
+# Schema-validated restore (confirm-gated; --yes skips the prompt)
+rk restore data/backups/<timestamp>.db
+rk restore data/backups/<timestamp>.db --yes
+```
+
+`rk restore <path> [--yes]` schema-validates the snapshot, is confirm-gated, swaps the live database atomically (temp-then-rename), and clears WAL sidecars so a stale WAL cannot replay over the restored file. It refuses a backup whose `schema_version` is newer than this rk build.
 
 ## Disaster Recovery
 
@@ -52,7 +58,7 @@ You only need to copy the `.db` file — the `-wal` and `-shm` files are transie
 
 **Data loss risk:** Manual notes, relationships, and audit evidence are lost if no backup exists. GitHub metadata and local repo scans are fully reconstructable.
 
-If the database becomes corrupt or you need a fresh start:
+If you have a snapshot, restore it with `rk restore <path>` (see Database Backup above). If the database becomes corrupt and you have no snapshot, or you need a fresh start:
 
 ```bash
 # 1. Delete the corrupt database
