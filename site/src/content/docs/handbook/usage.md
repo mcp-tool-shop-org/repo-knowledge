@@ -240,6 +240,8 @@ rk prune --days 30 --apply
 
 ## Publish-state commands
 
+**Publish-state is not a registry publish.** These commands read npm / PyPI / GitHub Releases and update local inventory. They do not `npm publish` or upload packages. MCP `repo_versions` is DB-only (no network refresh); CLI `rk versions --refresh` may GET registries.
+
 ### `rk versions <slug>`
 
 Show the cross-channel published-version dashboard (`npm`, `pypi`, `github_release`). Optional: `--refresh` (sync from registries before rendering), `--strict` (exit non-zero if the `--refresh` sync surfaced errors), `--channel` (`npm|pypi|github_release`).

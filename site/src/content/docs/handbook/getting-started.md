@@ -7,9 +7,9 @@ sidebar:
 
 ## Requirements
 
-- **Node.js 20+**
+- **Node.js 20+** — this package's `engines.node` is `>=20`. The locked `better-sqlite3` addon's own `engines` list is vendor majors, not a prebuild-coverage claim.
 - **`gh` CLI** (authenticated) for GitHub sync
-- C/C++ build tools for `better-sqlite3`, or prebuilt binaries will be used automatically on supported platforms
+- C/C++ build tools for `better-sqlite3` when a prebuild misses. The addon install script is dual-path: `prebuild-install || node-gyp rebuild --release`. A matching prebuild is used when one is available; otherwise `node-gyp` compiles from source. That is not universal platform coverage. If install fails, see the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
 
 ## Install
 
@@ -17,9 +17,18 @@ sidebar:
 npm install -g @mcptoolshop/repo-knowledge
 ```
 
+This package has no product-level install script. npm installs the `better-sqlite3` dependency, whose vendor script is `prebuild-install || node-gyp rebuild --release`.
+
 ## Initialize
 
-Create a workspace config and seed the audit control catalog:
+`rk init` bootstraps the workspace. It:
+
+- Creates `rk.config.json` in the current directory when missing (prints `Already exists` if the file is already there)
+- Ensures the `data/` directory exists (same create / `Already exists` path)
+- Opens the database via `openDb` at the resolved `dbPath` (default `data/knowledge.db`), which applies migrations
+- Seeds the canonical audit control catalog
+
+The command is idempotent: a re-run is safe. Existing config and `data/` stay in place; the database is opened again and controls are re-seeded.
 
 ```bash
 rk init
@@ -44,7 +53,7 @@ Pull repository metadata from GitHub:
 rk sync --owners my-org
 ```
 
-This fetches repo names, descriptions, topics, stars, languages, and license info via the `gh` CLI. No source code is read from GitHub.
+This fetches repo metadata via the `gh` CLI: names, descriptions, topics, stars, license info, and the repo's primary language (`primaryLanguage` on the `gh` listing; stored as `primary_language`). GitHub sync does not populate a language-bytes map — it stores `languages` as an empty stub (`{}`). No source code is read from GitHub.
 
 To also scan local directories for tech fingerprints and docs:
 

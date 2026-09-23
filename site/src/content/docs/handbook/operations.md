@@ -20,21 +20,29 @@ rk stats
 
 ## Database backup
 
-The database is a single SQLite file running in WAL mode.
+The knowledge database is a local SQLite file (default: `data/knowledge.db`). Snapshot and restore it with the first-class CLI — `rk backup` writes a vacuumed copy; do not treat a live-file `cp` as the primary path.
 
 ```bash
-# Flush the WAL to the main database file
-sqlite3 data/knowledge.db "PRAGMA wal_checkpoint(FULL);"
+# Vacuumed snapshot under data/backups/
+rk backup
 
-# Copy the database file
-cp data/knowledge.db data/knowledge-backup-$(date +%Y%m%d).db
+# Or write the snapshot to an explicit path
+rk backup --out /path/to/knowledge-backup.db
 ```
 
-Only the `.db` file is needed — the `-wal` and `-shm` files are transient and will be recreated.
+`rk backup [--out <path>]` uses SQLite `VACUUM INTO` to write a consistent single-file snapshot under `data/backups/` (or `--out`).
+
+```bash
+# Schema-validated restore (confirm-gated; `--yes` skips the prompt)
+rk restore data/backups/<timestamp>.db
+rk restore data/backups/<timestamp>.db --yes
+```
+
+`rk restore <path> [--yes]` schema-validates the snapshot, is confirm-gated, swaps the live database atomically (temp-then-rename), and clears WAL sidecars so a stale WAL cannot replay over the restored file. It refuses a backup whose `schema_version` is newer than this rk build.
 
 ## Recovery
 
-If the database becomes corrupt or you need a fresh start:
+If you have a snapshot, restore it with `rk restore <path>` (see above). If the database becomes corrupt and you have no snapshot, or you need a fresh start:
 
 ```bash
 # Delete the corrupt database
@@ -75,12 +83,16 @@ Run `gh auth login` and follow the prompts. The `gh` CLI must be authenticated f
 Error: Could not locate the bindings file
 ```
 
-Install C/C++ build tools:
+`better-sqlite3` installs via the vendor dual path `prebuild-install || node-gyp rebuild --release`: use a matching prebuild when one is available, otherwise compile from source. A prebuild miss (unsupported Node ABI, arch, or runtime) is expected to fall through to `node-gyp`. That is not a claim that prebuilds cover every platform.
+
+This package's `engines.node` is `>=20`. The addon's own `engines` list (see the locked `better-sqlite3` package) is vendor majors, not a coverage table. Do not treat those majors as a prebuild matrix.
+
+Install C/C++ build tools when the compile path runs:
 - **Ubuntu:** `sudo apt install build-essential`
 - **macOS:** `xcode-select --install`
 - **Windows:** Install Visual Studio Build Tools
 
-Prebuilt binaries are used automatically on many platforms.
+See the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
 
 ### Database locked
 
