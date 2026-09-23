@@ -22,4 +22,4 @@ After land sha: STUDY-RK-091 (if #21 still open) · do not invent 101.
 
 ✅ Builder may land
 
-Land sha=`9c6328f` · tip `54cc0c0` (pre-land)
+Land sha=`3d46a4d` · tip `54cc0c0` (pre-land) · tip after push: `3d46a4d`
