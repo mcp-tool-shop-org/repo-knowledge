@@ -1,0 +1,4908 @@
+{
+  "boundaries": [
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "b91cd1d0a9a6c6ef8fad49b58882e37f542541c509ca7807fefa14d5a2a28885",
+          "path": ".claude/context/brand-rules.md"
+        },
+        {
+          "hash": "fb27a3284b1fede972d1b17a04bd74178f13ea4bef2c8cb7314c4b7f22d17ba2",
+          "path": ".claude/context/current-priorities.md"
+        },
+        {
+          "hash": "f1a4a729c745dd30b4b5edf2ce48b0d6e20906c3907ce8c52f352346651c98ca",
+          "path": ".claude/context/product-brief.md"
+        },
+        {
+          "hash": "f0e42cb5bc6c44dfd4becc9f469a06a3a45ae3c64ec636e6ea6c6c70f88b09d8",
+          "path": ".claude/context/repo-map.md"
+        },
+        {
+          "hash": "a717ed4fdd54c139e63844e5b3e3d28f2f309d975e2b3af6e0ebff10d931686b",
+          "path": ".claude/workflows/protect-catalog-truth.md"
+        }
+      ],
+      "globs": [
+        ".claude/**"
+      ],
+      "importConfidence": "full",
+      "name": ".claude",
+      "origin": "authored",
+      "role": "docs",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "aee8c363a8ed4f4c8f51e1f0f42bb4edaa5bea26cd1d7c2495165c919a382de5",
+          "path": ".github/dependabot.yml"
+        },
+        {
+          "hash": "13ee41fc47777911b4432390ea7317afd928c93140cddc219a09bbce538b3912",
+          "path": ".github/workflows/ci.yml"
+        },
+        {
+          "hash": "1811526edd32c80a1cb25f6f25f8962d02b39dcefb417b2ac7561442d2f624dd",
+          "path": ".github/workflows/pages.yml"
+        },
+        {
+          "hash": "a8593218435c4018d4c9e76c1645823dc0958e50f87b151564126fe57b050f68",
+          "path": ".github/workflows/release.yml"
+        }
+      ],
+      "globs": [
+        ".github/**"
+      ],
+      "importConfidence": "full",
+      "name": ".github",
+      "origin": "authored",
+      "role": "config",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "d177f037b290f2b8b9f7b65f9c0bbc759a74388f104fe1e3bfee0bd920194835",
+          "path": "assets/logo.png"
+        }
+      ],
+      "globs": [
+        "assets/**"
+      ],
+      "importConfidence": "full",
+      "name": "assets",
+      "origin": "authored",
+      "role": "config",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "de788f2b7941004aa9c2d2db91498fc78afd6dfc05ad4620abb39c884f8d1093",
+          "path": "data/control-registry.json"
+        }
+      ],
+      "globs": [
+        "data/**"
+      ],
+      "importConfidence": "full",
+      "name": "data",
+      "origin": "generated",
+      "role": "config",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "979bffd1e5942b19d709e8943fc9b3e9efbc49af2abdbc5dfa168cb29bbeba96",
+          "path": "research/STUDY-RK-001/grounding.md"
+        },
+        {
+          "hash": "4cc9e7c431f4981feabf40f957e9e39c7f1413ec2ff46a77a8dcb912e4ecaa1d",
+          "path": "research/STUDY-RK-001/handoff.md"
+        },
+        {
+          "hash": "d004412a4a760e24b4a68114efd3a18918f9835e5cd63cd3977e63a0de0950c7",
+          "path": "research/STUDY-RK-001/pack-analogist.md"
+        },
+        {
+          "hash": "c5e1f647f15f9d48551b530e16c1aa5fe47b431aaf653e9834dd7a44e2b880e7",
+          "path": "research/STUDY-RK-001/pack-practitioner.md"
+        },
+        {
+          "hash": "576b9e10ebeada1dd3d7acc4db41a149c8c92a9c414c1bc686a1e0cbf2bc9603",
+          "path": "research/STUDY-RK-001/pack-scholar.md"
+        },
+        {
+          "hash": "5ad61e1dc5742924df2ef86b3f7abe63b965a73070ad26523f3e16790f6fd78e",
+          "path": "research/STUDY-RK-002/grounding.md"
+        },
+        {
+          "hash": "30fb991adf14b7b983fa3fe424edfa07a62371f117da18f99226f944a692fdd7",
+          "path": "research/STUDY-RK-002/handoff.md"
+        },
+        {
+          "hash": "f4ebe7964a006d123c31abe2b2aec78dcd36865bebf34bc84b03b1c1252d0586",
+          "path": "research/STUDY-RK-002/pack-analogist.md"
+        },
+        {
+          "hash": "43b1ef7b3a7079f0997179f6c957c421da8f782f8fb2f9869be90c5d296bb548",
+          "path": "research/STUDY-RK-002/pack-practitioner.md"
+        },
+        {
+          "hash": "ac41c7b1ea86e7890386bbdc6b118e2a855c6defe1d8c101baf38844cf5f4c98",
+          "path": "research/STUDY-RK-002/pack-scholar.md"
+        },
+        {
+          "hash": "7b3cd7d64c02866da678ad254bb85a5a60cf55e1fa8167df126ca040d26d7852",
+          "path": "research/STUDY-RK-003/grounding.md"
+        },
+        {
+          "hash": "cbd4fa71552a307639b17ac9c0e57db5602680cfc7cbf9dba88e5e13a428a2d0",
+          "path": "research/STUDY-RK-003/handoff.md"
+        },
+        {
+          "hash": "833062ec0b9c362338f9488c2d5b34de750fc22d02d8355de906f45fb6d2bf3f",
+          "path": "research/STUDY-RK-003/pack-analogist.md"
+        },
+        {
+          "hash": "5c36aa3258bdf41f8ffcec94fdeb5c304802623b16c0ecee72981eddd70f60e9",
+          "path": "research/STUDY-RK-003/pack-practitioner.md"
+        },
+        {
+          "hash": "faef87cc197f407e50e06b4cce96c781b99c5f0ec7170388cad681ae4ae709ca",
+          "path": "research/STUDY-RK-003/pack-scholar.md"
+        },
+        {
+          "hash": "86a5d4b7c6c7c0cf834f3b49fdbe09a80690d1e046b291914c153ae48a471cc3",
+          "path": "research/STUDY-RK-004/grounding.md"
+        },
+        {
+          "hash": "505c1573a47d7fdfe21ff66de887918dd4b85143c83259bf99eec765682561fe",
+          "path": "research/STUDY-RK-004/handoff.md"
+        },
+        {
+          "hash": "5af7632f8baf1f5e0342634a0e453dba21c1a473fd84f75d70febc880c30cb9a",
+          "path": "research/STUDY-RK-004/pack-analogist.md"
+        },
+        {
+          "hash": "62b5df0d65e6eb27f6731d719866232362cc01f08b0bc414f4914cac262afe00",
+          "path": "research/STUDY-RK-004/pack-practitioner.md"
+        },
+        {
+          "hash": "5b0b534bb86a6ac9aefa380f54f94f606ae13b1dedbf6baf4eeb1eb7c3a3f7e4",
+          "path": "research/STUDY-RK-004/pack-scholar.md"
+        },
+        {
+          "hash": "039162f6a696f780ae9a91e0dae7264009ed59f9a84dd36d96c11e78704b73a3",
+          "path": "research/STUDY-RK-005/grounding.md"
+        },
+        {
+          "hash": "89cf2b6bbf141b4f9aa1deda82b113e155a82afd0822fc0163972faffe7b2b9c",
+          "path": "research/STUDY-RK-005/handoff.md"
+        },
+        {
+          "hash": "f002d178d826f586f88ed5b2f159f8dc79d57ce3db9d108ba083c2e60c937504",
+          "path": "research/STUDY-RK-005/pack-analogist.md"
+        },
+        {
+          "hash": "15b7b91df8c986e30376bd85c5bb5811cdfdb6432812ea157486600d28054bf8",
+          "path": "research/STUDY-RK-005/pack-practitioner.md"
+        },
+        {
+          "hash": "bf4438208424dc5d866f05d2e70c534cdc938994cdcb12de436a05fa487fef8d",
+          "path": "research/STUDY-RK-005/pack-scholar.md"
+        },
+        {
+          "hash": "3151bfeb5a30b7c37f92f7840347ce0ed4255c6c24022604f61def027336a1a8",
+          "path": "research/STUDY-RK-006/grounding.md"
+        },
+        {
+          "hash": "910a72fda2f0ce5db35add608367f179a763adf6d5cd2e8a34d0d8ef332947a0",
+          "path": "research/STUDY-RK-006/handoff.md"
+        },
+        {
+          "hash": "e7117b127c73be00fb4db3baa598d4112b84c881056c64302c4e023a34ffae4b",
+          "path": "research/STUDY-RK-006/pack-analogist.md"
+        },
+        {
+          "hash": "babf86da4038d552c71e13b46c6d8daeaa04997a9621efde54b54b37205687d6",
+          "path": "research/STUDY-RK-006/pack-practitioner.md"
+        },
+        {
+          "hash": "116afed6621db16923de6e2922a5b9e95102854fd5a76dedb44f2359eac9bdef",
+          "path": "research/STUDY-RK-006/pack-scholar.md"
+        },
+        {
+          "hash": "000d0f5930dc128c27948c4d71645d76dda17d7f95426424830b46df3a497695",
+          "path": "research/STUDY-RK-007/grounding.md"
+        },
+        {
+          "hash": "cb008dfd34426ca5049a0bfc5f7a52b16039cd0ae9a1dda6d74637b774ec8ac2",
+          "path": "research/STUDY-RK-007/handoff.md"
+        },
+        {
+          "hash": "382f712cadcd4794e47128adcf5590b7a9b8e5dc287c76d171720bd5636bc5b9",
+          "path": "research/STUDY-RK-007/pack-analogist.md"
+        },
+        {
+          "hash": "a71e23f01422968b697b09a078b1b96b120b2d07e4109a039d221cd41299dc74",
+          "path": "research/STUDY-RK-007/pack-practitioner.md"
+        },
+        {
+          "hash": "93cc4b118eb01765219708686cd23708845b1570694185007697c53e48470d8a",
+          "path": "research/STUDY-RK-007/pack-scholar.md"
+        },
+        {
+          "hash": "8d00a6cae19774fd7acecb9a72f1456db6165090c21bb8dfc3e6f3b649f01574",
+          "path": "research/STUDY-RK-008/grounding.md"
+        },
+        {
+          "hash": "ba7e827bb1a682500c64bc03e7ce9f3220ac51856505a97089937c136789a34e",
+          "path": "research/STUDY-RK-008/handoff.md"
+        },
+        {
+          "hash": "d2c678e9c05e7eb936fe37f15b98348fea996dd026f3fb1b8d1a0b085ebfdaaa",
+          "path": "research/STUDY-RK-008/pack-analogist.md"
+        },
+        {
+          "hash": "e35ead2cf9900f801394427ba979513e6cbaaed95ee374ee59fe85aa98d7f7bc",
+          "path": "research/STUDY-RK-008/pack-practitioner.md"
+        },
+        {
+          "hash": "04301038421773ceaa2f814192051d4f7383cd2e3eb2eb43915018d0df5ca7ea",
+          "path": "research/STUDY-RK-008/pack-scholar.md"
+        },
+        {
+          "hash": "e3e6dba33160771fe65149e453f05b005cba36c15eaa62440000c23d0de4e98c",
+          "path": "research/STUDY-RK-009/grounding.md"
+        },
+        {
+          "hash": "bf3b338a7d859b07193257ba6c921f65caa9a5c150d8088155ffc478f9b46376",
+          "path": "research/STUDY-RK-009/handoff.md"
+        },
+        {
+          "hash": "5497d0613ebfeedca58bcd9ae23e4aafc05b88d27ae00cdb28348090a03759d2",
+          "path": "research/STUDY-RK-009/pack-analogist.md"
+        },
+        {
+          "hash": "06fc25c0d5826f0961bb7957c8cdac3a3619fc9b1b0c0bf51316e3bb7076781a",
+          "path": "research/STUDY-RK-009/pack-practitioner.md"
+        },
+        {
+          "hash": "eccb54b3065384458d445dfcb6acb98641b440b44fb48d47a114c08162959725",
+          "path": "research/STUDY-RK-009/pack-scholar.md"
+        },
+        {
+          "hash": "505d102be4f13d1774d98e0beb6b76e47e9813bbaebdb510f1bba60fc4ce189a",
+          "path": "research/STUDY-RK-010/grounding.md"
+        },
+        {
+          "hash": "b48d896fb68915c292b58f640cc92198ca13c84796ed6d25cf823616f8cd439a",
+          "path": "research/STUDY-RK-010/handoff.md"
+        },
+        {
+          "hash": "7cb84f348e40e307cb3e55a073c5d909199aeb112dc2c95e078d22777e33124d",
+          "path": "research/STUDY-RK-010/pack-analogist.md"
+        },
+        {
+          "hash": "ee0646866492096d2e05192fce7fc69e0e1b74541cf525df5dbea8a17b1223bc",
+          "path": "research/STUDY-RK-010/pack-practitioner.md"
+        },
+        {
+          "hash": "bab6720cd7b1f3eb5bfe09cb0136a6784ac2958e42f22d57102f89d867fa443c",
+          "path": "research/STUDY-RK-010/pack-scholar.md"
+        },
+        {
+          "hash": "4e054f5816d47bd2a42c88a3d29e72a333615cb855ed15d35872589884b69dcd",
+          "path": "research/STUDY-RK-011/grounding.md"
+        },
+        {
+          "hash": "38b8623b1269f31f3accda055d857d0e7b9670278da022762f6c5cabcb782352",
+          "path": "research/STUDY-RK-011/handoff.md"
+        },
+        {
+          "hash": "53fcfe6ce64a5ddd47df010354a43594893e66a693782dc026c45de56515b2c5",
+          "path": "research/STUDY-RK-011/pack-analogist.md"
+        },
+        {
+          "hash": "09c2ff9fcb10aae63f2cca73de202a05feb52a926bbc0bde496631e23785410e",
+          "path": "research/STUDY-RK-011/pack-practitioner.md"
+        },
+        {
+          "hash": "b14709bdde95791776e6f0800e6b714478dd61f2f39535e390e79cafe7682f23",
+          "path": "research/STUDY-RK-011/pack-scholar.md"
+        },
+        {
+          "hash": "17486b34979276d96e6d6d0246ca6888f35453616e72337b3ce529b1406e99d0",
+          "path": "research/STUDY-RK-012/grounding.md"
+        },
+        {
+          "hash": "67aac1348b39c7450b9825719450b699b1d4590c9568c88755b29b4f78a8f76e",
+          "path": "research/STUDY-RK-012/handoff.md"
+        },
+        {
+          "hash": "d48d87b564f90cc1c515bb4c3c3959f441b1df9af53271cfde79b0b4c71bf844",
+          "path": "research/STUDY-RK-012/pack-analogist.md"
+        },
+        {
+          "hash": "e6f37e096ebe32859e6c86adc7511b6574b151d63886bc258be47bf84758e5bd",
+          "path": "research/STUDY-RK-012/pack-practitioner.md"
+        },
+        {
+          "hash": "ce7821bfb93224f2598e073cec46992e2e3c38d16268d3ac712e8a81203a41fb",
+          "path": "research/STUDY-RK-012/pack-scholar.md"
+        },
+        {
+          "hash": "e8f109d77ed3d51e13334d7a4db3edf8de69be74f4c929f89ae2b89f8ff63554",
+          "path": "research/STUDY-RK-013/grounding.md"
+        },
+        {
+          "hash": "a16418ef38972aeff481159d2b1be389268dd2b35868aaee5aba5ec7095bdb77",
+          "path": "research/STUDY-RK-013/handoff.md"
+        },
+        {
+          "hash": "e159877450d5816f19fedd8bfbcec0ad00168b4cfeb131009e8574172a5ddd5d",
+          "path": "research/STUDY-RK-013/pack-analogist.md"
+        },
+        {
+          "hash": "bb276507f1ad913c81183b071d4f438642beea8275ef19250e568d54409f00c3",
+          "path": "research/STUDY-RK-013/pack-practitioner.md"
+        },
+        {
+          "hash": "797b5d4e959f4ea015c2d8203cb10a83bf474353455f08a00224a63fff3b2ee9",
+          "path": "research/STUDY-RK-013/pack-scholar.md"
+        },
+        {
+          "hash": "ee8ce8d45bb5f965d2e4e5bff5f5e7b5973fc4db371bcc4b88df0654fb6143f4",
+          "path": "research/STUDY-RK-014/grounding.md"
+        },
+        {
+          "hash": "dca975e2a1662f7c99d1b58e5cf907d4d867db0fc2ce1009d72a2a5c9f43fcbb",
+          "path": "research/STUDY-RK-014/handoff.md"
+        },
+        {
+          "hash": "cbf531d53169eb24e15bb1ec7c4f5afcfebf0456031b5a4c90023c1550693ba0",
+          "path": "research/STUDY-RK-014/pack-analogist.md"
+        },
+        {
+          "hash": "d245c0ec03016c863838d1370c855ba1cc54cb1c6441c50e8ba07b30e1e5310e",
+          "path": "research/STUDY-RK-014/pack-practitioner.md"
+        },
+        {
+          "hash": "2a0bf55e306dd2761ba73fd6511b23e5d93dafae308ff3dcee35c228ac225c64",
+          "path": "research/STUDY-RK-014/pack-scholar.md"
+        },
+        {
+          "hash": "74294b399a7257b20b505bdbd60062504d1e96c1375dc45f8624cdc452e9d3f8",
+          "path": "research/STUDY-RK-015/grounding.md"
+        },
+        {
+          "hash": "261498c4f399774510039460761457efed9801fb576e7a08f024af6b08f8b1dc",
+          "path": "research/STUDY-RK-015/handoff.md"
+        },
+        {
+          "hash": "c2f85eb585d3c14b5eaec28f8defecc25685e60ee5161c12d6562828ef9205c5",
+          "path": "research/STUDY-RK-015/pack-analogist.md"
+        },
+        {
+          "hash": "5c4b1878532cf9060dabf210aba11b0b6e8e00ecf542b18bd0f556f5b37faecd",
+          "path": "research/STUDY-RK-015/pack-practitioner.md"
+        },
+        {
+          "hash": "7c8ed9e1078bf7a3bd0b7247592cf3f832e7d7a4f6f640544e774458d664bdf1",
+          "path": "research/STUDY-RK-015/pack-scholar.md"
+        },
+        {
+          "hash": "801ceb9829bacc805a96fc20c9a4cae5a0912e80b8c4ca6c6fb166214f23b8a1",
+          "path": "research/STUDY-RK-016/grounding.md"
+        },
+        {
+          "hash": "219f5f8a4e4f5ccbc1ed5c02ac4cf52b551bf74c6f04658d2c731d4ea365baae",
+          "path": "research/STUDY-RK-016/handoff.md"
+        },
+        {
+          "hash": "7c49b1d47ee8171f33211128822c7dadaedf5d697db895860ea4542f4414b04b",
+          "path": "research/STUDY-RK-016/pack-analogist.md"
+        },
+        {
+          "hash": "ed1083cdc89915c7baf6d87687676645b09e0180c898367d4a2792b1a4f60d96",
+          "path": "research/STUDY-RK-016/pack-practitioner.md"
+        },
+        {
+          "hash": "0ad4adb85546978a0a0a37e1f3959429c1a7f6b8534f74172e9b207dc81d966a",
+          "path": "research/STUDY-RK-016/pack-scholar.md"
+        },
+        {
+          "hash": "d5e6ddf19db659b1a29e507709b24aba85f53ac1adfd2e21f5c961e378745d51",
+          "path": "research/STUDY-RK-017/grounding.md"
+        },
+        {
+          "hash": "9cba4f2c360290f44a772a5412819f28a6cb2c36c3bff3453abeb39b31ae9ba1",
+          "path": "research/STUDY-RK-017/handoff.md"
+        },
+        {
+          "hash": "7b5541a940e922213238aa7070b8c934589cbaedabb00013445104efdab95beb",
+          "path": "research/STUDY-RK-017/pack-analogist.md"
+        },
+        {
+          "hash": "4f4481ab7943f4ef3b4e962b9ecf030af073cc2e928886e32bca1bad10c62727",
+          "path": "research/STUDY-RK-017/pack-practitioner.md"
+        },
+        {
+          "hash": "ea89cb23f7e4e85f4ca0d5ddda91ae0ab3902275c9fbb13f8d64a47d1868b778",
+          "path": "research/STUDY-RK-017/pack-scholar.md"
+        },
+        {
+          "hash": "027622d1ebb9440d14edce6ca8c75de068c624869254dca3e4af874145e21fbd",
+          "path": "research/STUDY-RK-018/grounding.md"
+        },
+        {
+          "hash": "2d6cbc3051999da34908cc1cd8641360c7947211113330ed43df646e6c16b4f6",
+          "path": "research/STUDY-RK-018/handoff.md"
+        },
+        {
+          "hash": "9b497a26bbcadd6d618a7f21d4f41133c92f4d765ed981ccdf302acd5429ad68",
+          "path": "research/STUDY-RK-018/pack-analogist.md"
+        },
+        {
+          "hash": "4f02d191a071b373395ce88fa34c997a32d88f54c196ec34e78953be975eb2cc",
+          "path": "research/STUDY-RK-018/pack-practitioner.md"
+        },
+        {
+          "hash": "7ce2f700207bb530840acc40f01e31065aa084db85143f7a7234525e24db6413",
+          "path": "research/STUDY-RK-018/pack-scholar.md"
+        },
+        {
+          "hash": "c443ee7f29f3564d9dd5aac3d5d0a835c101cb7fb7178af411d5697dbf2a61dd",
+          "path": "research/STUDY-RK-019/grounding.md"
+        },
+        {
+          "hash": "89002105e1e3f8dfaa9cc98e2f7049db3e410d172ffcf30953718247ed11473c",
+          "path": "research/STUDY-RK-019/handoff.md"
+        },
+        {
+          "hash": "d6595bc5b58d93b9bc9e1b42478770bc60b85ec6981db7e6c912a2dfbdbb3d3f",
+          "path": "research/STUDY-RK-019/pack-analogist.md"
+        },
+        {
+          "hash": "a82d2bd1e8cedd806c89bb79a3b0325e3a0ac46f3d49eaeb1cb0a88b37a6c63a",
+          "path": "research/STUDY-RK-019/pack-practitioner.md"
+        },
+        {
+          "hash": "cbfc87d167afc7398b77c022dd9ad9a1babc26f4a906b8cf9873b74dafab069e",
+          "path": "research/STUDY-RK-019/pack-scholar.md"
+        },
+        {
+          "hash": "6d6a0d7f9fc7447653956d3ea4e17c95de65b60b1dbd0c7039385abdd5db98d9",
+          "path": "research/STUDY-RK-020/coverage.md"
+        },
+        {
+          "hash": "3d1798507c05f66929eecb2391724357be1ca55c2bfff30d5fe06f23c9abc745",
+          "path": "research/STUDY-RK-020/grounding.md"
+        },
+        {
+          "hash": "2314d7fc048a01b53b879da91e5abe47ff403e7d120777343f48a863f8e77e90",
+          "path": "research/STUDY-RK-020/handoff.md"
+        },
+        {
+          "hash": "bd80b39423fbb261be195c46c6e87a864ce02ff619283fb26289f1b717726e95",
+          "path": "research/STUDY-RK-021/grounding.md"
+        },
+        {
+          "hash": "ec4d627a065f59f015284a730c305625c741222ceba57c4dcad8e708294694d8",
+          "path": "research/STUDY-RK-021/handoff.md"
+        },
+        {
+          "hash": "60d21a55c19b7efe41bad7a232f648781c4072fb522447133cbc7988dff3506d",
+          "path": "research/STUDY-RK-021/pack-analogist.md"
+        },
+        {
+          "hash": "510268c11f3c884dedffa1e974eab4654c76af0f575eb43d4f04612e276aec9c",
+          "path": "research/STUDY-RK-021/pack-practitioner.md"
+        },
+        {
+          "hash": "7bd7ddb37a41be801c65eb7bf87e73b08b5ff67a797c740ea2645f0fdc4dc219",
+          "path": "research/STUDY-RK-021/pack-scholar.md"
+        },
+        {
+          "hash": "0a7928b5e3b807d8025a4caaca078e9d0c6948e629b595c79275b33e365a7d26",
+          "path": "research/STUDY-RK-022/grounding.md"
+        },
+        {
+          "hash": "16f04d0c7962c5123d9b37d7bba1d754cf7fbb949b1153ccc531cd48c725d10a",
+          "path": "research/STUDY-RK-022/handoff.md"
+        },
+        {
+          "hash": "3829ff653ad4205c776fab03994acf4a29d467ab9d12bcc22f19f423a0d89d10",
+          "path": "research/STUDY-RK-022/pack-analogist.md"
+        },
+        {
+          "hash": "908e6acb341a4eb9d7387715629f3eb1fa6868871ae53d8b571df59b5df32c78",
+          "path": "research/STUDY-RK-022/pack-practitioner.md"
+        },
+        {
+          "hash": "40b122e794d293ab4f9bc233280dfb54109242687cdc18b4fe9306b8f3573602",
+          "path": "research/STUDY-RK-022/pack-scholar.md"
+        },
+        {
+          "hash": "d80f2f4d4d6b8796b9011f23472461cb78ebc179220585b5cc64b68b6705b99d",
+          "path": "research/STUDY-RK-023/grounding.md"
+        },
+        {
+          "hash": "df9f2e05af294c7b1f13b36605158f09391c8e14a0bbb57d291de22687d62737",
+          "path": "research/STUDY-RK-023/handoff.md"
+        },
+        {
+          "hash": "7574c8275ffa8bee9037b38d2067139bccbc86081b53a97ef370b3990c9ad05b",
+          "path": "research/STUDY-RK-023/pack-analogist.md"
+        },
+        {
+          "hash": "d923e4d1a2d5bed38066b581d4029fac0dec56b939ec24f2584c52b52a95e9ea",
+          "path": "research/STUDY-RK-023/pack-practitioner.md"
+        },
+        {
+          "hash": "c721def8c9eb2f67b9fe89aa24afd08aed1bc49d1713281e30f898443a00a1ef",
+          "path": "research/STUDY-RK-023/pack-scholar.md"
+        },
+        {
+          "hash": "a8fab193e0e7f28add1e65bfde3682905096d86f344536e066c65d17a3d14061",
+          "path": "research/STUDY-RK-024/grounding.md"
+        },
+        {
+          "hash": "0d3e09e2c59a0db9de96db96fee6489c65c05a1d019d29a6e506a2846ef5237a",
+          "path": "research/STUDY-RK-024/handoff.md"
+        },
+        {
+          "hash": "813733f27c3e365cac28e09e37252baadcfc0b725abe0ea5c3b56f4b2946a683",
+          "path": "research/STUDY-RK-024/pack-analogist.md"
+        },
+        {
+          "hash": "3822685c3ac53fc4ba471dd876a1df9a515ba0b978b35b2e106d405bc8f04f33",
+          "path": "research/STUDY-RK-024/pack-practitioner.md"
+        },
+        {
+          "hash": "8ce7fa82d174dcb3c27f45093647ec0e0538e23cf21c31dff61b110f10702f5f",
+          "path": "research/STUDY-RK-024/pack-scholar.md"
+        },
+        {
+          "hash": "e93caa2819871315f2a8a88978388fde1717b7431f481f16b391031807991ca2",
+          "path": "research/STUDY-RK-025/grounding.md"
+        },
+        {
+          "hash": "e566e41d91af444c2dfcafa197aa8a97e298a9754ccedf5033e8538f64c93d5c",
+          "path": "research/STUDY-RK-025/handoff.md"
+        },
+        {
+          "hash": "0ee2b6b3ffab5b9c5eba429c04a6572a31f0e4d653cdfcaa16e6c2df3f76ca98",
+          "path": "research/STUDY-RK-025/pack-analogist.md"
+        },
+        {
+          "hash": "3f0d52b476abe0d94f136934ae1f18b9dec84c87fac08cc5fc1ae7270f587d85",
+          "path": "research/STUDY-RK-025/pack-practitioner.md"
+        },
+        {
+          "hash": "ad73678ef4dbff9114906d7cf1eab7fb27a2a7022e57bf532e4afc968dd3c857",
+          "path": "research/STUDY-RK-025/pack-scholar.md"
+        },
+        {
+          "hash": "b218d676a7fbbd3d08b5a47c9abfc04d6737af45f0bbf39e45fc8fe4d071f50d",
+          "path": "research/STUDY-RK-026/grounding.md"
+        },
+        {
+          "hash": "7ea0cc4417567dae0bf82f8282546b5d7c5582e8972a918a5460082728b83ca6",
+          "path": "research/STUDY-RK-026/handoff.md"
+        },
+        {
+          "hash": "67d5b57d3460c7ae1ba869d6441fdb848e82d0970cd2ec86967c6e6959eefb23",
+          "path": "research/STUDY-RK-026/pack-analogist.md"
+        },
+        {
+          "hash": "9d6697612371f3a0c1a9d99dd3fd0c253d7847102b059b1fd43ccd2408efad9b",
+          "path": "research/STUDY-RK-026/pack-practitioner.md"
+        },
+        {
+          "hash": "f41ff1bbeec1ca7cedf5f9bdab30fb7f1df72e6051d7c9f8fbeb7ca89810595d",
+          "path": "research/STUDY-RK-026/pack-scholar.md"
+        },
+        {
+          "hash": "ca0cbf7d094ca49b65b630704f82bdd9f783dbc71f006dbd499078bc3ab8ec0e",
+          "path": "research/STUDY-RK-027/grounding.md"
+        },
+        {
+          "hash": "cab7fdc61bb4e68410c0c26c98355d3fdb1b1cb14392d79cbd72ed54af1beb24",
+          "path": "research/STUDY-RK-027/handoff.md"
+        },
+        {
+          "hash": "df4debeb1de0421f02e8db97e1bb3068ec55e736b03bc2e965a740888782e5ce",
+          "path": "research/STUDY-RK-027/pack-analogist.md"
+        },
+        {
+          "hash": "f29be398488713e1fee0983a0fdd64bed863a49d668c42cd90fdc595d48a2cd7",
+          "path": "research/STUDY-RK-027/pack-practitioner.md"
+        },
+        {
+          "hash": "5194394684f45524efee128289c5414d3518ab49ab8e5bcee71e2a4cef8290ef",
+          "path": "research/STUDY-RK-027/pack-scholar.md"
+        },
+        {
+          "hash": "5ae095e23a5aa37652820f00cc7ab67d894b917b7036dfb4210273a387b7dacb",
+          "path": "research/STUDY-RK-028/grounding.md"
+        },
+        {
+          "hash": "7a363094ee689d2bc6533cdb906c3e52bf7b7b4c4a0847e22f9be0b4cbe1c14e",
+          "path": "research/STUDY-RK-028/handoff.md"
+        },
+        {
+          "hash": "e21e78869f5f87e6e08344d7417c02c5785eb1cc65b0fd28ac29ffb5d32716ef",
+          "path": "research/STUDY-RK-028/pack-analogist.md"
+        },
+        {
+          "hash": "e24c99b7c4dd8773b2a246bd7477794a1af5bc268732a9171563b3af3fb0423e",
+          "path": "research/STUDY-RK-028/pack-practitioner.md"
+        },
+        {
+          "hash": "e05d65c9ab4624c997751431573b708c94c3bda0b7c667974395c9724f31e05d",
+          "path": "research/STUDY-RK-028/pack-scholar.md"
+        },
+        {
+          "hash": "4d3ed92c0fb2d7a976cf7dc28f9982af14058af1e1cdb295a549ac5ac41f1453",
+          "path": "research/STUDY-RK-029/grounding.md"
+        },
+        {
+          "hash": "8b316f9036eac92a6dc08d208436151d257007340a0b6ee9abe3b2736cc9a117",
+          "path": "research/STUDY-RK-029/handoff.md"
+        },
+        {
+          "hash": "7bbd3e1a1f682b49aa1e535eb25f490150ec8c09d0606fcbeb0eb95be8369e99",
+          "path": "research/STUDY-RK-029/pack-analogist.md"
+        },
+        {
+          "hash": "66fbbd2a3205dd98cc44163700467ce244d44896230bafd722397208e61498c3",
+          "path": "research/STUDY-RK-029/pack-practitioner.md"
+        },
+        {
+          "hash": "3cf51177efdfeb09de0391a6988bd41d4e4a4fafee1da6d8369a62f50c4d7b6e",
+          "path": "research/STUDY-RK-029/pack-scholar.md"
+        },
+        {
+          "hash": "5fd26251bb67dfcb99abf0bf04e09b95441c4cebdfbc8d0f32803e06b1fcd4f8",
+          "path": "research/STUDY-RK-030/grounding.md"
+        },
+        {
+          "hash": "dfa14886c68c53042cb6660e46dc48bdd08433d21a74edb0b477b56e6a251dd4",
+          "path": "research/STUDY-RK-030/handoff.md"
+        },
+        {
+          "hash": "18163e4b8ef768a2ff7245dcc4513aff12f83eda75d4d6f0860337c290f3db09",
+          "path": "research/STUDY-RK-030/pack-analogist.md"
+        },
+        {
+          "hash": "3b5f5ced68b427176c339503460cc6a59a1d53ae457d0966a1bfa1fbdbcfb8f5",
+          "path": "research/STUDY-RK-030/pack-practitioner.md"
+        },
+        {
+          "hash": "d5a6abac886527030e94b91d51a2a5ffca2e3e3e77ab0d9ae7dc8a4915b5637b",
+          "path": "research/STUDY-RK-030/pack-scholar.md"
+        },
+        {
+          "hash": "8198d68b69fa7e22f6db48f78b2937e7da76404a795313bd728f5d1509f7be4f",
+          "path": "research/STUDY-RK-031/grounding.md"
+        },
+        {
+          "hash": "b5c031a5cc4b48eece552ce13b4decd4068c2ed45effdc80df4f0d063ba31fb6",
+          "path": "research/STUDY-RK-031/handoff.md"
+        },
+        {
+          "hash": "0e8215e603e9f7637141ad9cff043421714ea828271bedfd03f148fb2e1af497",
+          "path": "research/STUDY-RK-031/pack-analogist.md"
+        },
+        {
+          "hash": "58536b7c5ef8d74b67c30a68ee2ec906d386bbacaac8391c13df73a09e2d8898",
+          "path": "research/STUDY-RK-031/pack-practitioner.md"
+        },
+        {
+          "hash": "1d6ef07322d9902056e1395ccb06976e904855f0910a06fb638c918098aa0670",
+          "path": "research/STUDY-RK-031/pack-scholar.md"
+        },
+        {
+          "hash": "2e8c79764e7f88b7ca748605676d79e18e3ec50d81b3feb65a4f0f832e973819",
+          "path": "research/STUDY-RK-032/grounding.md"
+        },
+        {
+          "hash": "cb6b736388599c80ce1e5262d935c6bb265a290621d6a6f8229aa2909fbe15ec",
+          "path": "research/STUDY-RK-032/handoff.md"
+        },
+        {
+          "hash": "ece6aeb1aff373fad04b6e4c90a28f244abc0ddeff335aa30e09d58e7dd2ed76",
+          "path": "research/STUDY-RK-032/pack-analogist.md"
+        },
+        {
+          "hash": "63825ca16964f6639e1790c2a102d074b7bc9716b6a29fb392c8cb6867921a00",
+          "path": "research/STUDY-RK-032/pack-practitioner.md"
+        },
+        {
+          "hash": "0370dd75c19f1525396022dec11d8a203c1b154e4b6aa9b2db458918a8b0224e",
+          "path": "research/STUDY-RK-032/pack-scholar.md"
+        },
+        {
+          "hash": "7f3faf757ed3dabc34009ba979e45944097eb5cc9e4ca64c571df458d6f003b9",
+          "path": "research/STUDY-RK-033/grounding.md"
+        },
+        {
+          "hash": "794fb2b89ac971df40c32f85cd5b101dfb1ce29fa9dedceeeb0015a80b1e7271",
+          "path": "research/STUDY-RK-033/handoff.md"
+        },
+        {
+          "hash": "ffb2eecfe4374097e781fcd2378dcfde956f922e2d1c51f5e8d0e700a9e127b7",
+          "path": "research/STUDY-RK-033/pack-analogist.md"
+        },
+        {
+          "hash": "9b77ee4ec44adafddb7220947487ddb19a260dbd8929f33cf09edc0c64183b96",
+          "path": "research/STUDY-RK-033/pack-practitioner.md"
+        },
+        {
+          "hash": "fca9f540beb8a53f9e89ae0e52c698a4abbd82ee67c692f722cd361e894bbf73",
+          "path": "research/STUDY-RK-033/pack-scholar.md"
+        },
+        {
+          "hash": "172ba17eda42e2c89c6b9762f326ff551235d91265fc45ab1c7cb1c1d7e62154",
+          "path": "research/STUDY-RK-034/grounding.md"
+        },
+        {
+          "hash": "c5ef78ee2bf0ccc49449e7d3cc119c0c555d724c756d9348ab69c5d166acb132",
+          "path": "research/STUDY-RK-034/handoff.md"
+        },
+        {
+          "hash": "ad4a6eece45a6dc696f53f8dc7a3955e58869d65e0bc34a5fb03598c89f7db06",
+          "path": "research/STUDY-RK-034/pack-analogist.md"
+        },
+        {
+          "hash": "6a439c30582fe0c94ba0a0e80d79b9eb4eee4e4181f9050a9abb294bb44fe5d2",
+          "path": "research/STUDY-RK-034/pack-practitioner.md"
+        },
+        {
+          "hash": "707ae914ac2f07721e1fe3c73398ef0e96be0b9b3b1a62dd0e3ba822da8eb91f",
+          "path": "research/STUDY-RK-034/pack-scholar.md"
+        },
+        {
+          "hash": "1240b3d31bbe0eeb0b00931994c56f6e551e4142910514d06bd8a9c7506d5e84",
+          "path": "research/STUDY-RK-035/grounding.md"
+        },
+        {
+          "hash": "f0683c097c70d35ba926d92e21713bf4ac607bfe57f446516cfae45c568bded3",
+          "path": "research/STUDY-RK-035/handoff.md"
+        },
+        {
+          "hash": "e42aa30b90a2fce45cc3adcdf273ef7ce1876b94fc7fda02d7add59349a63dcc",
+          "path": "research/STUDY-RK-035/pack-analogist.md"
+        },
+        {
+          "hash": "af3307a229b3b9814e2d9c284265e58d4f3b5f773f78b7708aa7c9096b3f417d",
+          "path": "research/STUDY-RK-035/pack-practitioner.md"
+        },
+        {
+          "hash": "a010fe38914fa32337c5b6178892c10645078532f783881eee4534728e8e182c",
+          "path": "research/STUDY-RK-035/pack-scholar.md"
+        },
+        {
+          "hash": "03d7f4d5a64511778a3b8e535ddb7f46a6166b847e9e646114820236cf9f807f",
+          "path": "research/STUDY-RK-036/grounding.md"
+        },
+        {
+          "hash": "d7016456e027252d252024d4bad7ea0b33b09bf2ea3b44a0a8c01068949e7375",
+          "path": "research/STUDY-RK-036/handoff.md"
+        },
+        {
+          "hash": "1c4ed384c611a79929d56fba7268bb48d8db5225739084eb61d4a5583d317f68",
+          "path": "research/STUDY-RK-036/pack-analogist.md"
+        },
+        {
+          "hash": "e42faf36d151f933721a1e04e950a18e17ea5254602050c6acae97423173c3b1",
+          "path": "research/STUDY-RK-036/pack-practitioner.md"
+        },
+        {
+          "hash": "9495ffd4fa1d7bc5f10b4df182a601b3174aea636e68bb84eda298302f43ee62",
+          "path": "research/STUDY-RK-036/pack-scholar.md"
+        },
+        {
+          "hash": "5831141b93aca72a27ed2963d250f16d9670d5cc094175c0aa6a6011e3835d79",
+          "path": "research/STUDY-RK-037/grounding.md"
+        },
+        {
+          "hash": "ce4af6a472dbd55c7d68fcb97b6dbec3470ae3577eb12699b32722f83db45539",
+          "path": "research/STUDY-RK-037/handoff.md"
+        },
+        {
+          "hash": "80172eff9ff2a081770ab18706f3d3ea3e6fb1174699562bbb574efc90776096",
+          "path": "research/STUDY-RK-037/pack-analogist.md"
+        },
+        {
+          "hash": "301edda77f52507cea575cb4490ee5d37a1c81f2727e3b273e7f4c64d6aac242",
+          "path": "research/STUDY-RK-037/pack-practitioner.md"
+        },
+        {
+          "hash": "e2b882ddd70edb316da0384a15fb2e3e0cea0992739cae2ea98042a7cedf2ec1",
+          "path": "research/STUDY-RK-037/pack-scholar.md"
+        },
+        {
+          "hash": "fa43aeb08d83d4f93adfeb935e5e55b955061c09d282da9628d13d1b114d9621",
+          "path": "research/STUDY-RK-038/grounding.md"
+        },
+        {
+          "hash": "ba8d3fdb70df12b6743472937b59934acc5e33885b8951785aca0be5afbc065a",
+          "path": "research/STUDY-RK-038/handoff.md"
+        },
+        {
+          "hash": "4ed545e06760c20a425030c6941510e8a31c8129b120dfc155885e5c6434be68",
+          "path": "research/STUDY-RK-038/pack-analogist.md"
+        },
+        {
+          "hash": "c868330d254b8057c22075f255b959533c0a0667aed61bdd64a33d7a49ea51fe",
+          "path": "research/STUDY-RK-038/pack-practitioner.md"
+        },
+        {
+          "hash": "6a9f2484edab22d3245618c2e2fea9e9d97cd1745fcd815c2018e7692a17a6f4",
+          "path": "research/STUDY-RK-038/pack-scholar.md"
+        },
+        {
+          "hash": "e6a34bee1d6c8fdb90f0710bea33568dfdbbee1c81c143a4dfa93ed180534396",
+          "path": "research/STUDY-RK-039/grounding.md"
+        },
+        {
+          "hash": "6ac4c803a5a77ff11c04029c756cfb8c0b838f09143a7e114fa51f70abc5f5ef",
+          "path": "research/STUDY-RK-039/handoff.md"
+        },
+        {
+          "hash": "e1d0f93e1ae51b3edcba9c1d0810ff4f572f7ead2067956fa4344a086eeb5a00",
+          "path": "research/STUDY-RK-039/pack-analogist.md"
+        },
+        {
+          "hash": "6862f234c9f86bf0dcbb5640415b0de8a0c855ec271d7d908803b5870d65e328",
+          "path": "research/STUDY-RK-039/pack-practitioner.md"
+        },
+        {
+          "hash": "e903ec84fd8ef475d42af06d3c8e723aac1df8bfbd898a4e8535e747e2ee77fb",
+          "path": "research/STUDY-RK-039/pack-scholar.md"
+        },
+        {
+          "hash": "9a5e4663a834672bb5f7320114893a40b5ccdca2c6dab89d9afa7b400f962f49",
+          "path": "research/STUDY-RK-040/grounding.md"
+        },
+        {
+          "hash": "bf73fbc00418af16ee230746292a5e08b5d79a90ca2b89ec7ed657f71617e3fe",
+          "path": "research/STUDY-RK-040/handoff.md"
+        },
+        {
+          "hash": "6fd36f91cdfe74c4e0a1c47ef1f2895ce11be5ff5579022a51b18db652eacba6",
+          "path": "research/STUDY-RK-040/pack-analogist.md"
+        },
+        {
+          "hash": "66ed75085b0c1eada7f7bc0da1b0161a7ce79c36cc4b779ae62c62d7024aaeec",
+          "path": "research/STUDY-RK-040/pack-practitioner.md"
+        },
+        {
+          "hash": "c8d3112024ed3e9954b44b8ed4e1f34d353009dde7fed709ce74420879171b04",
+          "path": "research/STUDY-RK-040/pack-scholar.md"
+        },
+        {
+          "hash": "4409099b389c51961d38f9ca4b359d638ebcd59315e58bb15c01c742d50b1cc9",
+          "path": "research/STUDY-RK-041/grounding.md"
+        },
+        {
+          "hash": "2041aa28e25164fb456ecd0301cfae9c0c66e1b8866751f95e88b4458f6993b9",
+          "path": "research/STUDY-RK-041/handoff.md"
+        },
+        {
+          "hash": "798312dad11d0edb4a35c796c06d40dd6801c3f78166af2840703e3c92cef9c2",
+          "path": "research/STUDY-RK-041/pack-analogist.md"
+        },
+        {
+          "hash": "806d540099f95289a05dc4dbe658b765dcb4fed209915c96c0f293df6eb1efd0",
+          "path": "research/STUDY-RK-041/pack-practitioner.md"
+        },
+        {
+          "hash": "6b71f6fb020309eaccbaef09977b60ab02e33bf7bffa52dc848f9c6bce6ccfa2",
+          "path": "research/STUDY-RK-041/pack-scholar.md"
+        },
+        {
+          "hash": "ca5ac170c3fa63d0b5faf0e4e11742e930ae90f0210a3969c670d1495c64e3f2",
+          "path": "research/STUDY-RK-051/grounding.md"
+        },
+        {
+          "hash": "7d1a9e5eb46338ccb355cd34a6682261d3927d24fec27f1d7b557dde730319af",
+          "path": "research/STUDY-RK-051/handoff.md"
+        },
+        {
+          "hash": "2ddb5827c564f2ed12fbb0c9a84c6db2142a7771647c92e47f110f3b91723082",
+          "path": "research/STUDY-RK-051/pack-analogist.md"
+        },
+        {
+          "hash": "42062aecaf4b15ace84e56c92bb00b91f7beb624c5a1880bca98610b23e78ed6",
+          "path": "research/STUDY-RK-051/pack-practitioner.md"
+        },
+        {
+          "hash": "135974d2046534b4eee212d3265cae74da5417b9c19f65aabbe82ee9f930c7e1",
+          "path": "research/STUDY-RK-051/pack-scholar.md"
+        },
+        {
+          "hash": "ac852ce2cec5acb39242d0da22c25c360249fd3e73b23717df2c02bfda423ab5",
+          "path": "research/STUDY-RK-052/grounding.md"
+        },
+        {
+          "hash": "4315aecbc75a1a6567a9abe9074e6acd5a92210cd4895b72ae17efe9698bc39e",
+          "path": "research/STUDY-RK-052/handoff.md"
+        },
+        {
+          "hash": "177c8439063487f4d327e8dfb0a03511e6defdff0c281a72a2b8288da9f84399",
+          "path": "research/STUDY-RK-052/pack-analogist.md"
+        },
+        {
+          "hash": "56e378a503dab7ac357295780ba9473836f6e64a62bb53bd27a4692993cf4140",
+          "path": "research/STUDY-RK-052/pack-practitioner.md"
+        },
+        {
+          "hash": "166a8ce1f70f0e329378066747b1159e3826c0bff9505c085514ae7cff43ab1d",
+          "path": "research/STUDY-RK-052/pack-scholar.md"
+        },
+        {
+          "hash": "2bee10959cd231b2349a3ddeeaa44649b0fc7ef4af631dd625b52cb2ba0d9603",
+          "path": "research/STUDY-RK-053/grounding.md"
+        },
+        {
+          "hash": "284f0de3122c65b6d5d6be5be103d4189d4d5d65a903f6bcdfa2d113d05c14cc",
+          "path": "research/STUDY-RK-053/handoff.md"
+        },
+        {
+          "hash": "e19fef643d81c7fb7f934309e79d475e6908ca123c44f3f478007db277f1a06b",
+          "path": "research/STUDY-RK-053/pack-analogist.md"
+        },
+        {
+          "hash": "041bd0f2cd6b098827837307df71f25bb7a9e7f11af8925ee252f575e5f05d3d",
+          "path": "research/STUDY-RK-053/pack-practitioner.md"
+        },
+        {
+          "hash": "b83d758b71418065f5da6c27c277d629aaf7d2b7fff03a7a137216873cff6f11",
+          "path": "research/STUDY-RK-053/pack-scholar.md"
+        },
+        {
+          "hash": "60f3d5e8c10f2f8a69ea105592792b221d814a86a48c79a193f09c65e6b1954e",
+          "path": "research/STUDY-RK-054/grounding.md"
+        },
+        {
+          "hash": "18a985324c58d21581ab28a5c31dca4bee1574f261d6d1ff2ac33ddfcb2c7968",
+          "path": "research/STUDY-RK-054/handoff.md"
+        },
+        {
+          "hash": "04c8c985be200aea8c8b3be6b0af446ec873043efe0019508dea027dd0a981f6",
+          "path": "research/STUDY-RK-054/pack-analogist.md"
+        },
+        {
+          "hash": "ff2b72d8ac39f972d7eccd727951b4c437ae5175603ee3eac42311112aad9eec",
+          "path": "research/STUDY-RK-054/pack-practitioner.md"
+        },
+        {
+          "hash": "5f87dbdd583230c31d9d50fe75d9f25d64b55a2b24253dbf46059a8a33748da2",
+          "path": "research/STUDY-RK-054/pack-scholar.md"
+        },
+        {
+          "hash": "4b4f18661e7176131469000f3521ee09a8018e6ceaa9dbb51b84f7567d00fda0",
+          "path": "research/STUDY-RK-055/grounding.md"
+        },
+        {
+          "hash": "11e2254a6d4879022e4bd786fdfff7ac8e5e8a98b7843a54127a395b9fe8e562",
+          "path": "research/STUDY-RK-055/handoff.md"
+        },
+        {
+          "hash": "adec2dd87c69e5541cb3fe2a3c53ab935ac0f44b9d9a630a2caea7baafdc8378",
+          "path": "research/STUDY-RK-055/pack-analogist.md"
+        },
+        {
+          "hash": "5c9975913e4efd0a14d22b3c6d7d00404fe9a5687d20d41f74cdc1cfb3491e34",
+          "path": "research/STUDY-RK-055/pack-practitioner.md"
+        },
+        {
+          "hash": "89026acb20c04a26a331ad6df3bdc2685759413e285412e41e432a489a1b996e",
+          "path": "research/STUDY-RK-055/pack-scholar.md"
+        },
+        {
+          "hash": "b3e9484de234e90d513bb9d0fd478a21784ccc5679a5daf0ce4422b47bf9ba4a",
+          "path": "research/STUDY-RK-056/grounding.md"
+        },
+        {
+          "hash": "b6ff0dae2f7af95a25e24b0f624b3c2860543ada5b4419278b89f340964d044d",
+          "path": "research/STUDY-RK-056/handoff.md"
+        },
+        {
+          "hash": "c70f29ac19886aa810ba3c0272dd89baaf907b1cb2520d5125c9b971112cc856",
+          "path": "research/STUDY-RK-056/pack-analogist.md"
+        },
+        {
+          "hash": "ac972d937da8b46d5f5380549ac39951812b1d747a0545ff8e0b8a0c2d483378",
+          "path": "research/STUDY-RK-056/pack-practitioner.md"
+        },
+        {
+          "hash": "3ffc504ab4f331514a933f0c25cfcc5dd8d7298d9f53dc71f16311b7a6e36a78",
+          "path": "research/STUDY-RK-056/pack-scholar.md"
+        },
+        {
+          "hash": "9b8c8fdae30d4e1f6013a1a8cd33da15cf7cc206a233ae3e6a3b5e9a63dcf15e",
+          "path": "research/STUDY-RK-057/grounding.md"
+        },
+        {
+          "hash": "d48cdb2200f360be353f1beccd382958c7fdba90ade9491f68f9719ead063052",
+          "path": "research/STUDY-RK-057/handoff.md"
+        },
+        {
+          "hash": "5c5b5c9e6036130facbe1d11e5939207d78a0f607487c44aae85abe207c17e36",
+          "path": "research/STUDY-RK-057/pack-analogist.md"
+        },
+        {
+          "hash": "9563a8a9495cf5e1e6ca3b4935df62f00f12c18c888b5823dd094349f43635bf",
+          "path": "research/STUDY-RK-057/pack-practitioner.md"
+        },
+        {
+          "hash": "fa7c373e785b34cd61cb234e9117a08f8292082bde4cf3b84b08d8797175b039",
+          "path": "research/STUDY-RK-057/pack-scholar.md"
+        },
+        {
+          "hash": "8d4c73f1be8cf255cf1ea7520475fc5ad5e507a51b0c529018e7ddd7f487c6db",
+          "path": "research/STUDY-RK-058/grounding.md"
+        },
+        {
+          "hash": "2dbfb588317ac1bdc3be1b04fd3aedc03927d181e7128cc41b95019d3a099077",
+          "path": "research/STUDY-RK-058/handoff.md"
+        },
+        {
+          "hash": "de0aca32e0d18b294a28208f15a6551d80105e769fa65977a5705eb3e093a649",
+          "path": "research/STUDY-RK-058/pack-analogist.md"
+        },
+        {
+          "hash": "bbe0c87a768c4ac6636dafbaff5126865b7fe5eb18d91018c9f63207e2c18001",
+          "path": "research/STUDY-RK-058/pack-practitioner.md"
+        },
+        {
+          "hash": "35f0b8547bfd6cf9be71ebfa2319cf040f05e835db634af0a1905ba20d7bfff9",
+          "path": "research/STUDY-RK-058/pack-scholar.md"
+        },
+        {
+          "hash": "5620162130554eb6dc1090b27f0e0a12af0a90b9a2780e4ee0634fd816105859",
+          "path": "research/STUDY-RK-059/grounding.md"
+        },
+        {
+          "hash": "5743035050af2161f5dda453ef6ce6c04d7cb3b3a719f30d944bba5d5764a33d",
+          "path": "research/STUDY-RK-059/handoff.md"
+        },
+        {
+          "hash": "cb7ef7a77e58849ce91748b8f69d0ffd6998a0cf0ae0eebaa55f5c9c967fb7b4",
+          "path": "research/STUDY-RK-059/pack-analogist.md"
+        },
+        {
+          "hash": "91e8a208acc92a30ce7e1cefb2dfc493c550e5d253ab22fc9b767906a74d2e96",
+          "path": "research/STUDY-RK-059/pack-practitioner.md"
+        },
+        {
+          "hash": "384391aa31dd27a5c7ae3348ce0a528b4fba63442c480fc57c8a8f8c1e9044c4",
+          "path": "research/STUDY-RK-059/pack-scholar.md"
+        },
+        {
+          "hash": "b59f630b6c8f2a29f31478829ec1005810eeab22448c048d4d8d11352f29a4e4",
+          "path": "research/STUDY-RK-060/grounding.md"
+        },
+        {
+          "hash": "bff289001b0d6cd5120845b6c6b2258622b39943a834ffe9385557243b4d0c92",
+          "path": "research/STUDY-RK-060/handoff.md"
+        },
+        {
+          "hash": "e3c9525b6ea7db3ed0f9bd492cba9459d1aa360839a32bb2351ee5f1ebe1ba74",
+          "path": "research/STUDY-RK-060/pack-analogist.md"
+        },
+        {
+          "hash": "7f62018dc57aea5486feee7e1e289f11542455b9fb7a374a3f8b552deb5bb324",
+          "path": "research/STUDY-RK-060/pack-practitioner.md"
+        },
+        {
+          "hash": "e0df9c153bbc4156df7ac4cf249ca00945154a2d377d6bd307fdb24b8a857126",
+          "path": "research/STUDY-RK-060/pack-scholar.md"
+        },
+        {
+          "hash": "9478ac6830f433b0d0640e418468ba28a4e0eb20468bdb81d2eecbd0606cd757",
+          "path": "research/STUDY-RK-061/grounding.md"
+        },
+        {
+          "hash": "4ca6075dd00b0b143bdee8644eb068b53bcde3a7f5bcf3332cd892c65ee57edd",
+          "path": "research/STUDY-RK-061/handoff.md"
+        },
+        {
+          "hash": "dc00d1a569301cc526ac938a515b2b2cb838a68af328e42cbe7839c257953888",
+          "path": "research/STUDY-RK-061/pack-analogist.md"
+        },
+        {
+          "hash": "e5ccf14accddce7822c3af77e4bf458617752e253ea19a44357109775918ed48",
+          "path": "research/STUDY-RK-061/pack-practitioner.md"
+        },
+        {
+          "hash": "57c782e102ea850fa6f3f79744fa198117783b13d94a0af4a363c30180027438",
+          "path": "research/STUDY-RK-061/pack-scholar.md"
+        },
+        {
+          "hash": "07524296bf0c003c193e30d7c7904a7d659f5a90e090caf32f5c23bfb5ae7db4",
+          "path": "research/STUDY-RK-062/grounding.md"
+        },
+        {
+          "hash": "0e42b90cb5191c94213e860acdc61d0ca55df484e4546515e15a96ded78668bf",
+          "path": "research/STUDY-RK-062/handoff.md"
+        },
+        {
+          "hash": "481ca25b859de748502354ef9b9f74a3ded593f72d8766d2f65a6533cf14f506",
+          "path": "research/STUDY-RK-062/pack-analogist.md"
+        },
+        {
+          "hash": "4a94e2d341d6abe47be074681d170aafb6746399302baa2e986499f295ec07b5",
+          "path": "research/STUDY-RK-062/pack-practitioner.md"
+        },
+        {
+          "hash": "a637ec74b23437b234fe403ab0a317efb37e3cce405f4287bf37b9d872e47caf",
+          "path": "research/STUDY-RK-062/pack-scholar.md"
+        },
+        {
+          "hash": "a857d0a18fd7743b552e036cc9289794433cdccf3eeca2f3fa736d7cf24725f8",
+          "path": "research/STUDY-RK-063/grounding.md"
+        },
+        {
+          "hash": "5abf0dd8f64ad420358f855e25c4fdbd557cc47fab719dd0a85678eff7bc3074",
+          "path": "research/STUDY-RK-063/handoff.md"
+        },
+        {
+          "hash": "d58745bb079e1b61f1ae7b80799754eb7813bb8c39dbd3084587280897836aab",
+          "path": "research/STUDY-RK-063/pack-analogist.md"
+        },
+        {
+          "hash": "ed5cc5713aefe7285d164f45fbe8698691cf4a0f8465e50711c33b8d3057bbb1",
+          "path": "research/STUDY-RK-063/pack-practitioner.md"
+        },
+        {
+          "hash": "0aa26f915787eb76c647de079145fb8477de4f34313b9dcc8357b9c4eafd3f5f",
+          "path": "research/STUDY-RK-063/pack-scholar.md"
+        },
+        {
+          "hash": "dee8d354b6e4a3816c4f6357f3e05c5981ac830c076e3b2bcc32220af1058102",
+          "path": "research/STUDY-RK-064/grounding.md"
+        },
+        {
+          "hash": "0982679ea8413ecf1072d7ebbb2953dce6d0ecbc3c389c69622117d4ec3bd38e",
+          "path": "research/STUDY-RK-064/handoff.md"
+        },
+        {
+          "hash": "168c026125ee1d9c6bb6cdf9eafb51ebb219e7a354e3057b710cf34af861db37",
+          "path": "research/STUDY-RK-064/pack-analogist.md"
+        },
+        {
+          "hash": "63fd0c5870f4062047d0184f22700f275349c4b8fc331730037bd77573c823cb",
+          "path": "research/STUDY-RK-064/pack-practitioner.md"
+        },
+        {
+          "hash": "961f1709f56b7c37749ddf0cce8b25cdc9d89ac4c6e0ae2169654bd755caf4dc",
+          "path": "research/STUDY-RK-064/pack-scholar.md"
+        },
+        {
+          "hash": "603a0485c6fb091f7b0e9aeb30be49abb32b4345cac43740932baafb4487ed0b",
+          "path": "research/STUDY-RK-065/grounding.md"
+        },
+        {
+          "hash": "19de1edc6af597c6dee081ba00114636e1aa5573bc7edc824346c3a6d1662022",
+          "path": "research/STUDY-RK-065/handoff.md"
+        },
+        {
+          "hash": "83af65917cf815c0ef927a0a6ec35356bf45b0c0b6f925028beb2413f5cdea6b",
+          "path": "research/STUDY-RK-065/pack-analogist.md"
+        },
+        {
+          "hash": "9017abac6e21433e89aa6a7ded6560e590e89987bcbe4a635ee0874f014c3691",
+          "path": "research/STUDY-RK-065/pack-practitioner.md"
+        },
+        {
+          "hash": "4cb56a96061bd0e11525f1c2e5c8e67e86a78ffddd4e5df5d5e9fb33b970fb6c",
+          "path": "research/STUDY-RK-065/pack-scholar.md"
+        },
+        {
+          "hash": "027060844b7d040aabd9e99d7c786096a22f7a16380b9d30c1bbd5d954846f10",
+          "path": "research/STUDY-RK-066/grounding.md"
+        },
+        {
+          "hash": "0fc9e4c0710afd038bfee3ccadafe6721d59340a1fd0dad097527e9b942fb8fc",
+          "path": "research/STUDY-RK-066/handoff.md"
+        },
+        {
+          "hash": "0bc2105fc1698eab1a720a3609a3321f81390ba81bec7baa66116f6d0da1d53a",
+          "path": "research/STUDY-RK-066/pack-analogist.md"
+        },
+        {
+          "hash": "82c2e19c22eb9c83067a1837b74b262473712e23c13d4657687b169122f05b63",
+          "path": "research/STUDY-RK-066/pack-practitioner.md"
+        },
+        {
+          "hash": "b72d9271c759c01ab2028bf6f2837b9070a87d8283b3899cb18acf37d99e696f",
+          "path": "research/STUDY-RK-066/pack-scholar.md"
+        },
+        {
+          "hash": "c0287b3562e62b4d7123d70f3b6fdb85e4cc42749a95000e97323bf921288514",
+          "path": "research/STUDY-RK-067/grounding.md"
+        },
+        {
+          "hash": "45614fa9724b5ffa957ced7b35d38a636e1fd1619f6e1b45d56c762d0756fb69",
+          "path": "research/STUDY-RK-067/handoff.md"
+        },
+        {
+          "hash": "02bf9b53e9ed6f904408666e4a23d88552aaebbb94e0759c68b96fb831c50837",
+          "path": "research/STUDY-RK-067/pack-analogist.md"
+        },
+        {
+          "hash": "0e0dcebcb5c9f23f5e345a7a94fe35593e5b7f4492c2f07a856ce81399860570",
+          "path": "research/STUDY-RK-067/pack-practitioner.md"
+        },
+        {
+          "hash": "484a5b1996f729c351a8b692638bd3dbe60e76adc1bf6a21b88304e301a05e04",
+          "path": "research/STUDY-RK-067/pack-scholar.md"
+        },
+        {
+          "hash": "1a97bbfdb93053ffe932ee51a1d8e6250e72709dd27b32d7025225cde49e7c57",
+          "path": "research/STUDY-RK-068/grounding.md"
+        },
+        {
+          "hash": "4b1977388c228d0d3c6c2a887350cc65864f559751e6a1be592cc4b4d1500c17",
+          "path": "research/STUDY-RK-068/handoff.md"
+        },
+        {
+          "hash": "aac14d8b6823a7220a62bdfe796b3efd75c67fe43933912a190d0cc34b8e7067",
+          "path": "research/STUDY-RK-068/pack-analogist.md"
+        },
+        {
+          "hash": "8ff2e5b58b668dbad8718e05c4d15708496882e070e4b2eb9fe538d056e245d4",
+          "path": "research/STUDY-RK-068/pack-practitioner.md"
+        },
+        {
+          "hash": "e810f05be00c6abacb3149ce42aa1e8eca368f090a48f769931b4366f2eb8324",
+          "path": "research/STUDY-RK-068/pack-scholar.md"
+        },
+        {
+          "hash": "1a0ae947cf33585f357f481317eb475cb508afc457f46e6e27e5195126c8010a",
+          "path": "research/STUDY-RK-069/grounding.md"
+        },
+        {
+          "hash": "d0b9af386d4bf52f3c1a063a561bc8b0be6781d18b61ef43c1875396cb4c956f",
+          "path": "research/STUDY-RK-069/handoff.md"
+        },
+        {
+          "hash": "e31f967c4992cbfe3e36255ae601d4408b60796041f5f6d646163bb4c737a33f",
+          "path": "research/STUDY-RK-069/pack-analogist.md"
+        },
+        {
+          "hash": "a4e1ae249549370c109aa3129030083648618c5353bf29a495e0379c210fe0a9",
+          "path": "research/STUDY-RK-069/pack-practitioner.md"
+        },
+        {
+          "hash": "56e9e96cc3bf9451fc2340ddce1b8563174bbbfc076260f8c85b74ff485fc95b",
+          "path": "research/STUDY-RK-069/pack-scholar.md"
+        },
+        {
+          "hash": "42791a62b1d91cd13f85d71df4bf402b4f1925ecf412ccb3f5146a139ac4a7d8",
+          "path": "research/STUDY-RK-070/grounding.md"
+        },
+        {
+          "hash": "b548705237eb58b1d263301703d338ed9c5159d1a4ee6f0fe8364bb075a4b386",
+          "path": "research/STUDY-RK-070/handoff.md"
+        },
+        {
+          "hash": "1a6a41730d9f27c73ebad2f4b4634356d676605fb4e4be266b49e380c9d2c002",
+          "path": "research/STUDY-RK-070/pack-analogist.md"
+        },
+        {
+          "hash": "0f2e64ddbf85d1977fba94aca1a7453155f53b4ca911016675a9e99125031479",
+          "path": "research/STUDY-RK-070/pack-practitioner.md"
+        },
+        {
+          "hash": "09a165ead0a7a08e700ec2355d9cf321d08e5eaf3dbabc677a36610d85ad579b",
+          "path": "research/STUDY-RK-070/pack-scholar.md"
+        },
+        {
+          "hash": "0ce2407fe2df83a1e11128aff963bbda97195da456f8a0fae4058bc55531d9f3",
+          "path": "research/STUDY-RK-071/grounding.md"
+        },
+        {
+          "hash": "33b162fdd41865161056eb8f13bc416f74ce368a1a1f0f948d7a8e693f049b0a",
+          "path": "research/STUDY-RK-071/handoff.md"
+        },
+        {
+          "hash": "1b43f690507968ecb65282b649565d63894e9ef72626d7c2ca2741975659a522",
+          "path": "research/STUDY-RK-071/pack-analogist.md"
+        },
+        {
+          "hash": "3dcccc018722c898b477deb0c8b13a10c8408be820ce04c666db917decda34a5",
+          "path": "research/STUDY-RK-071/pack-practitioner.md"
+        },
+        {
+          "hash": "a12509c8cd4a8d27b13d03da5379c04422229295f556fa8866949def15217388",
+          "path": "research/STUDY-RK-071/pack-scholar.md"
+        },
+        {
+          "hash": "d6534df930943639f8fe529c1453dda15cb58b4c5c10304f9d049f5241865175",
+          "path": "research/STUDY-RK-072/grounding.md"
+        },
+        {
+          "hash": "b8166a4c1ab0a81132e9891365b464803d94118a8f1a8415f788e4573f318d0f",
+          "path": "research/STUDY-RK-072/handoff.md"
+        },
+        {
+          "hash": "0bd69014226af562ce7ba6334c1172a8e0952ba9a614e42aee5f09146f100347",
+          "path": "research/STUDY-RK-072/pack-analogist.md"
+        },
+        {
+          "hash": "c49181ab7798a8a50ea046023bb3fffc76a4472a990d0fe7e5b04a4c47bfccb0",
+          "path": "research/STUDY-RK-072/pack-practitioner.md"
+        },
+        {
+          "hash": "a50d4ea13eb341b8692d92b02375aecda66928363e6ddb6c66c1c2bbd3c91678",
+          "path": "research/STUDY-RK-072/pack-scholar.md"
+        },
+        {
+          "hash": "98911e9acdc0df0efada73f17fb505f5364b45b2d17272e42d9d4c789998e97b",
+          "path": "research/STUDY-RK-073/grounding.md"
+        },
+        {
+          "hash": "4f0ef74b4039b6975ba57edb47ac938593e85c494f35dd55620d0dde8bababca",
+          "path": "research/STUDY-RK-073/handoff.md"
+        },
+        {
+          "hash": "100304e774f964f5ffe67b36450ac1f49bc2cb55e1293632e299dc5f421f9c70",
+          "path": "research/STUDY-RK-073/pack-analogist.md"
+        },
+        {
+          "hash": "150e6f1725e638390d7b94734cc5132d0a20309dea0839f1e585fac4cf64f7d1",
+          "path": "research/STUDY-RK-073/pack-practitioner.md"
+        },
+        {
+          "hash": "1ec7624969e16dee33060e868e2504bd67fa4644fa1931ddefea33bb6bf294f3",
+          "path": "research/STUDY-RK-073/pack-scholar.md"
+        },
+        {
+          "hash": "a70e52233137ae48ebbdfa03f265dd6dbb5dec173769a8ef3c8daf758f3b25d1",
+          "path": "research/STUDY-RK-074/grounding.md"
+        },
+        {
+          "hash": "b76e6a4057fc187b34668b3567107398a1fe9d894ecfd3c761c49aac19afd549",
+          "path": "research/STUDY-RK-074/handoff.md"
+        },
+        {
+          "hash": "7c2b2838da611190fbf6f17b4873df6af011ef2969339df9d055d0d035b73b9a",
+          "path": "research/STUDY-RK-074/pack-analogist.md"
+        },
+        {
+          "hash": "d67d16f1014a901af701aa4b406cbf64cc71c155fff7fd2b1c9e5738cb316581",
+          "path": "research/STUDY-RK-074/pack-practitioner.md"
+        },
+        {
+          "hash": "f48e021e3af41ce5227c486985cde47064e6be351674a5c91f3a50101f3a6dc9",
+          "path": "research/STUDY-RK-074/pack-scholar.md"
+        },
+        {
+          "hash": "76a32715775e24a3ccf5f5933d10a37357c2e7f2d73139fc0be1e077fb0cf490",
+          "path": "research/STUDY-RK-075/grounding.md"
+        },
+        {
+          "hash": "087c0f7ddf2827f3da13602692191ae878a699bf32c9e17395acb2f821aff46a",
+          "path": "research/STUDY-RK-075/handoff.md"
+        },
+        {
+          "hash": "a60926fb5f5257f0a500a4f6ef1d76b12a874a5c25417b2cd843ebde27aec03d",
+          "path": "research/STUDY-RK-075/pack-analogist.md"
+        },
+        {
+          "hash": "81272e36e7af46fef87e3072fd9dd427325b4713c1bfadaa10171724b7950628",
+          "path": "research/STUDY-RK-075/pack-practitioner.md"
+        },
+        {
+          "hash": "fd69a228da5be3d865e577733f154c20966580688bd25c7b4d697e56a31f6513",
+          "path": "research/STUDY-RK-075/pack-scholar.md"
+        },
+        {
+          "hash": "64c9753162071461154c4342905f85861326fb969fa90729202754c477bf5994",
+          "path": "research/STUDY-RK-076/grounding.md"
+        },
+        {
+          "hash": "74ee51bd07e0d5796615fa8ccd9199b3872db6214303640165902a8baddeffe3",
+          "path": "research/STUDY-RK-076/handoff.md"
+        },
+        {
+          "hash": "7558515d6fda3b58fb863f13ec5248f3a6dda478f131795bf9da5175b3918a6b",
+          "path": "research/STUDY-RK-076/pack-analogist.md"
+        },
+        {
+          "hash": "0507ef1f4fb25cb4fa691df1ead53c4e97749303fdb7ed57f867bbd131752c51",
+          "path": "research/STUDY-RK-076/pack-practitioner.md"
+        },
+        {
+          "hash": "8c142a52398d68286b95dcf701349641c2ae3e51996fa79f38d8c791ba935331",
+          "path": "research/STUDY-RK-076/pack-scholar.md"
+        },
+        {
+          "hash": "a553948fcb04e64ed382e1fab15aff35a8df958d8b8b0150c5b57d41f9b3b906",
+          "path": "research/STUDY-RK-077/grounding.md"
+        },
+        {
+          "hash": "f253479b6511247a3dd0ddbab861b0a72ad35f7d39a053da7b8edd5c427f7392",
+          "path": "research/STUDY-RK-077/handoff.md"
+        },
+        {
+          "hash": "8f5619cee5547844eb31d64228b8c067fcadc0199153ec06cce05d8c41bd9ed3",
+          "path": "research/STUDY-RK-077/pack-analogist.md"
+        },
+        {
+          "hash": "b0afa66ac03d47880bf845ede48669418f9350ca1e8d37e5a26931dee6f8d95f",
+          "path": "research/STUDY-RK-077/pack-practitioner.md"
+        },
+        {
+          "hash": "0c5b6cc3221afc8f0776c09d897de3349356e6351069927748170a6cc8e36fef",
+          "path": "research/STUDY-RK-077/pack-scholar.md"
+        },
+        {
+          "hash": "44234a7762ab5aecc0e7b38c337c7f71338728c3420091d7119451ddf36b8a55",
+          "path": "research/STUDY-RK-078/grounding.md"
+        },
+        {
+          "hash": "a93db60d835b63c3896cfa094b43dff62fa68bb2225ba18a452ed0136610aca9",
+          "path": "research/STUDY-RK-078/handoff.md"
+        },
+        {
+          "hash": "814727bf2c996a8e14a2f432e1b627e4a3ccc666ab415daad62f073238306004",
+          "path": "research/STUDY-RK-078/pack-analogist.md"
+        },
+        {
+          "hash": "633202d2f03ec514aae3272e67fa9fde0e532bd3bc7ea7a08833de30b8b1283f",
+          "path": "research/STUDY-RK-078/pack-practitioner.md"
+        },
+        {
+          "hash": "c91d52ad3767d402c15e45bae5b0001f7a476a55f532665def7670efacee2246",
+          "path": "research/STUDY-RK-078/pack-scholar.md"
+        },
+        {
+          "hash": "c287d1c371e2b4ee65b23ff434cfb1ed8b0c961a38cec550d2f5c95424e9e522",
+          "path": "research/STUDY-RK-079/grounding.md"
+        },
+        {
+          "hash": "8f0c231c3e3daf8a32904e6d678032afaf7b8542727fcb760cd0a225820e215a",
+          "path": "research/STUDY-RK-079/handoff.md"
+        },
+        {
+          "hash": "33161069ed6125aa05e007bd1b209e3a6162d601d9d500b8b9bd854f2fc9da54",
+          "path": "research/STUDY-RK-079/pack-analogist.md"
+        },
+        {
+          "hash": "72445dee09a835339aa4471997a87ae761980426b84513f3e1df5e8aea1e0b67",
+          "path": "research/STUDY-RK-079/pack-practitioner.md"
+        },
+        {
+          "hash": "4931d5f55a91ac422a0f2a6e744119ab3b627817fde8f4657062b4cb542dc476",
+          "path": "research/STUDY-RK-079/pack-scholar.md"
+        },
+        {
+          "hash": "4c17ce49a406a60a95e92161732378cc0418f67d1ceaa040b43abf81218051f2",
+          "path": "research/STUDY-RK-080/grounding.md"
+        },
+        {
+          "hash": "542eb5874173d8f88fc9c40b04da539c653b2e11b8b41c78534476319a8cb512",
+          "path": "research/STUDY-RK-080/handoff.md"
+        },
+        {
+          "hash": "27028105dafce84b0dc475e20b17dc0e36484efc10d88432eba1233d4a934f17",
+          "path": "research/STUDY-RK-080/pack-analogist.md"
+        },
+        {
+          "hash": "ae91ea3d0dd18c8e56acb81eb5a47c6d07139d0e445fd5efd2794186d4505afb",
+          "path": "research/STUDY-RK-080/pack-practitioner.md"
+        },
+        {
+          "hash": "c1d7655afa099ace30038cf6f10b29b262e4f0c438114b96a489e3f5c4a8743f",
+          "path": "research/STUDY-RK-080/pack-scholar.md"
+        },
+        {
+          "hash": "6f629a7220bf0600df1f02b4e7f8e87d18a57718e533371d8950b3a6c49156c9",
+          "path": "research/STUDY-RK-081/grounding.md"
+        },
+        {
+          "hash": "bd870b0470f9603d694a29331270c52c24f9cb52f52449b313fa07fbe908e466",
+          "path": "research/STUDY-RK-081/handoff.md"
+        },
+        {
+          "hash": "8583a18fd093578d29fe730e06cb29f7e3c88dc8a4c0e9a66b03d73d2d09502d",
+          "path": "research/STUDY-RK-081/pack-analogist.md"
+        },
+        {
+          "hash": "cd0ba698881c2d9d6bce0b5778d280a9eb732734124c46dc9ddfe64fa8c389ec",
+          "path": "research/STUDY-RK-081/pack-practitioner.md"
+        },
+        {
+          "hash": "6188240a11bb9537599cb2cb47e7d2f37924809416298d9ac0def721bb687066",
+          "path": "research/STUDY-RK-081/pack-scholar.md"
+        },
+        {
+          "hash": "adafd528df39500d4e08a81f7054f2eb6136ba6d027cea42da0107fdfba6ae38",
+          "path": "research/STUDY-RK-082/grounding.md"
+        },
+        {
+          "hash": "1147223c36cf1502e8ca3be64e3ec2b54b3117d9a546b1b3517893c0f6d2e0e2",
+          "path": "research/STUDY-RK-082/handoff.md"
+        },
+        {
+          "hash": "d987119db59fdd379c4a404ce03455b53a09ac0ea5af906c40f82ef7c347300c",
+          "path": "research/STUDY-RK-082/pack-analogist.md"
+        },
+        {
+          "hash": "b0ea8cf48e9b58ee26d9e01f8ccbb5ed5232fb0e9955b3346e83e68f49438764",
+          "path": "research/STUDY-RK-082/pack-practitioner.md"
+        },
+        {
+          "hash": "72de1f98d44f10b98d9e2036776a887c3ad6f915e8fa2a02fa2f86e46077db73",
+          "path": "research/STUDY-RK-082/pack-scholar.md"
+        },
+        {
+          "hash": "72ef94ee1718a7d97da1796d1e650739a9559e46e632c985ea87e995f48839c0",
+          "path": "research/STUDY-RK-083/grounding.md"
+        },
+        {
+          "hash": "b49ce6347b0495f504560ffbacae81ef5fdee24ce6daee9a41a11deba4a1159a",
+          "path": "research/STUDY-RK-083/handoff.md"
+        },
+        {
+          "hash": "4fb22878815c6f80807bd06517ebbd46feab9025bfa0c6399f07b754b6af1921",
+          "path": "research/STUDY-RK-083/pack-analogist.md"
+        },
+        {
+          "hash": "fea4e9988f9a0893a65f39832845b5329d97698b725f06bb903a01f523d8e199",
+          "path": "research/STUDY-RK-083/pack-practitioner.md"
+        },
+        {
+          "hash": "32ca4f6f5b82cae76523e0c4c8d7a7cb78b2bec58c1c2c6d32e59197c4b50eac",
+          "path": "research/STUDY-RK-083/pack-scholar.md"
+        },
+        {
+          "hash": "185cf5211812a0ca49a9d22032ffca81fbc5dc847ef905e4d720b0caeaa020bc",
+          "path": "research/STUDY-RK-084/grounding.md"
+        },
+        {
+          "hash": "d59ba35114343b3010b378f39117ae15f60a59a646388f2c707569cc96cba5c0",
+          "path": "research/STUDY-RK-084/handoff.md"
+        },
+        {
+          "hash": "1982306a0b4f74186f360887ce54e9aae5970096c63ac919e3b68793c99ccc42",
+          "path": "research/STUDY-RK-084/pack-analogist.md"
+        },
+        {
+          "hash": "f0a673d730746dd2f823489a5d0ab67dd41983e9cfb60aafea78c5bf7f22f9e4",
+          "path": "research/STUDY-RK-084/pack-practitioner.md"
+        },
+        {
+          "hash": "d6faed2f9f4170b05837ebcce805000924665fdf3d76e27b069c97e306403c25",
+          "path": "research/STUDY-RK-084/pack-scholar.md"
+        },
+        {
+          "hash": "f98c3e867379e3b7dacdd95c72397b27be407d038091317d6950f48fda619f06",
+          "path": "research/STUDY-RK-085/grounding.md"
+        },
+        {
+          "hash": "fe2fc2271265e3a2de94e77a5a4960cdc1b9163ca84c44210a135d7619809755",
+          "path": "research/STUDY-RK-085/handoff.md"
+        },
+        {
+          "hash": "56c92ba10f69930e0f9b13034a6d6389f6e11eb4e5067119af6bdfb3789e3d99",
+          "path": "research/STUDY-RK-085/pack-analogist.md"
+        },
+        {
+          "hash": "5d567f0ca6897bdf58a2ec399dbd761de44c9a076c058a7954d1a3469cc47fb4",
+          "path": "research/STUDY-RK-085/pack-practitioner.md"
+        },
+        {
+          "hash": "bcf0ca0a1bb4ed9e4736d7d4c1bd2d10101d7f3fe7fe5dd51659b48b175a9cfa",
+          "path": "research/STUDY-RK-085/pack-scholar.md"
+        },
+        {
+          "hash": "22fb4445574cc5ecefd473c85271f522bfb510172555bd8736d1c2263cbc20fb",
+          "path": "research/STUDY-RK-086/grounding.md"
+        },
+        {
+          "hash": "df25ca50170131670c3e0170aa9cb9fe193e58c9dde172093acefcf8e02f9c22",
+          "path": "research/STUDY-RK-086/handoff.md"
+        },
+        {
+          "hash": "725d9c1eeb919d8eb2ab4f915c0abb9a7dec9b24ec190da0d2b53772187e4bbf",
+          "path": "research/STUDY-RK-086/pack-analogist.md"
+        },
+        {
+          "hash": "2cc4b0b25586421ec02d75b4784e32a8d0fd07f0236c420e3040176c1725ea87",
+          "path": "research/STUDY-RK-086/pack-practitioner.md"
+        },
+        {
+          "hash": "34f63ac820d4cddf8f7b72b686a03d1da2a9434cf2bc91675b6d5bc71f0a664b",
+          "path": "research/STUDY-RK-086/pack-scholar.md"
+        },
+        {
+          "hash": "c31f54d9e06981f12021673dc73a60422681b7a3542753935dba617a6c8f24a6",
+          "path": "research/STUDY-RK-087/grounding.md"
+        },
+        {
+          "hash": "f5da5146c9f312f59c4df4d9571c4ea1f40693063bf066298bafa0131640b4fe",
+          "path": "research/STUDY-RK-087/handoff.md"
+        },
+        {
+          "hash": "7e1dd3efd2e351fa65c47ccfbf394636986e285524be08a71f44d0c26e7105f8",
+          "path": "research/STUDY-RK-087/pack-analogist.md"
+        },
+        {
+          "hash": "7297e2ee00928f2844065b9a56fde55127c0676813b98cae69887c7641490e7b",
+          "path": "research/STUDY-RK-087/pack-practitioner.md"
+        },
+        {
+          "hash": "05290b7cd3181f43a9b5d7e1c635cb4df44aa1b7b6aa801f5fe75086c289cc08",
+          "path": "research/STUDY-RK-087/pack-scholar.md"
+        },
+        {
+          "hash": "575eb3d82a4ee1be982fa8517eabd209ad63e002e6c15a7ef41d942708c2e50d",
+          "path": "research/STUDY-RK-088/grounding.md"
+        },
+        {
+          "hash": "9a0a35b0d7a21eb067e01cbfaffddbea9b13fc04603372b27fee3421e321b992",
+          "path": "research/STUDY-RK-088/handoff.md"
+        },
+        {
+          "hash": "411539ba25a3c4bb2cec2b217e0a33a3fd5b5f26db68712d06453d517ee39ce6",
+          "path": "research/STUDY-RK-088/pack-analogist.md"
+        },
+        {
+          "hash": "30cdba1bb950e04a333091b079848210acbc7a18ff4a876fa250235581550b10",
+          "path": "research/STUDY-RK-088/pack-practitioner.md"
+        },
+        {
+          "hash": "e9659a47631a2bbec51f31ac853ecc5afa3267785c033f5d3855c83749b0c6ec",
+          "path": "research/STUDY-RK-088/pack-scholar.md"
+        },
+        {
+          "hash": "6237a877679454c0b4f02f77c0fe7290e006bd9a3a0b86271d8750e04419fbb3",
+          "path": "research/STUDY-RK-089/grounding.md"
+        },
+        {
+          "hash": "751966a11a1123ee62cc0f8cb17a8dd6e18867e3a17c1d0f45d94b00a5f509f8",
+          "path": "research/STUDY-RK-089/handoff.md"
+        },
+        {
+          "hash": "9916cb14132f37804161df7bc237aa24931c3ede70f43d1cb493f7d1176ded00",
+          "path": "research/STUDY-RK-089/pack-analogist.md"
+        },
+        {
+          "hash": "b02b493067b0424643aed905e9d945dd849ab1cbc6cfb90c498be693582c5fee",
+          "path": "research/STUDY-RK-089/pack-practitioner.md"
+        },
+        {
+          "hash": "7639dc2bab1030188537df946fb151d0158a313244c6e0faee311b9094888c3d",
+          "path": "research/STUDY-RK-089/pack-scholar.md"
+        },
+        {
+          "hash": "8886c911ef7c8a4b4287049b6b05e1d534aaf4936ef9a9869c7cca740f021eea",
+          "path": "research/STUDY-RK-090/grounding.md"
+        },
+        {
+          "hash": "d94c9bc09e89c9f5cbcc578bfcabb68a976137fb9b9b2e62938561779ffdbb77",
+          "path": "research/STUDY-RK-090/handoff.md"
+        },
+        {
+          "hash": "c97514dd79b1ecfbeb74ab8a6bf645ae8a8f5cda95245dfebc7135ecfba30d0c",
+          "path": "research/STUDY-RK-090/pack-analogist.md"
+        },
+        {
+          "hash": "d03d931267da07f5ebf848bb3bd6bce3c8b1fac18b4c7549fcc7419e42ab8641",
+          "path": "research/STUDY-RK-090/pack-practitioner.md"
+        },
+        {
+          "hash": "02073bbbaf35b239e671cd24aee006c276840d706efe0bdb2f6748b5fc2404e6",
+          "path": "research/STUDY-RK-090/pack-scholar.md"
+        },
+        {
+          "hash": "d6b3baf1d70c979b191fc141532616464ddf15a25f958a22882606a13b8bb718",
+          "path": "research/STUDY-RK-091/grounding.md"
+        },
+        {
+          "hash": "4d118a1912e5f67a96fcb985e359aeeb2192c711d0cad0534e0ff1236c377af0",
+          "path": "research/STUDY-RK-091/handoff.md"
+        },
+        {
+          "hash": "d82bfdf23cc53160093799897da0402b7878c7bbab5fc991eee1f4500bc77d42",
+          "path": "research/STUDY-RK-091/pack-analogist.md"
+        },
+        {
+          "hash": "7fa1665cc1d1a5f9d26aa78a68dadf8475ee222b71395d552b2ff0b0f09a7973",
+          "path": "research/STUDY-RK-091/pack-practitioner.md"
+        },
+        {
+          "hash": "7dde1dbd9d43b06726548d68d6a0099ed2f72596db186a97027671ca1d7b7189",
+          "path": "research/STUDY-RK-091/pack-scholar.md"
+        },
+        {
+          "hash": "da5d22db4d78b8faaa243e07e5c17969a57b07490ed6e0dd3e975e45546d5816",
+          "path": "research/STUDY-RK-092/grounding.md"
+        },
+        {
+          "hash": "fbb0fada50e2e07911cc62aa3cb10a541e8be6a5bda05dec316b0e45ad9d39cf",
+          "path": "research/STUDY-RK-092/handoff.md"
+        },
+        {
+          "hash": "c1ccdb50f68e8fdb8948228f30f3c9e37193d0c8e5b44f07fd730a4703632d19",
+          "path": "research/STUDY-RK-092/pack-analogist.md"
+        },
+        {
+          "hash": "c9cfa2f649a2e8caea3a0826e01fe9f8f81e1e364f156d206d4cf4a205425ff9",
+          "path": "research/STUDY-RK-092/pack-practitioner.md"
+        },
+        {
+          "hash": "16ec5c98b222d53680f7253dd3530e30b0be665dbbd5c1dc686443e79cd7d818",
+          "path": "research/STUDY-RK-092/pack-scholar.md"
+        },
+        {
+          "hash": "38efeec2e9dae86b6ea523f7f67d2635d85fc2d9d931f937d41e47e2dea838a3",
+          "path": "research/STUDY-RK-093/grounding.md"
+        },
+        {
+          "hash": "d06211dc331cd0ded59b7c56f000fb30f71324cde1b7db21c2c4fb3faacc548c",
+          "path": "research/STUDY-RK-093/handoff.md"
+        },
+        {
+          "hash": "7de152a9fcdb0b7127cd29c9ca9a45f3f7934e23445dc08e7fcd0b78f16652ad",
+          "path": "research/STUDY-RK-093/pack-analogist.md"
+        },
+        {
+          "hash": "db85d1dbd44640df0e953d18aea916030e46bbdf6f9278035f17f89cc7ac97b0",
+          "path": "research/STUDY-RK-093/pack-practitioner.md"
+        },
+        {
+          "hash": "af271aff634ed8c2155e1e28e89c43435bc29e8ac36ae60c5cd88e2a254dbf56",
+          "path": "research/STUDY-RK-093/pack-scholar.md"
+        },
+        {
+          "hash": "416af3f790a283402cd95b744d4c427a7c30eb3aa1dc8e934cc7d6f41d857a89",
+          "path": "research/STUDY-RK-094/grounding.md"
+        },
+        {
+          "hash": "8066759ae1c49c792a5311d30efa5b80719600e4332fa55555740c61349227ca",
+          "path": "research/STUDY-RK-094/handoff.md"
+        },
+        {
+          "hash": "99e09a567e1d8de860ab914682ab7984acf4763e1566eafa253ff9610fed2e9d",
+          "path": "research/STUDY-RK-094/pack-analogist.md"
+        },
+        {
+          "hash": "8f2a85e4c20623e5794cc04dbf1c432d342685121ec3b84655d969c5bb3bcde1",
+          "path": "research/STUDY-RK-094/pack-practitioner.md"
+        },
+        {
+          "hash": "446c5bd7cd8f1d764368d05fe38d326e8922c2a12154c50db5b76731612fef9e",
+          "path": "research/STUDY-RK-094/pack-scholar.md"
+        },
+        {
+          "hash": "e43fceebf6ff8201890921ae0091b88ad3623cccab5c4aff13a26619b2380591",
+          "path": "research/STUDY-RK-095/grounding.md"
+        },
+        {
+          "hash": "9abe29c16331b79eb34f6523bd3b76066dffee0af1a602e7828ab9d6d278e819",
+          "path": "research/STUDY-RK-095/handoff.md"
+        },
+        {
+          "hash": "cd8d8cfe0b1b9f89af32e2b4df0bb6c7c29284082dce8e3f9e2d5eb49dfadd20",
+          "path": "research/STUDY-RK-095/pack-analogist.md"
+        },
+        {
+          "hash": "5dea65b1d257ef71cf22ff92508232884df073bbd2fe17db93988c89a4fbbac0",
+          "path": "research/STUDY-RK-095/pack-practitioner.md"
+        },
+        {
+          "hash": "e61df92e643af7782fb13460337706f20f1866b5d910aeda71ffd5d43b10cc29",
+          "path": "research/STUDY-RK-095/pack-scholar.md"
+        },
+        {
+          "hash": "8b0ad4367510ce5c48fc755b2f17d4246d0ff806378083f0cc6666d3aefe588d",
+          "path": "research/STUDY-RK-096/grounding.md"
+        },
+        {
+          "hash": "c843b85058ab42c1fbe290e2b9394f167576fe2329e2aaab99754f16a334220e",
+          "path": "research/STUDY-RK-096/handoff.md"
+        },
+        {
+          "hash": "2bb9f139a626dc6c2edec0d7472efe94c9b2b5947b4b5906bba5fb208ebd0ab2",
+          "path": "research/STUDY-RK-096/pack-analogist.md"
+        },
+        {
+          "hash": "70ce2f266e14976460b6fc9aa4c2b49b920a781ba399fe49b6332f50e9f1ab55",
+          "path": "research/STUDY-RK-096/pack-practitioner.md"
+        },
+        {
+          "hash": "285f801632ea9006ec2bee5d4ea09f24921d47af5291bae8fb3c5c78411bc9a9",
+          "path": "research/STUDY-RK-096/pack-scholar.md"
+        },
+        {
+          "hash": "fcb6e354b1525f0804f44b61a3d69ca91dfe1b6bcb5c3d5fc84a83538993eed4",
+          "path": "research/STUDY-RK-097/grounding.md"
+        },
+        {
+          "hash": "6b95e08bb0d7ded304a8c14a775e28a6e225af04a5f09cf04f9add8b4fc06d76",
+          "path": "research/STUDY-RK-097/handoff.md"
+        },
+        {
+          "hash": "a303602addfe7f3fffbce8db5785c1360a55e374d7acb71ee95165d4ce6581d9",
+          "path": "research/STUDY-RK-097/pack-analogist.md"
+        },
+        {
+          "hash": "17c7615592140ff392c0dcd98d72513574d93577b7f14d7c0fb2b56b8bf6b780",
+          "path": "research/STUDY-RK-097/pack-practitioner.md"
+        },
+        {
+          "hash": "70a2cf56e06db49a78c4daff866ac4a8a28c0b4ecb8f930354b2f31d4cfc8a75",
+          "path": "research/STUDY-RK-097/pack-scholar.md"
+        },
+        {
+          "hash": "1a9c752cc2a67e172e62a4f048214eb58997fde4ec92e40b798b528aa04174b6",
+          "path": "research/STUDY-RK-098/grounding.md"
+        },
+        {
+          "hash": "668fd7c42232719f4bafc8fa4a09015cdeda86d78df2dc91cde883d7d3acf919",
+          "path": "research/STUDY-RK-098/handoff.md"
+        },
+        {
+          "hash": "d9a228bd9cec91f7dbf5e3d1736ec5c1c74b9187b7797b134d6b0096c55e4dc6",
+          "path": "research/STUDY-RK-098/pack-analogist.md"
+        },
+        {
+          "hash": "ae8d293aa36ab552e9b4d7723aab0317329c6332d57a0564c1d840e953062158",
+          "path": "research/STUDY-RK-098/pack-practitioner.md"
+        },
+        {
+          "hash": "3c8832298dad6bdf1df5cda05a413aa2e83fbe572998b980690621b483039bd8",
+          "path": "research/STUDY-RK-098/pack-scholar.md"
+        },
+        {
+          "hash": "3bb5872da0b0e44807043850c94ca431566b7c19844c4bf4ed182bf27f7fc980",
+          "path": "research/STUDY-RK-099/grounding.md"
+        },
+        {
+          "hash": "7dc2fb22f2de8f69bc691ca463d73326929b4910cb6b228434346527ff470a06",
+          "path": "research/STUDY-RK-099/handoff.md"
+        },
+        {
+          "hash": "5b672e6dbd749036a658d74199317e1a6989b98ca165bf2390c4a6401edf03f4",
+          "path": "research/STUDY-RK-099/pack-analogist.md"
+        },
+        {
+          "hash": "853709a3b679c28e5224c84e479a4eded26f547e248e7463d7b62720aa5e4bd8",
+          "path": "research/STUDY-RK-099/pack-practitioner.md"
+        },
+        {
+          "hash": "c8cf04a57fef370610e6c52bf2ab6daee6d2b14b1c0aeee227e9bbde46494762",
+          "path": "research/STUDY-RK-099/pack-scholar.md"
+        },
+        {
+          "hash": "dc7e0e132fb61a9d3d55354431899597acaab1954ac49c46443e0ae320652aeb",
+          "path": "research/STUDY-RK-100/grounding.md"
+        },
+        {
+          "hash": "a7302e932e14f5b301646b6f2b8f86eece37d3a226900fb28bd8b3bc876aed38",
+          "path": "research/STUDY-RK-100/handoff.md"
+        },
+        {
+          "hash": "cf63d04927ec6b64cc8860f85dc0179b2b65941aeace8e93322e673d6ac7a182",
+          "path": "research/STUDY-RK-100/pack-analogist.md"
+        },
+        {
+          "hash": "ac00832fe3eb4d4f014fb22c00e5f573602ba29b51e33f0dcdaeca4753f35740",
+          "path": "research/STUDY-RK-100/pack-practitioner.md"
+        },
+        {
+          "hash": "f2234ea89827685da5711ae0c292bf1b4d1aa7f2aa73603c70c4020a22a8bda5",
+          "path": "research/STUDY-RK-100/pack-scholar.md"
+        },
+        {
+          "hash": "d681b534f748b1f954f7ffa48a9ead972bf5553ed7494c9afd823dcbd772a42e",
+          "path": "research/STUDY-RK-101/grounding.md"
+        },
+        {
+          "hash": "23f872b653aa1469fa5bfcf27845e6d9ce89de1f1d6de90ad40d1a94525042a7",
+          "path": "research/STUDY-RK-101/handoff.md"
+        },
+        {
+          "hash": "a2e02a0c754f203b480b57e143b81ecffc097a39820acc1751addcc7ac1195c8",
+          "path": "research/STUDY-RK-101/pack-analogist.md"
+        },
+        {
+          "hash": "cd2e024e1550fe1676662897e9f5fdbecaae23073299e50e455758b0116fe9be",
+          "path": "research/STUDY-RK-101/pack-practitioner.md"
+        },
+        {
+          "hash": "36963706f73b72150ce9924232606ffacb52906c395448aa022fbc396a03ce61",
+          "path": "research/STUDY-RK-101/pack-scholar.md"
+        },
+        {
+          "hash": "b1640f26f30a58230e3aa4f57fc5efa489f5cd3a536561d4b0ed51462ee99c95",
+          "path": "research/STUDY-RK-102/grounding.md"
+        },
+        {
+          "hash": "fd8052b185f25048547ae5d68c2234fa675ce2f15e770ed91c7ac44f9874c4af",
+          "path": "research/STUDY-RK-102/handoff.md"
+        },
+        {
+          "hash": "03951d822af37daca32e7aa1f0c77ec4735fc14c4e5a10a13482ed803691d196",
+          "path": "research/STUDY-RK-102/pack-analogist.md"
+        },
+        {
+          "hash": "865198f71ace09dab71b7d7c81b54ba5f81161817b7837c1b6f2071ba180baf3",
+          "path": "research/STUDY-RK-102/pack-practitioner.md"
+        },
+        {
+          "hash": "6af172dddf86ceb2f1a4051e49068b4760c3101cfc1b6f98c06dedf334d56046",
+          "path": "research/STUDY-RK-102/pack-scholar.md"
+        },
+        {
+          "hash": "aba7cc9fda634c6c64161ca79701827a9da6a6077c5347622a4b737fd8ba3007",
+          "path": "research/STUDY-RK-103/grounding.md"
+        },
+        {
+          "hash": "65e4d664cc1cc2600ae3fa0b3b7d2734c7ae834c8f5d60da318c6635353cc7c6",
+          "path": "research/STUDY-RK-103/handoff.md"
+        },
+        {
+          "hash": "2cb5df1eae4cb94dbe7c5464fdeceab44d8dd4427a2b9af4adeb9e42ebb855b5",
+          "path": "research/STUDY-RK-103/pack-analogist.md"
+        },
+        {
+          "hash": "d0d2099590a925a3a1b6a5c97a97e95a8bd8429c4438348c1228bc0036df7ddc",
+          "path": "research/STUDY-RK-103/pack-practitioner.md"
+        },
+        {
+          "hash": "2c87028f9a0b06bdb2423828c60bc62f16eee5dbd9152f524536615b71895557",
+          "path": "research/STUDY-RK-103/pack-scholar.md"
+        },
+        {
+          "hash": "da632bf9367f72f9a1857e8d5c3a9b41e134a4dde484e526306799be11147b7b",
+          "path": "research/STUDY-RK-104/grounding.md"
+        },
+        {
+          "hash": "7aaf52a0df12677e69ea69da76118a1e451fa9ad48427cbb258f62311b848192",
+          "path": "research/STUDY-RK-104/handoff.md"
+        },
+        {
+          "hash": "a6b52f2431814db0b57022919738e73c62404e8786006970ff76339f00b23b1a",
+          "path": "research/STUDY-RK-104/pack-analogist.md"
+        },
+        {
+          "hash": "e46132c2b9e7e9d846ea488b613085c09a794f8440ef7a16e8aa933809e4d19e",
+          "path": "research/STUDY-RK-104/pack-practitioner.md"
+        },
+        {
+          "hash": "ea69d01af6cf5334daa689f1f175eb32193b9972fcbbc309afe24862870d1324",
+          "path": "research/STUDY-RK-104/pack-scholar.md"
+        },
+        {
+          "hash": "52f0f70a84dc327ceb70d62a9a6348254842fc8efa90821cfd58dbef62b79f58",
+          "path": "research/STUDY-RK-105/grounding.md"
+        },
+        {
+          "hash": "b67289d1eaa0edc7b918b35c3327e9b163cce82fefe9a49937d017439fab78d8",
+          "path": "research/STUDY-RK-105/handoff.md"
+        },
+        {
+          "hash": "9e2684763bdabb241201459e492d755a0a0c446f2fcec1d967bc4d095ed84ef6",
+          "path": "research/STUDY-RK-105/pack-analogist.md"
+        },
+        {
+          "hash": "db827a42bb40c5ed307723ac17dfd523192d5edaaf475d69027be10abfe0c790",
+          "path": "research/STUDY-RK-105/pack-practitioner.md"
+        },
+        {
+          "hash": "9d14f9d1944962056e0391bd31f3d5e14b755158eb90d4a226cd8c878f0627ac",
+          "path": "research/STUDY-RK-105/pack-scholar.md"
+        },
+        {
+          "hash": "8ef756f54caf8db4e30ea3321ee8858c494c97be509baec8511a01a1f4b076f0",
+          "path": "research/STUDY-RK-106/grounding.md"
+        },
+        {
+          "hash": "be8b92036336a16404a1cd653d299ec961ff5b9c2146a046722dd8b7958e0dac",
+          "path": "research/STUDY-RK-106/handoff.md"
+        },
+        {
+          "hash": "8dd8354f5bfff11b2e346fd85668baf82d352b35901721ce01450210784d3384",
+          "path": "research/STUDY-RK-106/pack-analogist.md"
+        },
+        {
+          "hash": "cbf5370339d0f6362a79bdde5672fa123460e340fb4c30a3cf79018a6993a411",
+          "path": "research/STUDY-RK-106/pack-practitioner.md"
+        },
+        {
+          "hash": "dcb35da5eca8cb80b78a3cf14059ba1c0fc83da6edcf51a56d3bf56e7cfc685a",
+          "path": "research/STUDY-RK-106/pack-scholar.md"
+        },
+        {
+          "hash": "c6da7ccef5367004ca3f4c672b1e95ea205a7237c582dbbcd554b91de1bf405b",
+          "path": "research/STUDY-RK-107/grounding.md"
+        },
+        {
+          "hash": "860f059092265d5e2ec2abba3b6a1e197ee3167b1400b2d2ad983e98b291356a",
+          "path": "research/STUDY-RK-107/handoff.md"
+        },
+        {
+          "hash": "5342d54f717a4568e2e29a5482b8dd0394599af78950447a43e1f0222b58bad6",
+          "path": "research/STUDY-RK-107/pack-analogist.md"
+        },
+        {
+          "hash": "e7d83f3658f1db9b984a9c821c7b74b1fd0d748fb2f5712731357d161605e32b",
+          "path": "research/STUDY-RK-107/pack-practitioner.md"
+        },
+        {
+          "hash": "d66c8cee84ad4b91e5d473b9afaff2a8a1793ecabe6edfdcf504baf4b3a7ee39",
+          "path": "research/STUDY-RK-107/pack-scholar.md"
+        },
+        {
+          "hash": "e7bdb93abc3c25969454bb2593b86263ebc451de1c14a9d77eea79c08cfbbc06",
+          "path": "research/STUDY-RK-108/grounding.md"
+        },
+        {
+          "hash": "db4dfd8876a09c4949f642a321d0e0470b94aaee7118506be772d9424054edd1",
+          "path": "research/STUDY-RK-108/handoff.md"
+        },
+        {
+          "hash": "cbd87c36544fa54fad56234a772be9796f4db0aad9937f37cd04096ca3cffedd",
+          "path": "research/STUDY-RK-108/pack-analogist.md"
+        },
+        {
+          "hash": "8216511eb1d7a864bcb52955b902ae349cae625b5f48819cee81a9d0eeaec41e",
+          "path": "research/STUDY-RK-108/pack-practitioner.md"
+        },
+        {
+          "hash": "74fd63cd67139ae8d2669429d4e2bac140875dfc1a2b89659abff86a5aabef33",
+          "path": "research/STUDY-RK-108/pack-scholar.md"
+        },
+        {
+          "hash": "91e9f056e5e4590b50679692928429f32e335ee75320cebf4979c78353f8038e",
+          "path": "research/STUDY-RK-109/grounding.md"
+        },
+        {
+          "hash": "7b5a5e6cc51d5e193aad7f6778d7dbac09a1e23b267ffda972dd0384206f87f7",
+          "path": "research/STUDY-RK-109/handoff.md"
+        },
+        {
+          "hash": "2fccb34eb9af57c2316f53dbb6dabad90e89822eb364f66f25a57d2696d03ad8",
+          "path": "research/STUDY-RK-109/pack-analogist.md"
+        },
+        {
+          "hash": "ed80635001759aa2beb64d82d93d1b376a229ebb044a736e12368cb1bbbb1e9c",
+          "path": "research/STUDY-RK-109/pack-practitioner.md"
+        },
+        {
+          "hash": "27d1654cd21e2ec083df516d9bc6230dd5ae4d925226577e02532c740ca2a78c",
+          "path": "research/STUDY-RK-109/pack-scholar.md"
+        },
+        {
+          "hash": "a08a05390f2544f8f8e36a680a28e0c7c4e752d3cc677886d7ce73fa72b1c92f",
+          "path": "research/STUDY-RK-110/grounding.md"
+        },
+        {
+          "hash": "55248e241d70278cd356a4f3ab8590c5aefe53a2b1a5c29080e8989581a954b4",
+          "path": "research/STUDY-RK-110/handoff.md"
+        },
+        {
+          "hash": "5b3f115d8d2db7583359ba0720654473489825bcc0b895be5407cd50a7ce5c46",
+          "path": "research/STUDY-RK-110/pack-analogist.md"
+        },
+        {
+          "hash": "8819e84b8f0fbbc9ed96da828a7c18d98220b386b1763b665a77bef02984b459",
+          "path": "research/STUDY-RK-110/pack-practitioner.md"
+        },
+        {
+          "hash": "3e193c7a37fac9cef2ebf6dcf673720cd89f85552f4d0c56d604ea56cb0c706f",
+          "path": "research/STUDY-RK-110/pack-scholar.md"
+        },
+        {
+          "hash": "66e1bab6cfb7f67e5000dcd57e6027cdcb0c234568e845ecca8fe5ce70dc06d9",
+          "path": "research/STUDY-RK-111/grounding.md"
+        },
+        {
+          "hash": "af4ec923e59f48ba6a146470005d97661fbd69393652aa4d921d58dc35e03280",
+          "path": "research/STUDY-RK-111/handoff.md"
+        },
+        {
+          "hash": "f863cf3e66316a4977db415c0f465b37d0011893e932ddd5c43236f547424ff4",
+          "path": "research/STUDY-RK-111/pack-analogist.md"
+        },
+        {
+          "hash": "21dc459d31329792afd0cec0a1e4771221b5fff508085373742dd91c6a85a004",
+          "path": "research/STUDY-RK-111/pack-practitioner.md"
+        },
+        {
+          "hash": "52ab4efd347b492537dbd56eca1d5c7d41f366572b3a2d82ff1d46b7a65328b7",
+          "path": "research/STUDY-RK-111/pack-scholar.md"
+        },
+        {
+          "hash": "ed33285cf40ffd907a8b381d5998852a71dee8cc6ec8b68fe3555ad634bf01ff",
+          "path": "research/STUDY-RK-112/grounding.md"
+        },
+        {
+          "hash": "460316a23d74557039a61fd1856ee274484c971fe43846a8925041c14cc1977e",
+          "path": "research/STUDY-RK-112/handoff.md"
+        },
+        {
+          "hash": "476de955d2a456f5181d3eb261f7d3bee843fd0fd0895f2c7d3c6905d8098977",
+          "path": "research/STUDY-RK-112/pack-analogist.md"
+        },
+        {
+          "hash": "785740ec471858bf949ca45a63fb0d92d91e80ef1347dbf12083ac653f1374c2",
+          "path": "research/STUDY-RK-112/pack-practitioner.md"
+        },
+        {
+          "hash": "b5d8b7ad589fb8ce2a66a595d167a7c170c12741461a2594237dbae7ed007d97",
+          "path": "research/STUDY-RK-112/pack-scholar.md"
+        },
+        {
+          "hash": "437ae5db0a18d8e68e57ee9e4432b2f6e072e060d827e023687ce62c8b3a2a2d",
+          "path": "research/STUDY-RK-113/grounding.md"
+        },
+        {
+          "hash": "c5c91f43d9053435867e9ca0507f382cfe6923ed12992697b85b40ea51ab9561",
+          "path": "research/STUDY-RK-113/handoff.md"
+        },
+        {
+          "hash": "5edbeda6d4de8cd80542448175e8e25b94a32bba588ced7c2d009d55fad1dea2",
+          "path": "research/STUDY-RK-113/pack-analogist.md"
+        },
+        {
+          "hash": "b8bb25522e19c8b36fd7d41d2b2f3fc021e3db53d3253bcbb37371fb8681e2fc",
+          "path": "research/STUDY-RK-113/pack-practitioner.md"
+        },
+        {
+          "hash": "672bb0d87adff7ac21739072e862834eab61261a780bf949d438bfb83042bb6c",
+          "path": "research/STUDY-RK-113/pack-scholar.md"
+        },
+        {
+          "hash": "ae86ef6d59117dd925ee9e0b8f9d35456d641bfd66481534d983786388fddd81",
+          "path": "research/STUDY-RK-114/grounding.md"
+        },
+        {
+          "hash": "91e9faf8b427f846f986d05f39b92aaa9a7369ad31297d0305e0fbda416864d4",
+          "path": "research/STUDY-RK-114/handoff.md"
+        },
+        {
+          "hash": "08ed68d7903b2c3a5541f4e197578ae8a48c236e1db5f92c80a8015cdf3b23f5",
+          "path": "research/STUDY-RK-114/pack-analogist.md"
+        },
+        {
+          "hash": "9858642317ac4e54471f97866fa894b89afa738db327d47d671759da4da0dd47",
+          "path": "research/STUDY-RK-114/pack-practitioner.md"
+        },
+        {
+          "hash": "eda952644df71e7551658b60466e3457bf8ff800ab4cb30e675a6aa8d7a7e10d",
+          "path": "research/STUDY-RK-114/pack-scholar.md"
+        },
+        {
+          "hash": "8603c5cc634cf714ceafc5da8c46b0b710e826c8102a083b5a2e1650fa6ed2fe",
+          "path": "research/STUDY-RK-115/grounding.md"
+        },
+        {
+          "hash": "4c310cc009377c7c27ee378b764c4d7a85ace5e17958cf1958ba1b8ad974a4b9",
+          "path": "research/STUDY-RK-115/handoff.md"
+        },
+        {
+          "hash": "0518c411903b9429a3d2b24b8d0931c201d65f54d20b0b654781e549444443cd",
+          "path": "research/STUDY-RK-115/pack-analogist.md"
+        },
+        {
+          "hash": "134b8203c6e3e5b86f248780e4b24fa54814f5765fbf197297b6d031c3226ef1",
+          "path": "research/STUDY-RK-115/pack-practitioner.md"
+        },
+        {
+          "hash": "51ac36ade0d440bbcd63da673abf333f0acae89b83b1833dff97d596174b5677",
+          "path": "research/STUDY-RK-115/pack-scholar.md"
+        },
+        {
+          "hash": "9cb42302afbe9c69b34381fd90da481f7373c7c3546140a70cd904be77a35f66",
+          "path": "research/STUDY-RK-116/grounding.md"
+        },
+        {
+          "hash": "bf566926e37f4f03ca53241422487e3e73b309bd579bbbae0d7629e540cfa2f5",
+          "path": "research/STUDY-RK-116/handoff.md"
+        },
+        {
+          "hash": "22615b4edc0eb08e4e21e00ca5f96ca04f3a02b5fb49aa234dc8ed778cc216d8",
+          "path": "research/STUDY-RK-116/pack-analogist.md"
+        },
+        {
+          "hash": "e84bc741df422edd505360921c1d8048725dad8598fed3385724f507d51f5d5e",
+          "path": "research/STUDY-RK-116/pack-practitioner.md"
+        },
+        {
+          "hash": "a7ee90a8d95da74c07c5acde9851b7a49ddd302808f100da0e2c981d27d593b2",
+          "path": "research/STUDY-RK-116/pack-scholar.md"
+        },
+        {
+          "hash": "2d414406eafc8284774fb7be254f54aa5448a70edc45fcc9dbc600cd55a3e69c",
+          "path": "research/STUDY-RK-117/grounding.md"
+        },
+        {
+          "hash": "4a1587f153b028e4bab8587b5a65a30f6f01baa7084ba2fac7f325d31a4d8241",
+          "path": "research/STUDY-RK-117/handoff.md"
+        },
+        {
+          "hash": "e09b69f3210a0ec35df5893e5d2421cf0bda50821d1030bc25cf601a8be1a580",
+          "path": "research/STUDY-RK-117/pack-analogist.md"
+        },
+        {
+          "hash": "9905eee82a2bfdf40b1d12348627f49c41262480e14e6c78fb7a56637a3b5a37",
+          "path": "research/STUDY-RK-117/pack-practitioner.md"
+        },
+        {
+          "hash": "671d986eae888766a90cb3a3b7c57c4f4132cf24572ea1b6aa8cae964bde7427",
+          "path": "research/STUDY-RK-117/pack-scholar.md"
+        },
+        {
+          "hash": "56b0355f2f450c90324c4bd91c58bbe17d9cefbc9d078a1165dddb840f438e60",
+          "path": "research/STUDY-RK-118/grounding.md"
+        },
+        {
+          "hash": "ad15eee642a5325948ae51b79f6433ada4ccf880031a175df95fe4956048ced7",
+          "path": "research/STUDY-RK-118/handoff.md"
+        },
+        {
+          "hash": "cc70350819065760a082a7b5651ab44103da319bb725140b51ee3495bf2d7455",
+          "path": "research/STUDY-RK-118/pack-analogist.md"
+        },
+        {
+          "hash": "3fdcc489eb1cbd16b17dad2ee4e5abe98a42633acd0551bdeb4f117b94ae581b",
+          "path": "research/STUDY-RK-118/pack-practitioner.md"
+        },
+        {
+          "hash": "268c62446af2db9935f56c1878dd70fc4d21057e3918d8d885d0e17c4f49b1cc",
+          "path": "research/STUDY-RK-118/pack-scholar.md"
+        },
+        {
+          "hash": "b8fe981b0d0e988f24add74d032c27808dc668ba0d13f8944569b88f0acf7691",
+          "path": "research/STUDY-RK-119/grounding.md"
+        },
+        {
+          "hash": "6585a312869a8cbc06bfa288909272a998c4650e7b12672e2cf49ece730677bd",
+          "path": "research/STUDY-RK-119/handoff.md"
+        },
+        {
+          "hash": "e2e4cebf9f659076b810fac8578f1a9ff05da8f4dc9ef8ff7e79c56b23525822",
+          "path": "research/STUDY-RK-119/pack-analogist.md"
+        },
+        {
+          "hash": "9db86c366fe52adf5d4c0488b9f1f658eab1cbc3cad1a7c56a0f460743926fd3",
+          "path": "research/STUDY-RK-119/pack-practitioner.md"
+        },
+        {
+          "hash": "fb0344320aad768ec2ce8c22afc20b78fdda31904facbb35516cad388f70f286",
+          "path": "research/STUDY-RK-119/pack-scholar.md"
+        },
+        {
+          "hash": "255114de3f1bf830b2ef9ced45e112c899ab053c3e77efe49a7c29da78cd3239",
+          "path": "research/STUDY-RK-120/grounding.md"
+        },
+        {
+          "hash": "6424d8a4b627f1d9b9d072aae451c5afe0518dcbe6922212bde336104377d90f",
+          "path": "research/STUDY-RK-120/handoff.md"
+        },
+        {
+          "hash": "c683f346d2f3904af24bb7f58cd42940618c55ac8385766db0d7f6b29d22e04b",
+          "path": "research/STUDY-RK-120/pack-analogist.md"
+        },
+        {
+          "hash": "bd32be875553d6aa1d94064678032da87f70acf04e07ceacca058b6220dd46e2",
+          "path": "research/STUDY-RK-120/pack-practitioner.md"
+        },
+        {
+          "hash": "d291012ec7547a2e62cd26d52f1ae042c53cdbc33396ab715aa2f3e19726374d",
+          "path": "research/STUDY-RK-120/pack-scholar.md"
+        },
+        {
+          "hash": "200399c3127ddda861263ff888e292d842113b7a115ad3a38b07598ac27bdf47",
+          "path": "research/STUDY-RK-121/grounding.md"
+        },
+        {
+          "hash": "5794cba89d60463d7bf22a465e70bcddb3c11c944d740699cda497fc7d39c288",
+          "path": "research/STUDY-RK-121/handoff.md"
+        },
+        {
+          "hash": "c8e6ee361f3a82aacb8d699ba967aac5c59931dd21ace9e32a985180d7eda835",
+          "path": "research/STUDY-RK-121/pack-analogist.md"
+        },
+        {
+          "hash": "0b7e296fd7c071ef9d34397281316e0f59e9b13d163d2949f6cc26709e7f37cb",
+          "path": "research/STUDY-RK-121/pack-practitioner.md"
+        },
+        {
+          "hash": "5d783b5b9aedf1984d07d374883d30a779e1db10a0971232f2881678ee36120c",
+          "path": "research/STUDY-RK-121/pack-scholar.md"
+        },
+        {
+          "hash": "8809eeceeb0116792eac5b2ddd892e79361dacc37101c6f679064054af73976d",
+          "path": "research/STUDY-RK-122/grounding.md"
+        },
+        {
+          "hash": "f7bfd548e5cf61bdc61a1e7e44be7491bd3e40a1fdc842aaff2650a276e50f00",
+          "path": "research/STUDY-RK-122/handoff.md"
+        },
+        {
+          "hash": "4e8b67ec751f53844a5eca08e74efc93181ba6b0eed651ca3982a213c662c325",
+          "path": "research/STUDY-RK-122/pack-analogist.md"
+        },
+        {
+          "hash": "0db8134cf711803bff39d0e15ab2bdbc9a197233c88e9e9711a69eea78a07507",
+          "path": "research/STUDY-RK-122/pack-practitioner.md"
+        },
+        {
+          "hash": "a45988756380530103dd6e74251551cff39e3b4a27c3a2f3e1f2d7e52e28c539",
+          "path": "research/STUDY-RK-122/pack-scholar.md"
+        },
+        {
+          "hash": "6a4da4ea95f1686f9c38824bdb7551f88943eb0072a2614375149d6c03452ada",
+          "path": "research/STUDY-RK-123/grounding.md"
+        },
+        {
+          "hash": "017f78978ccba26c9f3e0c60e4eba6b45e91e6e02c7fb6624dd209b688088b5f",
+          "path": "research/STUDY-RK-123/handoff.md"
+        },
+        {
+          "hash": "fa59555000ac1d7c0de5f56b960ea606e2762d958995136ba23a219638e35afa",
+          "path": "research/STUDY-RK-123/pack-analogist.md"
+        },
+        {
+          "hash": "cf43aa7e708639934452aa36534c159a2441036db6832708a9ae66858dd7eae9",
+          "path": "research/STUDY-RK-123/pack-practitioner.md"
+        },
+        {
+          "hash": "2d404432feea1875e2afa3645978b673459c46b3b2518c166b0ca338bf5ae7fd",
+          "path": "research/STUDY-RK-123/pack-scholar.md"
+        },
+        {
+          "hash": "cbab09af4a42edab399c95e42c9340ce31b41cd09f02befd9d2aa0228620235e",
+          "path": "research/STUDY-RK-124/grounding.md"
+        },
+        {
+          "hash": "0a4a0c2cfadc88cb49a3bc5ea75ec94bd8341f78b12a54ac86bd21a5245329de",
+          "path": "research/STUDY-RK-124/handoff.md"
+        },
+        {
+          "hash": "789706c40cbe6dd1a0f4bb8f98519410c3dc809453267ab546022464b3ec7c98",
+          "path": "research/STUDY-RK-124/pack-analogist.md"
+        },
+        {
+          "hash": "cfbc0c44c834016676a13f86dce2a94aebcb6b91ae7e9be8f26f9b655a62d017",
+          "path": "research/STUDY-RK-124/pack-practitioner.md"
+        },
+        {
+          "hash": "3ccfe915b147c260753d06943a171f798181d9449fc3815c69930ed701ad7b4c",
+          "path": "research/STUDY-RK-124/pack-scholar.md"
+        },
+        {
+          "hash": "05ea2202b0e44345ce1ddde028baefa3f1b5dc9c66d044206df7205825663c05",
+          "path": "research/STUDY-RK-125/grounding.md"
+        },
+        {
+          "hash": "cb61be8716983ef3e4e511ec3c743842cdf90a989c1b1c6aa2abd4c444c722af",
+          "path": "research/STUDY-RK-125/handoff.md"
+        },
+        {
+          "hash": "f3855d33399d6e09e272e6c76ab9187996e017a9ed22093432882b7b2ad0389b",
+          "path": "research/STUDY-RK-125/pack-analogist.md"
+        },
+        {
+          "hash": "f1bc4f12a19b27857afabb80dfeece3b1e336c428ba47881d3e87ccdd12742ee",
+          "path": "research/STUDY-RK-125/pack-practitioner.md"
+        },
+        {
+          "hash": "7830d3cc52e3b256d3c6b65029598cf47c3346afb58539c32442a20b3b512090",
+          "path": "research/STUDY-RK-125/pack-scholar.md"
+        },
+        {
+          "hash": "3737e9e157cb229768747d6435018701aa4cd60439a0e5a8e1dab50b0799d7c0",
+          "path": "research/STUDY-RK-126/grounding.md"
+        },
+        {
+          "hash": "35d1839ed262e3aac2758d4dedad635e23b4f3d6f049b36990df0a08dfecc5de",
+          "path": "research/STUDY-RK-126/handoff.md"
+        },
+        {
+          "hash": "4a1cd67af9bb1c96cf2aba1978dc4dbe165daed6640e955a38c99c1ed760d97c",
+          "path": "research/STUDY-RK-126/pack-analogist.md"
+        },
+        {
+          "hash": "24c2979584d688055ea7b0d5b9257d743e6d1c2a9645e795999ca0ae177b22e8",
+          "path": "research/STUDY-RK-126/pack-practitioner.md"
+        },
+        {
+          "hash": "fcd64084e6572aea26799ecc9279de98275bc5e8721d5f905de0cfc95a459dd8",
+          "path": "research/STUDY-RK-126/pack-scholar.md"
+        },
+        {
+          "hash": "83c7747202f7818230d6ef334f398a43ddfa86023a30b873df70f2ceaa0cee75",
+          "path": "research/STUDY-RK-127/grounding.md"
+        },
+        {
+          "hash": "81ffc210050afa990d1613ff74f8058d64109a48c42d94d1c0288aab7cb60c39",
+          "path": "research/STUDY-RK-127/handoff.md"
+        },
+        {
+          "hash": "ac3454ec2839d774aff49a14023a65a912f0bb1254ee260c5306e86172c011b7",
+          "path": "research/STUDY-RK-127/pack-analogist.md"
+        },
+        {
+          "hash": "a21a3d6d42faaae82643d185b94681ea18e5210cd504e8b1d841a22160187dd3",
+          "path": "research/STUDY-RK-127/pack-practitioner.md"
+        },
+        {
+          "hash": "ef49d785598e69725789ccba199a195cc11d0bff3c46c9c24ccf4169b97c57fb",
+          "path": "research/STUDY-RK-127/pack-scholar.md"
+        },
+        {
+          "hash": "07abe7dea7e26dc33a737095a697f9aaf1aacc7655580f9d4786d9d2d3f5ec58",
+          "path": "research/STUDY-RK-128/grounding.md"
+        },
+        {
+          "hash": "39844c006d529fdd58b01cbfee7b8f9ce80770be7fd53d6b837993e151ded149",
+          "path": "research/STUDY-RK-128/handoff.md"
+        },
+        {
+          "hash": "16bc80539149ddbee20c5f58dad5f72400e52afd852656388a8d777963c8df6a",
+          "path": "research/STUDY-RK-128/pack-analogist.md"
+        },
+        {
+          "hash": "6e49db8c05097631915fec55aa307388104886337fa2bf8c70416425d878e394",
+          "path": "research/STUDY-RK-128/pack-practitioner.md"
+        },
+        {
+          "hash": "6f2e672096a4ebb95d42dd0b1f6ed0dfc76523595eea5fd258f9b98c5c383371",
+          "path": "research/STUDY-RK-128/pack-scholar.md"
+        },
+        {
+          "hash": "8bf67d3e1518adadb4fcc494cb4e74f6e02996121009e15bf2089bf7c097f6a4",
+          "path": "research/STUDY-RK-129/grounding.md"
+        },
+        {
+          "hash": "df8ab94586e818a1658c96dd09f78afc87d73749a0382cb7bf1d88f88220eff8",
+          "path": "research/STUDY-RK-129/handoff.md"
+        },
+        {
+          "hash": "4a5ae4f2e40d90dc8d41049324dd7fedbeabe870d2a626a8ab8559d329a35523",
+          "path": "research/STUDY-RK-129/pack-analogist.md"
+        },
+        {
+          "hash": "d356c671e09f20bc30d923b8869505c9819e09b29cc22dc4232a2a2508f5a733",
+          "path": "research/STUDY-RK-129/pack-practitioner.md"
+        },
+        {
+          "hash": "82bbb4b36194d7861e4df1cac249ecea41e1468eb74082ab41a207458fe355a0",
+          "path": "research/STUDY-RK-129/pack-scholar.md"
+        },
+        {
+          "hash": "4442bdbf11b0390ad518f3cc63b7caba052c43aefd15969dd7699df460844b8e",
+          "path": "research/STUDY-RK-130/grounding.md"
+        },
+        {
+          "hash": "d11ca65a6977acd16d64bd368abfde781d9f4cc8f1212a7af3d28de63463b2aa",
+          "path": "research/STUDY-RK-130/handoff.md"
+        },
+        {
+          "hash": "6e43656c5fa913d37eeb233c297f4cc3c64ecfb8d95f30b7509f444ee97092a8",
+          "path": "research/STUDY-RK-130/pack-analogist.md"
+        },
+        {
+          "hash": "e63accb40d65cf97817e60b31a830778bab7db16655711e1ebf2b36ad1ce523f",
+          "path": "research/STUDY-RK-130/pack-practitioner.md"
+        },
+        {
+          "hash": "e623f8c82c5fb3cb10b286cb8f90283402b0f1443b55c92e9e776fa46d0a5164",
+          "path": "research/STUDY-RK-130/pack-scholar.md"
+        }
+      ],
+      "globs": [
+        "research/**"
+      ],
+      "importConfidence": "full",
+      "name": "research",
+      "origin": "authored",
+      "role": "docs",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "d3a412dd07adf9c1f2489fa1a26d3b98431a6cc6206776c5d9e46983ac271fbd",
+          "path": ".gitignore"
+        },
+        {
+          "hash": "6d8dcfac40c8c9da7896d87800f4cc90a84dcbf020903c223f43f047f2975304",
+          "path": ".npmignore"
+        },
+        {
+          "hash": "ec8088d76079990c7cf988be9759c1d9943f9f15f749b9624557c48a24df7be4",
+          "path": "AUDIT-CONTRACT.md"
+        },
+        {
+          "hash": "63b6d244bce76947a87dc705e7a89d577655ba17b8f10cf2dd5df009327efe1c",
+          "path": "AUDIT-WORKLIST.md"
+        },
+        {
+          "hash": "15cc1847c4bd1eea0a563ce3ca66f28d70c6af86ad85f7ba875a2f6bc20d1f69",
+          "path": "CHANGELOG.md"
+        },
+        {
+          "hash": "b7c54ac530e2ed7c6c6cf6688886939e9e88a8f0beb27051ca1807f69bb1ef8f",
+          "path": "ENRICHMENT-WORKLIST.md"
+        },
+        {
+          "hash": "350330c94513650a401861f37ff60752f570e1cedb746ab47b5ed72798631651",
+          "path": "HANDBOOK.md"
+        },
+        {
+          "hash": "65b3840f7ab9aff672d4a9f87b9e373f17548f5d3b644dac3bce4ff2f1356263",
+          "path": "KNOWLEDGE-CONTRACT.md"
+        },
+        {
+          "hash": "b0dc6508cc8915d7be1ad607527e0fcccc03f607263d3bfc24decd4a7f2f3141",
+          "path": "KNOWLEDGE-WORKLIST.md"
+        },
+        {
+          "hash": "5ae6b3c8f446f0a7cb95176e4dadb91b68aaffb16b3be09f64f5de248b6a973a",
+          "path": "LICENSE"
+        },
+        {
+          "hash": "4c53cb8ae432e5843e0b9f6c3eae4d842a423bb85181b35e45705504c4300599",
+          "path": "README.es.md"
+        },
+        {
+          "hash": "88b088e1b81fb10d1af6ba521d9d21d8c45e1f11311e048409423f41ed02c8d0",
+          "path": "README.fr.md"
+        },
+        {
+          "hash": "64db71b402239d7ce6578cc19e34bb5e591516180f08ce9b12a00735d6bcfcb2",
+          "path": "README.hi.md"
+        },
+        {
+          "hash": "0d89fca8b374fca3723ccd83ab4cc58fa38882c7e7f8e5ec9c50318b9c48d3be",
+          "path": "README.it.md"
+        },
+        {
+          "hash": "02811c486b9e1a202e41706668f8e6919dec5d0435709d28ab789acb376ad449",
+          "path": "README.ja.md"
+        },
+        {
+          "hash": "c4071267136b21faa4e940fb58360a453be914d3cba8a8bdf1691a0a06655b6d",
+          "path": "README.md"
+        },
+        {
+          "hash": "59444b0f99525c2521e34f80200d11518e35ab62e7744793b9398da38fa07a8e",
+          "path": "README.pt-BR.md"
+        },
+        {
+          "hash": "ebbc5d6251508b5c5d2defaa2e36f4970f0b1e01bd00eb61b0946406000b5a46",
+          "path": "README.zh.md"
+        },
+        {
+          "hash": "03809121410094e2601f5ef28a5758985fc96e96f923dcf2816dd60947019976",
+          "path": "REMEDIATION-CHECKLIST.md"
+        },
+        {
+          "hash": "8e5d823e09821e25053f2bd51c442d8cfee31018cd9cbe46e80761ff8ebc844d",
+          "path": "REMEDIATION-INSTRUCTIONS.md"
+        },
+        {
+          "hash": "4d416ab87fd0b765ef8b4f7132e5dcb08af583ad9127c73819213a5bbf9b0a1b",
+          "path": "REMEDIATION-WORKLIST.md"
+        },
+        {
+          "hash": "34acd85ff66b0cdb6cbf58d56d586ce3d964f479981b5edbb043c382c340b8ee",
+          "path": "ROADMAP.md"
+        },
+        {
+          "hash": "78b8195bd6c99654def9da29154a45266e9b42152fda65f75b69d622a97063cd",
+          "path": "SCORECARD.md"
+        },
+        {
+          "hash": "d3c7b2b1f1dda46afbdcf1980f2831eaa8074f49cadd9dc0af14150c497f6bbf",
+          "path": "SECURITY.md"
+        },
+        {
+          "hash": "cf86ffa517ec4cc78fadca8340ee2bb7b19d65c2c274b074de0426eb0b0d9619",
+          "path": "SHIP_GATE.md"
+        },
+        {
+          "hash": "9eada476cd2718304f815e8738e3756a8c7ea750c298edc871c32006f18d4cf6",
+          "path": "THE-CLAUDE-GAMES.md"
+        },
+        {
+          "hash": "ce55a8e137415a20cedf0e73e4579053de2868d53fbafbff4a938c36f0daf195",
+          "path": "audit_report.md"
+        },
+        {
+          "hash": "2f9e43ae8520053b9c5a77b46798b73e390039e492a9b971cd773dd785b97a43",
+          "path": "eslint.config.js"
+        },
+        {
+          "hash": "ed18f467d51bfc0c811dd36d3dc358597eddd069f6228784db1e1e4d775a06ed",
+          "path": "package-lock.json"
+        },
+        {
+          "hash": "d89a5a9697e08f19385c08e2094ed372286f29bd3ff38c2e75df9416aea53274",
+          "path": "package.json"
+        },
+        {
+          "hash": "8d396ad240645357d7833cfd2354f07ed60b55c7b158c94c5322996c09659001",
+          "path": "sbom.json"
+        },
+        {
+          "hash": "df395dc9a0a425aff2a00be4e27106635b9d9f682ede9e234020604b5b4c8736",
+          "path": "tsconfig.json"
+        },
+        {
+          "hash": "7ba9b0bb9ef2c67af850c0c0ae48dc8353a01bd5ec33a191bbfe12b85dea8623",
+          "path": "tsup.config.ts"
+        },
+        {
+          "hash": "ade272a337b1d807c34015bdafa04ab28a059e26289d2d784b30b878580b19f5",
+          "path": "vitest.config.ts"
+        }
+      ],
+      "globs": [
+        "*"
+      ],
+      "importConfidence": "full",
+      "name": "root",
+      "origin": "mixed",
+      "role": "docs",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "entry": "formatPassRate",
+          "entryRule": 1,
+          "exports": [
+            "formatPassRate"
+          ],
+          "hash": "c4df99ee957ec9e6077e46846f84d6e8d14c2fb6e840d7315d04cc168710a359",
+          "importsFiles": [
+            "scripts/lib/format.mjs"
+          ],
+          "path": "scripts/gen-audit-report.mjs",
+          "sequences": [
+            {
+              "calls": [
+                {
+                  "inner": [
+                    {
+                      "line": 29,
+                      "name": "toFixed",
+                      "target": null,
+                      "via": "render"
+                    }
+                  ],
+                  "line": 23,
+                  "name": "formatPassRate",
+                  "target": {
+                    "file": "scripts/lib/format.mjs"
+                  }
+                }
+              ],
+              "exported": true,
+              "invokedAtTopLevel": true,
+              "isDefaultExport": false,
+              "name": "formatPassRate"
+            }
+          ]
+        },
+        {
+          "hash": "0223128b6d8be6217b7688108aad3cd5c61195a23d2a5647d887934ca022b452",
+          "path": "scripts/gen-audit-worklist.mjs"
+        },
+        {
+          "hash": "b2060f3b372f6ee5b3c6bea5cdbb640e0f94e9a37e53be3e3dfbc4b37d177737",
+          "path": "scripts/gen-enrichment-worklist.mjs"
+        },
+        {
+          "hash": "71151353dfde69ae9dae1e59739e024f627d37469b156886c9464ef123782532",
+          "path": "scripts/gen-remediation-checklist.mjs"
+        },
+        {
+          "entry": "formatPassRate",
+          "entryRule": 1,
+          "exports": [
+            "formatPassRate"
+          ],
+          "hash": "ce7611e6720d33fd105fb36f4cf52f547ea9c41787555b5a4eb6acdc64e7de37",
+          "importsFiles": [
+            "scripts/lib/format.mjs"
+          ],
+          "path": "scripts/gen-worklist.mjs",
+          "sequences": [
+            {
+              "calls": [
+                {
+                  "inner": [
+                    {
+                      "line": 29,
+                      "name": "toFixed",
+                      "target": null,
+                      "via": "render"
+                    }
+                  ],
+                  "line": 22,
+                  "name": "formatPassRate",
+                  "target": {
+                    "file": "scripts/lib/format.mjs"
+                  }
+                }
+              ],
+              "exported": true,
+              "invokedAtTopLevel": true,
+              "isDefaultExport": false,
+              "name": "formatPassRate"
+            }
+          ]
+        },
+        {
+          "entry": "formatPassRate",
+          "entryRule": 4,
+          "exports": [
+            "formatPassRate"
+          ],
+          "hash": "da2d83433b9ea2189239aa80bd5e10ca3aea13db52a9d631d36403b26dd31bf5",
+          "path": "scripts/lib/format.mjs",
+          "sequences": [
+            {
+              "calls": [
+                {
+                  "line": 29,
+                  "name": "toFixed",
+                  "target": null,
+                  "via": "render"
+                }
+              ],
+              "exported": true,
+              "invokedAtTopLevel": false,
+              "isDefaultExport": false,
+              "name": "formatPassRate"
+            }
+          ]
+        },
+        {
+          "hash": "f9ba1bf018a9e0ea8a6128cd77e0da736ad73fc911c390a1901106323bef401f",
+          "path": "scripts/postbuild.js"
+        },
+        {
+          "hash": "e6f61b7f122e8a4236dffefdfde0c787864bc44b2dfa6a717987e1c4f08f1925",
+          "path": "scripts/sync-releases.cjs"
+        }
+      ],
+      "globs": [
+        "scripts/**"
+      ],
+      "importConfidence": "full",
+      "name": "scripts",
+      "origin": "authored",
+      "role": "code",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "516a21cfdc47120ac7b7edbe5b71704edd8957d830b63fccd8d74c206b310077",
+          "path": "site/astro.config.mjs"
+        },
+        {
+          "hash": "b5578baf42cab82e5e7b451b6992cb929aeb6ff8d02d8e11ab690e6f67fea144",
+          "path": "site/package-lock.json"
+        },
+        {
+          "hash": "cff923d88f356795747a843362ca300b43d09c5715e6356f904b4d5fa06a7fae",
+          "path": "site/package.json"
+        },
+        {
+          "hash": "bc65125f8105ce6260d49087abcf073880a5fd823497a7e2fb96dfcd7f21e428",
+          "path": "site/src/content.config.ts"
+        },
+        {
+          "hash": "cda3dbea7290968073525832108f3b3da9f3cd2efc46f7a959111ca47fd03475",
+          "path": "site/src/content/docs/handbook/audit-framework.md"
+        },
+        {
+          "hash": "0e42c52f98ead2cc118ea3d7d1d9d1eb9893931a107376ae9aef0c53d1829a8d",
+          "path": "site/src/content/docs/handbook/beginners.md"
+        },
+        {
+          "hash": "c64a976b726d938ebfd462a3de7b9ba408fa67b8085b040ce43143736632ce70",
+          "path": "site/src/content/docs/handbook/getting-started.md"
+        },
+        {
+          "hash": "9f2092fb1d1bd721b6a6f03396eb1edc17d3c1f134e0ece7991fbf565453c1f5",
+          "path": "site/src/content/docs/handbook/index.md"
+        },
+        {
+          "hash": "ff444b916698116addf1c7d4ef939fc59ff5ba2ecee30070e6413bd2068f1cde",
+          "path": "site/src/content/docs/handbook/mcp-server.md"
+        },
+        {
+          "hash": "71262f8accde1e0af025e6290fec7143abd1b556cb97e5ea23caa99004ea71b8",
+          "path": "site/src/content/docs/handbook/operations.md"
+        },
+        {
+          "hash": "4421d05ff3544e1544ccbb5f8a81b70eab8de010b95c862436a95cf7bda81444",
+          "path": "site/src/content/docs/handbook/reference.md"
+        },
+        {
+          "hash": "2a600db8ffcdb30c5aded52b72bddd2a4266c44ac733661424ad831d5d2ff795",
+          "path": "site/src/content/docs/handbook/security.md"
+        },
+        {
+          "hash": "fee38d5737a2dfdee5600e0039c08c93160a49d635a50f862928d9fb0c94c636",
+          "path": "site/src/content/docs/handbook/usage.md"
+        },
+        {
+          "hash": "a699ad78a6d27d6864ccfe4c3a4a01993aca28ecb4a3d20893f37db9f9b1a522",
+          "path": "site/src/pages/index.astro"
+        },
+        {
+          "hash": "4e9e346128b22580eb1be437d916c407f9f64eccb1e98f6ed4c7a4545dc2d6a6",
+          "path": "site/src/site-config.ts"
+        },
+        {
+          "hash": "5995279a40a9a63426a93feec129006b261cc7200426a398914d0317722ef19b",
+          "path": "site/src/styles/global.css"
+        },
+        {
+          "hash": "f368fdcfe2273242d4fa2590ac7447f0616d866514bd6bbe2aa7d57c79f24c23",
+          "path": "site/src/styles/starlight-custom.css"
+        },
+        {
+          "hash": "61fc24492db9aef7ec38eb91cfeebaef96155014bb5f22648fd8ed2327c6cae2",
+          "path": "site/tsconfig.json"
+        }
+      ],
+      "globs": [
+        "site/**"
+      ],
+      "importConfidence": "full",
+      "name": "site",
+      "origin": "authored",
+      "role": "docs",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 39,
+      "dynamicWrites": 3,
+      "entryPoints": [
+        "src/index.ts"
+      ],
+      "externals": 0,
+      "files": [
+        {
+          "exports": [
+            "getApplicableControls",
+            "seedControls"
+          ],
+          "hash": "37793c9d7bd14a158a707d17ea38bf7fe819e7bd4bed699669632055436b70f7",
+          "path": "src/audit/controls.ts"
+        },
+        {
+          "exports": [
+            "importAudit",
+            "importAuditInline",
+            "normalizePassRate"
+          ],
+          "hash": "774efb4a7ef72198b27b92fec8f3187703477deffebe5b5cad3f3cee6fc885d7",
+          "importsFiles": [
+            "src/audit/controls.ts",
+            "src/db/init.ts",
+            "src/search/fts.ts"
+          ],
+          "path": "src/audit/import.ts"
+        },
+        {
+          "exports": [
+            "compareRuns",
+            "findByAuditStatus",
+            "getAuditPosture",
+            "getExceptions",
+            "getLatestAudit",
+            "getOpenFindings",
+            "getPortfolioPosture"
+          ],
+          "hash": "ec55def896a0a719ffba27d3f465df616593aa98a6673f9841da9684b7fd6ef7",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/audit/queries.ts"
+        },
+        {
+          "exports": [
+            "shouldFailStrict"
+          ],
+          "hash": "78f26594f43723fa5a3e675a8cc037900e06f301d8e9f296034d3400294c111f",
+          "path": "src/cli-exit.ts"
+        },
+        {
+          "hash": "778f6d829d6c416d58119730b03ab3ac2610809fdea1572205609b849de07b07",
+          "importsFiles": [
+            "package.json",
+            "src/audit/controls.ts",
+            "src/audit/import.ts",
+            "src/audit/queries.ts",
+            "src/cli-exit.ts",
+            "src/colors.ts",
+            "src/config.ts",
+            "src/db/init.ts",
+            "src/games/parser.ts",
+            "src/games/render.ts",
+            "src/games/scorer.ts",
+            "src/health/index.ts",
+            "src/index.ts",
+            "src/search/fts.ts",
+            "src/sync/build-health.ts",
+            "src/sync/dogfood-suggest.ts",
+            "src/sync/dogfood.ts",
+            "src/sync/index.ts",
+            "src/sync/local.ts",
+            "src/sync/publish.ts"
+          ],
+          "path": "src/cli.ts"
+        },
+        {
+          "exports": [
+            "colorByStatus",
+            "colorEnabled",
+            "statusColor"
+          ],
+          "hash": "f8f6f5358f3c91ff8fe330871513b2874c8a73daf2cab525cb9d88b399f7bfe5",
+          "path": "src/colors.ts"
+        },
+        {
+          "exports": [
+            "addOwner",
+            "listOwners",
+            "readRkConfigFile",
+            "removeOwner",
+            "resolveConfig",
+            "writeRkConfigFile"
+          ],
+          "hash": "fd7868b4961fbe3223f7b26936bce3facc3eb03ac5f01baf59eb1aab959d23fc",
+          "path": "src/config.ts"
+        },
+        {
+          "exports": [
+            "addRelationship",
+            "appendDepAuditHistory",
+            "archiveRepoBySlug",
+            "closeDb",
+            "completeSyncRun",
+            "deleteNote",
+            "deleteRepoBySlug",
+            "findRepos",
+            "findStaleArchived",
+            "getAllRepos",
+            "getDb",
+            "getDepAuditHistory",
+            "getDepAuditState",
+            "getLatestDbHealthRun",
+            "getLatestPublishedVersion",
+            "getPortfolioHealth",
+            "getRelated",
+            "getRepo",
+            "getRepoForgeVaultPath",
+            "getRepoIdBySlug",
+            "getRepoLocalPaths",
+            "getReposByNpmPackage",
+            "getRig",
+            "getStats",
+            "getToolchainDrift",
+            "insertDbHealthRun",
+            "insertSyncRun",
+            "listDbHealthRuns",
+            "listObservedToolchain",
+            "listPublishedVersions",
+            "listRigs",
+            "listSyncRuns",
+            "listWorkflowActions",
+            "listWorkflowPermissions",
+            "openDb",
+            "pruneBatch",
+            "setReplacedBy",
+            "setRepoCiStatus",
+            "setRepoClassification",
+            "setRepoForgeVaultPath",
+            "setRepoPackageNames",
+            "setRepoToolchainPin",
+            "setTopics",
+            "upsertDepAuditState",
+            "upsertDoc",
+            "upsertFact",
+            "upsertNote",
+            "upsertObservedToolchain",
+            "upsertPublishedVersion",
+            "upsertRelease",
+            "upsertRepo",
+            "upsertRepoLocalPath",
+            "upsertRig",
+            "upsertTech",
+            "upsertWorkflowAction",
+            "upsertWorkflowPermissions"
+          ],
+          "hash": "d23f743a0bf6058a00f7d796a8467cc1f89c03ef61657bbb3b485bdebab605ff",
+          "path": "src/db/init.ts"
+        },
+        {
+          "hash": "6e45e5c990fc00bc6f76522e9909c24f3f86d2d2d6ccb2d15c05f42f8bccb267",
+          "path": "src/db/migration-002-audit.sql"
+        },
+        {
+          "hash": "a8844eecec5478d7aa2d646aeb73f7204682909e086f52239233fe64444183e2",
+          "path": "src/db/migration-003-metrics-v2.sql"
+        },
+        {
+          "hash": "1d71a978b573ac4793b1f94738cf3b4a2a7a277e7c212a9bb266b9be67c15ea1",
+          "path": "src/db/migration-004-findings-idempotent.sql"
+        },
+        {
+          "hash": "ff52d0b6d05435cdcc325216077f2459def8ddfce0b7bbf5ca60f294428dc34f",
+          "path": "src/db/migration-005-fts-triggers.sql"
+        },
+        {
+          "hash": "48ef34efebb4610bb3c93fbe7ec8181a8fdbf1fbc2134d153d556ef2f161a5ed",
+          "path": "src/db/migration-006-lifecycle-paths.sql"
+        },
+        {
+          "hash": "bb08f419792b0b015da05bd5d63158736cdb3d74cc7d4562ff9ab517ff5c481a",
+          "path": "src/db/migration-007-publish-state.sql"
+        },
+        {
+          "hash": "365526d12031865a1369b633b08bd1659c0dc709a489954438ced35df31d7537",
+          "path": "src/db/migration-008-build-health.sql"
+        },
+        {
+          "hash": "fcfb353912b6fed97b5b17a5dc21865767c8595fd2217d71ec427e451e685cf5",
+          "path": "src/db/migration-009-build-health-extensions.sql"
+        },
+        {
+          "hash": "8d767bcf2bbe84d212c57c0120a2656a7529062a9c8513be74af8ec88ead1f12",
+          "path": "src/db/migration-010-operational-runs.sql"
+        },
+        {
+          "hash": "9b085ff74c9f14226b704866588d55dc5eedff2d19cb4f1d4ad8966be9435c7a",
+          "path": "src/db/migration-011-cross-tool-vocab.sql"
+        },
+        {
+          "hash": "1a654b1a40ffa30c98710b5f821b4df5b857fc9678e7995535212c50bea7f43f",
+          "path": "src/db/schema.sql"
+        },
+        {
+          "hash": "1921cc2a115229b8d634450b9008286368a680972c3ddb8393150eb184ea6fd0",
+          "path": "src/errors.ts"
+        },
+        {
+          "hash": "f88d73b553f3d60e1c61c14721a8fc229fa1dff2ebbed0fa87e4ac18e1d316a7",
+          "importsFiles": [
+            "src/games/parser.ts",
+            "src/games/render.ts",
+            "src/games/scorer.ts",
+            "src/games/types.ts"
+          ],
+          "path": "src/games/index.ts"
+        },
+        {
+          "exports": [
+            "parseWorklist"
+          ],
+          "hash": "0a31243015efc384386bbfdc6e1f55d4bf06c9e90f719d8845137a67259bc6cd",
+          "importsFiles": [
+            "src/games/types.ts"
+          ],
+          "path": "src/games/parser.ts"
+        },
+        {
+          "exports": [
+            "renderJSON",
+            "renderMarkdown",
+            "renderReport"
+          ],
+          "hash": "f7cb0cd90c1313e7fe79f9f071cedf5955525d6b82cc194ada590eced24acf8e",
+          "importsFiles": [
+            "src/colors.ts",
+            "src/games/types.ts"
+          ],
+          "path": "src/games/render.ts"
+        },
+        {
+          "exports": [
+            "scoreGame"
+          ],
+          "hash": "f847a4e14c99eb2285d66264f01e9c9c54d6bc0e9057d3df15e7028a9163706d",
+          "importsFiles": [
+            "src/games/types.ts"
+          ],
+          "path": "src/games/scorer.ts"
+        },
+        {
+          "hash": "9fe23d1261d9e8c8f6cee2f460fa19fbf59cd6e126e8055a5550a0c0d2cc2b4b",
+          "path": "src/games/types.ts"
+        },
+        {
+          "exports": [
+            "getRepoDiff",
+            "renderRepoDiffText"
+          ],
+          "hash": "3bfd74a8ee916dc9e410353baa5310086f16b466cad9f769f11faf88bc26283e",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/health/diff.ts"
+        },
+        {
+          "exports": [
+            "buildRepoDoctor",
+            "renderDoctorText"
+          ],
+          "hash": "c8aca2023c848d5f9593fcb9cc49645a4417b2cb3980921ab73c973d44cee46d",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/health/doctor.ts"
+        },
+        {
+          "exports": [
+            "buildFeed",
+            "renderFeedText"
+          ],
+          "hash": "87ca660ead53d8e7cb51347cd85238eaedb90b63309820aaac6f3d0169779fec",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/health/feed.ts"
+        },
+        {
+          "exports": [
+            "renderFsckText",
+            "runFsck"
+          ],
+          "hash": "7f43eae5b1a46f10343c1ff27886890a7bce6bd3535b7029e0bff7e6b762efda",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/health/fsck.ts"
+        },
+        {
+          "hash": "c19c0bd6a5fcd9851b913105167893a93b1d325fc8a09a40bc8aa71655590ad9",
+          "importsFiles": [
+            "src/health/diff.ts",
+            "src/health/doctor.ts",
+            "src/health/feed.ts",
+            "src/health/fsck.ts",
+            "src/health/table.ts"
+          ],
+          "path": "src/health/index.ts"
+        },
+        {
+          "exports": [
+            "buildHealthTable",
+            "renderHealthTableText"
+          ],
+          "hash": "f75864fd50e9ae6a8b0503e3fad7544a05c12f342927d4667dbacfba3937de3b",
+          "importsFiles": [
+            "src/colors.ts",
+            "src/db/init.ts"
+          ],
+          "path": "src/health/table.ts"
+        },
+        {
+          "hash": "608e7bff67e51483aa117a3012e1bda5509953911256e6966d3fa0d890fb5619",
+          "importsFiles": [
+            "src/audit/controls.ts",
+            "src/audit/import.ts",
+            "src/audit/queries.ts",
+            "src/config.ts",
+            "src/db/init.ts",
+            "src/games/index.ts",
+            "src/health/index.ts",
+            "src/search/fts.ts",
+            "src/sync/build-health.ts",
+            "src/sync/github.ts",
+            "src/sync/index.ts",
+            "src/sync/local.ts",
+            "src/sync/publish.ts"
+          ],
+          "path": "src/index.ts",
+          "reexportsAll": [
+            "src/games/index.ts"
+          ]
+        },
+        {
+          "hash": "a31563104ebae1117a5b6ae97f7182a579a97ed6497e47c2c694473e06a5632f",
+          "importsFiles": [
+            "package.json",
+            "src/audit/controls.ts",
+            "src/audit/import.ts",
+            "src/audit/queries.ts",
+            "src/config.ts",
+            "src/db/init.ts",
+            "src/health/index.ts",
+            "src/index.ts",
+            "src/search/fts.ts",
+            "src/sync/dogfood-suggest.ts",
+            "src/sync/dogfood.ts",
+            "src/sync/index.ts"
+          ],
+          "path": "src/mcp/server.ts"
+        },
+        {
+          "exports": [
+            "rebuildIndex",
+            "search",
+            "searchRepos"
+          ],
+          "hash": "cc4c419a072a55fc26aad4f149df081e37373f8f3080cb9592a4a258c8270401",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/search/fts.ts"
+        },
+        {
+          "exports": [
+            "observeToolchain",
+            "scanWorkflowActions",
+            "scanWorkflowPermissions",
+            "syncBuildHealthForRepo",
+            "syncCiStatus",
+            "syncNpmAudit"
+          ],
+          "hash": "0622aeadda46cf814fdc1b939e3733332d74973a9610abc666b3d01993d3636b",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/exec-bin.ts",
+            "src/sync/publish.ts"
+          ],
+          "path": "src/sync/build-health.ts"
+        },
+        {
+          "exports": [
+            "suggestByRepo",
+            "suggestBySurface"
+          ],
+          "hash": "9d7f83dbfc1cf21490294625a2fd7dc3808273dfa570511cc91b4a1db50b0f23",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/sync/dogfood-suggest.ts"
+        },
+        {
+          "exports": [
+            "syncDogfood"
+          ],
+          "hash": "e6d7d5a2d2dd419fdc757fc76345e4e5ebc5881a5db14ae7db3906fe26127dbf",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/swarm.ts"
+          ],
+          "path": "src/sync/dogfood.ts"
+        },
+        {
+          "exports": [
+            "needsShellFor"
+          ],
+          "hash": "f89d1c675e47b8df429c0a03d7b8b7ba2c9a464413063835bf102563dcdd3145",
+          "path": "src/sync/exec-bin.ts"
+        },
+        {
+          "exports": [
+            "fetchGitHubRepos",
+            "fetchReleases",
+            "syncGitHub"
+          ],
+          "hash": "269ce8c3845e927c7906ff27ffcdaf96a02d5341b8a18b1431f56d4b203cc9ac",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/sync/github.ts"
+        },
+        {
+          "exports": [
+            "fullSync"
+          ],
+          "hash": "5d8d196ff754169dea1fa6d0ebfebb2a7f5f7196ca13f5868d6f491735acdcd1",
+          "importsFiles": [
+            "src/config.ts",
+            "src/db/init.ts",
+            "src/search/fts.ts",
+            "src/sync/build-health.ts",
+            "src/sync/github.ts",
+            "src/sync/local.ts",
+            "src/sync/publish.ts"
+          ],
+          "path": "src/sync/index.ts"
+        },
+        {
+          "hash": "ca4d26aa96ab3b7d3e37bc365131d9945e85562d0b17e585ce53a5be7f9de096",
+          "parseError": true,
+          "path": "src/sync/local.ts"
+        },
+        {
+          "exports": [
+            "isTransientError",
+            "syncGitHubReleases",
+            "syncNpmVersion",
+            "syncPublishStateForRepo",
+            "syncPyPIVersion",
+            "withTransientRetry",
+            "withTransientRetrySync"
+          ],
+          "hash": "43ec460b8ca76ee2e9f49a46f67f841e753056fb47e7ad6ecdf2d310a2bcb07e",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/sync/publish.ts"
+        },
+        {
+          "exports": [
+            "syncSwarmControlPlane"
+          ],
+          "hash": "79fd878030e30db79469e943622a7e1fcd66ddda548549d7f39f8b3c880b4291",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "src/sync/swarm.ts"
+        }
+      ],
+      "globs": [
+        "src/**"
+      ],
+      "importConfidence": "full",
+      "name": "src",
+      "origin": "authored",
+      "role": "code",
+      "testedBy": 45,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "0b0dbd15d64c7cea93441060edc495e9e03b0da5f6a5de554e0cd1ecf598908e",
+          "path": "templates/claude-games/README.md"
+        },
+        {
+          "hash": "3b340b6704c732775060e302373248de97355259adc407c841d203e78e321355",
+          "path": "templates/claude-games/audit-instructions.md"
+        },
+        {
+          "hash": "b9c042735665f43d62ef41d11e95a3374f4576a1f3e1704fbb562e2f2c28141d",
+          "path": "templates/claude-games/enrichment-instructions.md"
+        },
+        {
+          "hash": "46d6c5841b935418b86d0f3f1e4e991ca5aa35c61c83b0d52298e795a34669e5",
+          "path": "templates/claude-games/remediation-instructions.md"
+        },
+        {
+          "hash": "9a78a08218bf72bbe83dea48fc254c15bf5d57c7c814df959072ff9185d881f9",
+          "path": "templates/config/rk.config.example.json"
+        }
+      ],
+      "globs": [
+        "templates/**"
+      ],
+      "importConfidence": "full",
+      "name": "templates",
+      "origin": "authored",
+      "role": "docs",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "e50f248100f43274a20ced7f9a2e12e68f4ac57e17118f7a2c6a42270c2a3f96",
+          "importsFiles": [
+            "src/audit/controls.ts",
+            "src/db/init.ts"
+          ],
+          "path": "test/audit-controls.test.ts"
+        },
+        {
+          "hash": "adb4d24fabf21e5644294785b08b65306ef318b40b1d14d675cc8186658dfd71",
+          "importsFiles": [
+            "src/audit/controls.ts",
+            "src/audit/import.ts",
+            "src/audit/queries.ts",
+            "src/db/init.ts"
+          ],
+          "path": "test/audit-import.test.ts"
+        },
+        {
+          "hash": "a159dfcab13a43501a8b8a996a11f657c9dcabd18e48c28226182a0b18f4105e",
+          "importsFiles": [
+            "src/audit/controls.ts",
+            "src/audit/import.ts",
+            "src/audit/queries.ts",
+            "src/db/init.ts"
+          ],
+          "path": "test/audit-queries.test.ts"
+        },
+        {
+          "hash": "80941911e9e71ce683b5e95344763edf460f9f3d5b4a648e7b217b1023c465f1",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/build-health.test.ts"
+        },
+        {
+          "hash": "3bec52035d5e7eb92f4b2b9abd074efe739dbb1c4f86c02760b78b7345a11106",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/classify.test.ts"
+        },
+        {
+          "hash": "9ba811323969ede05837685553b6f7382c15c569b91ffa1bd01d46a90b79fd25",
+          "path": "test/cli-async.test.ts"
+        },
+        {
+          "hash": "9537eb50abf4a8976e1a3e8213d7c92a444902885c3e57c4d0d6cb60c97e1fe2",
+          "importsFiles": [
+            "src/cli-exit.ts"
+          ],
+          "path": "test/cli-exit.test.ts"
+        },
+        {
+          "hash": "09a7bc15ff7dc4949c5ce4accc826fccb5b346dc58351d7944eae7660095e8eb",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/cli-note-delete.test.ts"
+        },
+        {
+          "hash": "bca9da08d155ce2d1d41c4570db852c8bdcc5023fe61d78bb5c19041e741b14e",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/cli-publish.test.ts"
+        },
+        {
+          "hash": "4354fc7e8c92bd57c18df9c93072dfadffb5bfe965c0c21be2d0aeb388d2cf3b",
+          "importsFiles": [
+            "src/colors.ts"
+          ],
+          "path": "test/colors.test.ts"
+        },
+        {
+          "hash": "48543f00f358e29e5f108e303972ce7fa016cc66b5c189a375bafd2f1d19d6fa",
+          "importsFiles": [
+            "src/config.ts"
+          ],
+          "path": "test/config.test.ts"
+        },
+        {
+          "hash": "26e5559eba6387feff7245454c4120071c5f282d07f4b3c81e1938fddf3f1ad2",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/db.test.ts"
+        },
+        {
+          "hash": "8428ab2cd9cd3f254aa490acb76842805e45f57108924bfe03159607b8a2ab9a",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/health/diff.ts"
+          ],
+          "path": "test/diff.test.ts"
+        },
+        {
+          "hash": "17f07edfc557073a456de0e55a112d8d0500689d879ff8de44287a2d61b38635",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/health/doctor.ts"
+          ],
+          "path": "test/doctor.test.ts"
+        },
+        {
+          "hash": "6524315ea6e033a1b124eb2c3e0fd1f9ae6429f3227877043907336e38d81a35",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/dogfood-suggest.ts",
+            "src/sync/dogfood.ts"
+          ],
+          "path": "test/dogfood-intelligence-sync.test.ts"
+        },
+        {
+          "hash": "84c9df20f610a570d75b0dd1ac9f20112562cc70288aafa950eeefec0042b99d",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/dogfood-suggest.ts"
+          ],
+          "path": "test/dogfood-suggest.test.ts"
+        },
+        {
+          "hash": "e93a16974353953433f7ff4d12f932ab334e3f7cf7cc1699f2520a249db17687",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/dogfood-suggest.ts",
+            "src/sync/dogfood.ts",
+            "src/sync/swarm.ts"
+          ],
+          "path": "test/dogfood-swarm-sync.test.ts"
+        },
+        {
+          "hash": "1bb6569296ad3df7a4fed7216b8d7908af928144e3aff62984a02d4953665026",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/dogfood.ts"
+          ],
+          "path": "test/dogfood-sync.test.ts"
+        },
+        {
+          "hash": "90e7d3be469648d81a6e5e2e7b2279c40554b05cf1e349ef78c1dffb11273a0c",
+          "importsFiles": [
+            "src/errors.ts"
+          ],
+          "path": "test/errors.test.ts"
+        },
+        {
+          "hash": "c2f4c0af91fbf4eb7e7fa213ab8d026536da01911b52101b4b202369f42f3d5f",
+          "importsFiles": [
+            "src/sync/exec-bin.ts"
+          ],
+          "path": "test/exec-bin.test.ts"
+        },
+        {
+          "hash": "2db5d4a14d1fc722f1c35949ade12a7da026512f313fe8ab8046ec3a5751d4e2",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/health/feed.ts"
+          ],
+          "path": "test/feed.test.ts"
+        },
+        {
+          "hash": "73b34446c3bbbf297f90cfb7df17795176c31e84ff9ba61615ab81680dc96b96",
+          "path": "test/fixtures/sample-audit/controls.json"
+        },
+        {
+          "hash": "db961acc34b6008a5cfc2e10e85f15cc029f53049a2671dfd8128725bf6d7454",
+          "path": "test/fixtures/sample-audit/findings.json"
+        },
+        {
+          "hash": "3c635d9f8b567bacabd2334e4f7db3eb1058693967c19ab72ec68bc9b698ad0c",
+          "path": "test/fixtures/sample-audit/metrics.json"
+        },
+        {
+          "hash": "350d4f5efcbbfb0550acd0cd39c64bfa186ac8dbe941e30b55d59ff25ca2a062",
+          "path": "test/fixtures/sample-audit/run.json"
+        },
+        {
+          "hash": "c4b665f15deb4085c094f8feb0e515d8db935a1e2320aa3c82c5fc186d5408de",
+          "path": "test/fixtures/sample-repo/README.md"
+        },
+        {
+          "hash": "e19a63669ef361eef149d70c530b11b7954579c56f530782a50c0a991a0b0b39",
+          "path": "test/fixtures/sample-repo/package.json"
+        },
+        {
+          "hash": "67815bcffc8eeb8bdc174df0d0c4ddef483390ed54032f86f816781181b55c95",
+          "path": "test/fixtures/sample-repo/tsconfig.json"
+        },
+        {
+          "hash": "9b384f9ef00f8337ee3140a50411f77467d6831465475d23362ae912a61f31b8",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/forge-vault-path.test.ts"
+        },
+        {
+          "hash": "a32092d79ede36e7979d8286fb6b0d4e9ad515f17825eef04da70dc17ed56981",
+          "parseError": true,
+          "path": "test/fsck.test.ts"
+        },
+        {
+          "hash": "8f025713cc53abdde443a692d17ce5257d25502ef18e44259dfa530dbdbfd50d",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/search/fts.ts"
+          ],
+          "path": "test/fts.test.ts"
+        },
+        {
+          "hash": "06a6837421534d994ba5ad8b1c7762504b50f25c030606f7316920e93b3514e0",
+          "importsFiles": [
+            "src/games/parser.ts",
+            "src/games/render.ts",
+            "src/games/scorer.ts",
+            "src/games/types.ts"
+          ],
+          "path": "test/games.test.ts"
+        },
+        {
+          "hash": "4ff0dcbc76e4c569eb3eb0a406c78f8c999a6f051cd4de5cccedd7ee23afa5c3",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/github.ts"
+          ],
+          "path": "test/github.test.ts"
+        },
+        {
+          "hash": "bf24954763262eda274f348a5e26dfacc2b7474abe7b808537a951c3973c471e",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/health/index.ts"
+          ],
+          "path": "test/health-commands.test.ts"
+        },
+        {
+          "hash": "5c2489b57fe140685d0e82323432d0290d2b9eecae5d3a2dfece793eccd67c9a",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/lifecycle.test.ts"
+        },
+        {
+          "hash": "cdcd20d4e3aba7f87ae1a423ab358a05f11492d5ace978a860bb9bba6885c66b",
+          "importsFiles": [
+            "src/audit/controls.ts",
+            "src/audit/import.ts",
+            "src/db/init.ts"
+          ],
+          "path": "test/mcp-server.test.ts"
+        },
+        {
+          "hash": "52b93647eb64dacf4d60981ac2e9a966317ddecda40b5cb3aaa2ed043ba8b328",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/migration-009.test.ts"
+        },
+        {
+          "hash": "a28946fc28064f9d849c5fd4c37965a2c28b3c88a7e071ffb4ea50e03bc77c6c",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/migration-010.test.ts"
+        },
+        {
+          "hash": "ad730f1c5cc3b69ec25da17c1495a92d00055a319b8fe4e35b68f4fc0fe6d021",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/migration-011.test.ts"
+        },
+        {
+          "hash": "e82b5d2aff4136a41e7e12384bc0313557a4c340b34ff3368d76f8949412aeb0",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/migration-sequence.test.ts"
+        },
+        {
+          "hash": "69a54dae545e1c09082df9579238e2754e1c9b89f200acfced49c32db14758bb",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/operational-runs.test.ts"
+        },
+        {
+          "hash": "e4d4426b8e0f9146f864e11712169722837fce8a268e8b306f7820ca31dc6a53",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/local.ts"
+          ],
+          "path": "test/parse-remote.test.ts"
+        },
+        {
+          "hash": "f085668063c32865d3d67a1c6949596b3aff10d431ade198e39500a6e8492440",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/publish-state.test.ts"
+        },
+        {
+          "hash": "4ac86146d7b572280f18f335c33356496e0c0f305407c9ba625d19927ff6a826",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/related-empty.test.ts"
+        },
+        {
+          "hash": "5380ed31a4799b1bd763cca1d4942f442a67a4bb5069bf7ece086072d8412b58",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/index.ts"
+          ],
+          "path": "test/relation-types.test.ts"
+        },
+        {
+          "hash": "4796145d09f386f4b5aac4ec8bcbbb6400b4469962807fb2ab7d9329deeb3281",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/rigs.test.ts"
+        },
+        {
+          "hash": "c81f455ba705997767ef292a227336fc70692256975c07920ad4b1928ea95ff7",
+          "importsFiles": [
+            "src/db/init.ts"
+          ],
+          "path": "test/security.test.ts"
+        },
+        {
+          "hash": "dc323c8af3b5dba332599a67deb7a7f4614d8980c12aa72b0b7965e05a99c7c3",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/github.ts"
+          ],
+          "path": "test/sync-404-archived.test.ts"
+        },
+        {
+          "hash": "9c478e2d66820e2cb05c1732547ccf877487cca223f999cb85d0a43b16f182d4",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/build-health.ts"
+          ],
+          "path": "test/sync-build-health.test.ts"
+        },
+        {
+          "hash": "525d4265c69ff3c4b6845515ca76615598fb78ce481071079939bd4a4d86c170",
+          "importsFiles": [
+            "src/config.ts"
+          ],
+          "path": "test/sync-owners-config.test.ts"
+        },
+        {
+          "hash": "1299872002abb2b07b5038b807b11bb571517fbdd7ed3cf9d7a58915896d95e9",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/publish.ts"
+          ],
+          "path": "test/sync-publish.test.ts"
+        },
+        {
+          "hash": "feb2ad08f583c9b1ae752293bc4c894a4a1dd529845656fa457c28343f9d8e05",
+          "parseError": true,
+          "path": "test/sync-recursive-local.test.ts"
+        },
+        {
+          "hash": "799b1be0f1964ead9c1b7c34beb0b5b9c4a54b2aca5086d38fe288157ad6e476",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/sync/index.ts",
+            "src/sync/local.ts"
+          ],
+          "path": "test/sync.test.ts"
+        },
+        {
+          "hash": "e3998f425e02405273deacbecdc05b1de02eb2b98f61d5ae4e18cb29027f1d61",
+          "importsFiles": [
+            "src/db/init.ts",
+            "src/health/table.ts"
+          ],
+          "path": "test/table.test.ts"
+        },
+        {
+          "hash": "106b4f19bc2dafc69a2803140aab0e83ac404c360be9fff593178d8a9e5ae47f",
+          "path": "test/version.test.ts"
+        }
+      ],
+      "globs": [
+        "test/**"
+      ],
+      "importConfidence": "full",
+      "name": "test",
+      "origin": "authored",
+      "role": "test",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    }
+  ],
+  "doors": [
+    {
+      "commands": [
+        {
+          "job": "build-and-test",
+          "step": "Atlas check",
+          "text": "npx --yes @dogfood-lab/atlas@1.14.0 check"
+        },
+        {
+          "job": "build-and-test",
+          "step": "3",
+          "text": "npm ci"
+        },
+        {
+          "job": "build-and-test",
+          "step": "npm audit (advisory — does not fail the build)",
+          "text": "echo '### npm audit (advisory)' >> \"$GITHUB_STEP_SUMMARY\"\necho '```' >> \"$GITHUB_STEP_SUMMARY\"\nnpm audit --audit-level=moderate 2>&1 | tee -a \"$GITHUB_STEP_SUMMARY\"\necho '```' >> \"$GITHUB_STEP_SUMMARY\"\n"
+        },
+        {
+          "job": "build-and-test",
+          "step": "5",
+          "text": "npm run build"
+        },
+        {
+          "job": "build-and-test",
+          "step": "6",
+          "text": "npm run typecheck"
+        },
+        {
+          "job": "build-and-test",
+          "step": "7",
+          "text": "npm run lint"
+        },
+        {
+          "job": "build-and-test",
+          "step": "8",
+          "text": "npm test"
+        }
+      ],
+      "file": ".github/workflows/ci.yml",
+      "landings": [
+        "data"
+      ],
+      "mentions": [],
+      "name": "CI",
+      "permissions": [],
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "scripts",
+          "depth": 0,
+          "files": 1
+        },
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 32
+        },
+        {
+          "boundary": "test",
+          "depth": 0,
+          "files": 48
+        },
+        {
+          "boundary": "root",
+          "depth": 1,
+          "enters": {
+            "file": "package.json",
+            "from": "src/cli.ts"
+          },
+          "files": 1
+        }
+      ],
+      "readers": [
+        {
+          "by": "package.json",
+          "call": "literal",
+          "confidence": "text",
+          "target": "data"
+        },
+        {
+          "by": "src/cli.ts",
+          "call": "existsSync",
+          "confidence": "ast",
+          "target": "data"
+        }
+      ],
+      "runs": [
+        {
+          "job": "build-and-test",
+          "path": "scripts/postbuild.js"
+        },
+        {
+          "directory": true,
+          "job": "build-and-test",
+          "matched": true,
+          "path": "src/",
+          "via": "eslint eslint.config.js"
+        },
+        {
+          "directory": true,
+          "job": "build-and-test",
+          "matched": true,
+          "path": "test/",
+          "via": "vitest vitest.config.ts"
+        }
+      ],
+      "runsCount": 3,
+      "secrets": [],
+      "sends": {
+        "deploysPages": false,
+        "dispatchesTo": [],
+        "opensIssues": false,
+        "opensIssuesOnFailure": false,
+        "opensPullRequests": false,
+        "publishes": false,
+        "publishesTo": [],
+        "releases": false
+      },
+      "stages": [],
+      "triggers": [
+        {
+          "event": "pull_request",
+          "paths": [
+            ".github/workflows/**",
+            "atlas/**",
+            "package-lock.json",
+            "package.json",
+            "site/astro.config.mjs",
+            "site/package-lock.json",
+            "site/package.json",
+            "src/**",
+            "test/**",
+            "tsconfig.json"
+          ]
+        },
+        {
+          "branches": [
+            "main"
+          ],
+          "event": "push",
+          "paths": [
+            ".github/workflows/**",
+            "atlas/**",
+            "package-lock.json",
+            "package.json",
+            "site/astro.config.mjs",
+            "site/package-lock.json",
+            "site/package.json",
+            "src/**",
+            "test/**",
+            "tsconfig.json"
+          ]
+        },
+        {
+          "event": "workflow_dispatch"
+        }
+      ],
+      "uses": [
+        "actions/checkout",
+        "actions/setup-node"
+      ],
+      "usesWorkflowToken": false
+    },
+    {
+      "commands": [
+        {
+          "job": "build",
+          "step": "Install site dependencies",
+          "text": "npm ci"
+        },
+        {
+          "job": "build",
+          "step": "Build site",
+          "text": "npm run build"
+        }
+      ],
+      "file": ".github/workflows/pages.yml",
+      "landings": [],
+      "mentions": [],
+      "name": "Deploy site to GitHub Pages",
+      "permissions": [
+        "contents:read",
+        "id-token:write",
+        "pages:write"
+      ],
+      "pushes": false,
+      "reach": [],
+      "readers": [],
+      "runs": [],
+      "runsCount": 0,
+      "secrets": [],
+      "sends": {
+        "deploysPages": true,
+        "dispatchesTo": [],
+        "opensIssues": false,
+        "opensIssuesOnFailure": false,
+        "opensPullRequests": false,
+        "publishes": false,
+        "publishesTo": [],
+        "releases": false
+      },
+      "stages": [],
+      "triggers": [
+        {
+          "branches": [
+            "main"
+          ],
+          "event": "pull_request",
+          "paths": [
+            ".github/workflows/pages.yml",
+            "site/**"
+          ]
+        },
+        {
+          "branches": [
+            "main"
+          ],
+          "event": "push",
+          "paths": [
+            ".github/workflows/pages.yml",
+            "site/**"
+          ]
+        },
+        {
+          "event": "workflow_dispatch"
+        }
+      ],
+      "uses": [
+        "actions/checkout",
+        "actions/deploy-pages",
+        "actions/setup-node",
+        "actions/upload-pages-artifact"
+      ],
+      "usesWorkflowToken": false
+    },
+    {
+      "commands": [
+        {
+          "job": "release",
+          "step": "Resolve version",
+          "text": "if [ \"${GITHUB_REF_TYPE}\" = \"tag\" ]; then\n  VERSION=\"${GITHUB_REF_NAME#v}\"\nelse\n  VERSION=$(node -p \"require('./package.json').version\")\nfi\necho \"version=${VERSION}\" >> \"$GITHUB_OUTPUT\"\necho \"Resolved version: ${VERSION}\"\n"
+        },
+        {
+          "job": "release",
+          "step": "3",
+          "text": "npm ci"
+        },
+        {
+          "job": "release",
+          "step": "Verify (build + typecheck + lint + test)",
+          "text": "npm run verify"
+        },
+        {
+          "job": "release",
+          "step": "Generate SBOM",
+          "text": "npm run sbom"
+        },
+        {
+          "job": "release",
+          "step": "Install npm >=11.5 in sandbox for OIDC trusted publishing",
+          "text": "SANDBOX=\"$HOME/.npm-cli-sandbox\"\nmkdir -p \"$SANDBOX\"\npushd \"$SANDBOX\" >/dev/null\necho '{\"name\":\"npm-cli-sandbox\",\"version\":\"0.0.0\",\"private\":true}' > package.json\nnpm install --no-save --no-audit --no-fund --silent npm@latest\npopd >/dev/null\necho \"$SANDBOX/node_modules/.bin\" >> \"$GITHUB_PATH\"\n\"$SANDBOX/node_modules/.bin/npm\" --version\n"
+        },
+        {
+          "job": "release",
+          "step": "Guard — package.json version equals tag version",
+          "text": "PKG=$(node -p \"require('./package.json').version\")\nTAG_VERSION=\"${{ steps.bump.outputs.version }}\"\nif [ \"$PKG\" != \"$TAG_VERSION\" ]; then\n  echo \"::error::package.json version ($PKG) does not match tag version ($TAG_VERSION) — refusing to publish a divergent release.\" >&2\n  exit 1\nfi\necho \"Version guard passed: package.json and tag both at $PKG\"\n"
+        },
+        {
+          "job": "release",
+          "step": "Publish to npm with provenance (OIDC Trusted Publisher)",
+          "text": "npm publish --provenance --access public"
+        },
+        {
+          "job": "release",
+          "step": "Create GitHub release (if not exists)",
+          "text": "TAG=\"v${{ steps.bump.outputs.version }}\"\nVERSION=\"${{ steps.bump.outputs.version }}\"\nif gh release view \"$TAG\" >/dev/null 2>&1; then\n  echo \"Release $TAG already exists; skipping create.\"\nelse\n  # Extract the CHANGELOG section for this version: everything\n  # between `## [<version>]` and the next `## [` heading.\n  NOTES_FILE=\"$(mktemp)\"\n  awk -v ver=\"$VERSION\" '\n    $0 ~ \"^## \\\\[\" ver \"\\\\]\" { capture = 1; next }\n    capture && /^## \\[/ { exit }\n    capture { print }\n  ' CHANGELOG.md > \"$NOTES_FILE\"\n  if [ -s \"$NOTES_FILE\" ]; then\n    echo \"Using CHANGELOG section for $VERSION as release notes.\"\n    gh release create \"$TAG\" --title \"$TAG\" --notes-file \"$NOTES_FILE\"\n  else\n    echo \"No CHANGELOG section for $VERSION; using auto-generated notes.\"\n    gh release create \"$TAG\" --title \"$TAG\" --generate-notes\n  fi\nfi\n"
+        },
+        {
+          "job": "release",
+          "step": "Upload SBOM to GitHub release",
+          "text": "gh release upload \"v${{ steps.bump.outputs.version }}\" sbom.json --clobber"
+        }
+      ],
+      "file": ".github/workflows/release.yml",
+      "landings": [
+        "REMEDIATION-WORKLIST.md",
+        "audit_report.md",
+        "data"
+      ],
+      "mentions": [
+        {
+          "job": "release",
+          "path": "CHANGELOG.md"
+        },
+        {
+          "job": "release",
+          "path": "package.json"
+        },
+        {
+          "job": "release",
+          "path": "sbom.json"
+        }
+      ],
+      "name": "Release",
+      "permissions": [
+        "contents:write",
+        "id-token:write"
+      ],
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "scripts",
+          "depth": 0,
+          "files": 4
+        },
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 32
+        },
+        {
+          "boundary": "test",
+          "depth": 0,
+          "files": 48
+        },
+        {
+          "boundary": "root",
+          "depth": 1,
+          "enters": {
+            "file": "package.json",
+            "from": "src/cli.ts"
+          },
+          "files": 1
+        }
+      ],
+      "readers": [
+        {
+          "by": "package.json",
+          "call": "literal",
+          "confidence": "text",
+          "target": "data"
+        },
+        {
+          "by": "src/cli.ts",
+          "call": "existsSync",
+          "confidence": "ast",
+          "target": "data"
+        }
+      ],
+      "runs": [
+        {
+          "job": "release",
+          "path": "scripts/gen-audit-report.mjs"
+        },
+        {
+          "job": "release",
+          "path": "scripts/gen-worklist.mjs"
+        },
+        {
+          "job": "release",
+          "path": "scripts/postbuild.js"
+        },
+        {
+          "directory": true,
+          "job": "release",
+          "matched": true,
+          "path": "src/",
+          "via": "eslint eslint.config.js"
+        },
+        {
+          "directory": true,
+          "job": "release",
+          "matched": true,
+          "path": "test/",
+          "via": "vitest vitest.config.ts"
+        }
+      ],
+      "runsCount": 5,
+      "secrets": [
+        "GITHUB_TOKEN"
+      ],
+      "sends": {
+        "deploysPages": false,
+        "dispatchesTo": [],
+        "opensIssues": false,
+        "opensIssuesOnFailure": false,
+        "opensPullRequests": false,
+        "publishes": true,
+        "publishesTo": [
+          "npm"
+        ],
+        "releases": true
+      },
+      "stages": [],
+      "triggers": [
+        {
+          "event": "push",
+          "tags": [
+            "v*.*.*"
+          ]
+        },
+        {
+          "event": "workflow_dispatch"
+        }
+      ],
+      "uses": [
+        "actions/checkout",
+        "actions/setup-node"
+      ],
+      "usesWorkflowToken": true
+    }
+  ],
+  "edges": [
+    {
+      "from": "src",
+      "kind": "file",
+      "to": "root"
+    },
+    {
+      "from": "test",
+      "fromTests": true,
+      "kind": "file",
+      "to": "src"
+    }
+  ],
+  "generatedFrom": {
+    "commit": "823601731ae25a1d41917a2d0b05b1ee08ad14de",
+    "tracked": 777
+  },
+  "landings": [
+    {
+      "readers": [
+        {
+          "by": "src/sync/build-health.ts",
+          "call": "existsSync",
+          "confidence": "ast"
+        },
+        {
+          "by": "src/sync/build-health.ts",
+          "call": "readFileSync",
+          "confidence": "ast"
+        },
+        {
+          "by": "src/sync/build-health.ts",
+          "call": "readdirSync",
+          "confidence": "ast"
+        },
+        {
+          "by": "src/sync/build-health.ts",
+          "call": "statSync",
+          "confidence": "ast"
+        }
+      ],
+      "target": ".github/workflows",
+      "writers": []
+    },
+    {
+      "readers": [],
+      "target": "AUDIT-WORKLIST.md",
+      "writers": [
+        {
+          "by": "scripts/gen-audit-worklist.mjs",
+          "confidence": "ast"
+        }
+      ]
+    },
+    {
+      "readers": [
+        {
+          "by": ".github/workflows/release.yml"
+        },
+        {
+          "by": "package.json",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "CHANGELOG.md",
+      "writers": []
+    },
+    {
+      "readers": [],
+      "target": "ENRICHMENT-WORKLIST.md",
+      "writers": [
+        {
+          "by": "scripts/gen-enrichment-worklist.mjs",
+          "confidence": "ast"
+        }
+      ]
+    },
+    {
+      "readers": [
+        {
+          "by": "package.json",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "sbom.json",
+          "call": "raw-url",
+          "confidence": "text",
+          "ref": "master",
+          "repo": "unclechu/node-deep-extend"
+        }
+      ],
+      "target": "LICENSE",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.fr.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.hi.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.it.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.ja.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.pt-BR.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.zh.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "README.es.md",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.es.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.hi.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.it.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.ja.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.pt-BR.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.zh.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "README.fr.md",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.es.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.fr.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.it.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.ja.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.pt-BR.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.zh.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "README.hi.md",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.es.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.fr.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.hi.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.ja.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.pt-BR.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.zh.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "README.it.md",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.es.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.fr.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.hi.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.it.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.pt-BR.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.zh.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "README.ja.md",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.es.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.fr.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.hi.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.it.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.ja.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.pt-BR.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.zh.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "package.json",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "research/STUDY-RK-017/pack-practitioner.md",
+          "call": "raw-url",
+          "confidence": "text",
+          "ref": "master",
+          "repo": "WiseLibs/better-sqlite3"
+        }
+      ],
+      "target": "README.md",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.es.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.fr.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.hi.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.it.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.ja.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.zh.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "README.pt-BR.md",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "README.es.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.fr.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.hi.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.it.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.ja.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "README.pt-BR.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "README.zh.md",
+      "writers": []
+    },
+    {
+      "readers": [],
+      "target": "REMEDIATION-CHECKLIST.md",
+      "writers": [
+        {
+          "by": "scripts/gen-remediation-checklist.mjs",
+          "confidence": "ast"
+        }
+      ]
+    },
+    {
+      "readers": [],
+      "target": "REMEDIATION-WORKLIST.md",
+      "writers": [
+        {
+          "by": "scripts/gen-worklist.mjs",
+          "confidence": "ast"
+        }
+      ]
+    },
+    {
+      "readers": [
+        {
+          "by": "package.json",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "SECURITY.md",
+      "writers": []
+    },
+    {
+      "readers": [],
+      "target": "audit_report.md",
+      "writers": [
+        {
+          "by": "scripts/gen-audit-report.mjs",
+          "confidence": "ast"
+        }
+      ]
+    },
+    {
+      "readers": [
+        {
+          "by": "src/cli.ts",
+          "call": "existsSync",
+          "confidence": "ast"
+        }
+      ],
+      "target": "data",
+      "writers": [
+        {
+          "by": "src/cli.ts",
+          "confidence": "ast"
+        }
+      ]
+    },
+    {
+      "readers": [
+        {
+          "by": "package.json",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "data/control-registry.json",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "templates/claude-games/audit-instructions.md",
+          "call": "literal",
+          "confidence": "text"
+        }
+      ],
+      "target": "package-lock.json",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": ".github/workflows/release.yml"
+        },
+        {
+          "by": "AUDIT-CONTRACT.md",
+          "call": "literal",
+          "confidence": "text"
+        },
+        {
+          "by": "research/STUDY-RK-017/pack-practitioner.md",
+          "call": "raw-url",
+          "confidence": "text",
+          "ref": "v12.8.0",
+          "repo": "WiseLibs/better-sqlite3"
+        },
+        {
+          "by": "research/STUDY-RK-028/pack-practitioner.md",
+          "call": "raw-url",
+          "confidence": "text",
+          "ref": "v12.8.0",
+          "repo": "WiseLibs/better-sqlite3"
+        },
+        {
+          "by": "src/cli.ts",
+          "call": "existsSync",
+          "confidence": "weak"
+        },
+        {
+          "by": "src/cli.ts",
+          "call": "readFileSync",
+          "confidence": "weak"
+        },
+        {
+          "by": "src/sync/build-health.ts",
+          "call": "existsSync",
+          "confidence": "weak"
+        }
+      ],
+      "target": "package.json",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": ".github/workflows/release.yml"
+        }
+      ],
+      "target": "sbom.json",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "eslint.config.js",
+          "call": "literal",
+          "confidence": "ast"
+        }
+      ],
+      "target": "scripts",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "tsup.config.ts",
+          "call": "literal",
+          "confidence": "ast"
+        }
+      ],
+      "target": "src/cli.ts",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "scripts/postbuild.js",
+          "call": "readdirSync",
+          "confidence": "ast"
+        }
+      ],
+      "target": "src/db",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "tsup.config.ts",
+          "call": "literal",
+          "confidence": "ast"
+        }
+      ],
+      "target": "src/index.ts",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "tsup.config.ts",
+          "call": "literal",
+          "confidence": "ast"
+        }
+      ],
+      "target": "src/mcp/server.ts",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "eslint.config.js",
+          "call": "literal",
+          "confidence": "ast"
+        }
+      ],
+      "target": "test/fixtures",
+      "writers": []
+    }
+  ],
+  "overlaps": [],
+  "submodules": [],
+  "symlinks": [],
+  "testFiles": 55,
+  "unassigned": []
+}
