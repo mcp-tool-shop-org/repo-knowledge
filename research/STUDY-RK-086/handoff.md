@@ -8,3 +8,5 @@ Merge: 🛑 do not merge #13/#14/#15 (or #6 #8 #12–#26).
 Next: STUDY-RK-087 MCP handbook still-open #16 (if OPEN). Do not invent STUDY-RK-101.
 
 Last line ✅ · 🛑 · 🔧.
+
+**Land sha:** `483c757`
