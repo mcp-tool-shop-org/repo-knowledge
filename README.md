@@ -30,9 +30,9 @@ npm install -g @mcptoolshop/repo-knowledge
 ```
 
 **Requirements:**
-- Node.js 20+
+- Node.js 20+ — this package's `engines.node` is `>=20`. The locked `better-sqlite3` addon's own `engines` list is vendor majors, not a prebuild-coverage claim.
 - `gh` CLI (authenticated) for GitHub sync
-- C/C++ build tools for `better-sqlite3`, or prebuild binaries will be used automatically on supported platforms
+- C/C++ build tools for `better-sqlite3` when a prebuild misses. The addon install script is dual-path: `prebuild-install || node-gyp rebuild --release`. A matching prebuild is used when one is available; otherwise `node-gyp` compiles from source. That is not universal platform coverage. If install fails, see the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
 
 ## Security Model
 

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Docs resolve of leftover STUDY-RK PRs: strip machine-absolute paths (#20); Claude Games POINTS vs templates (#21); handbook ops `rk backup`/`rk restore` instead of live-file `cp` (#23); `rk init` / `primaryLanguage` getting-started (#24); better-sqlite3 dual-path install docs without pinning an addon patch version (#19); one-line lock that publish-state is not a registry publish (#18).
 - **`rk show` prints an honest empty Relationships section** when no edges are stored (`No relationships recorded`) instead of omitting the heading. Empty `getRelated` is engine state, not Isolated-OK or enrichment-complete; the command never invents edges. `rk related` keeps the text sentinel `No relationships recorded for: <slug>` and `--json` `[]`. MCP `related_repos` still returns `{ relationships: [] }` for agents.
 
 ### Fixed
