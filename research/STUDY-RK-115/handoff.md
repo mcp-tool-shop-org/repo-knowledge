@@ -102,3 +102,5 @@ Staged: `/workspace/studio/outbox-STUDY-RK-115/verifier.md`
 # STUDY-RK-115 handoff (Verifier scorecard + land guidance)
 
 Land five files under research/STUDY-RK-115/ from outbox. NEW leftover/coding PR: no. KEEP holds OPEN. 🛑 do not merge #6 #8 #12–#28. Do not invent STUDY-RK-131.
+
+Landed five files under research/STUDY-RK-115/ sha=`4cd799b` tip-before-stamp=`3cb5dd9`.
