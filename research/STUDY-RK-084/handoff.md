@@ -8,3 +8,5 @@ Merge: 🛑 do not merge #6 #8 #12–#26.
 Next: STUDY-RK-085 identity re-scan still-open #19 #20 (🛑 mailbox/home-path/Tailscale). Do not invent STUDY-RK-101.
 
 Last line ✅ · 🛑 · 🔧.
+
+**Land sha:** `a8b6f52`
