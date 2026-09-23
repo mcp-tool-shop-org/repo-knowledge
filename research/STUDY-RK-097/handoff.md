@@ -23,3 +23,5 @@ Leave packs unchanged. Do not invent STUDY-RK-101. Quiet: paths + sha, then stop
 STUDY-RK-098 (081..097 packs stamp) already opened · do not invent 101.
 
 ✅ Builder may land correction
+
+Patch sha=`e50a159` · prior land=`194deb0` tip=`6e134b4` · tip after patch: `e50a159`
