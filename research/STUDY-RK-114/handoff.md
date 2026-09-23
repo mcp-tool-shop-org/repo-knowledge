@@ -99,3 +99,5 @@ Scholar **8/8** · Practitioner **8/8** · Analogist **6 Hold-with-limit · 7–
 # STUDY-RK-114 handoff (Verifier scorecard + land guidance)
 
 Land five files under research/STUDY-RK-114/ from outbox. NEW leftover/coding PR: no. KEEP holds OPEN. 🛑 do not merge #6 #8 #12–#28. Do not invent STUDY-RK-131.
+
+Landed five files under research/STUDY-RK-114/ sha=`f091579` tip-before-stamp=`e6ba5aa`.
