@@ -16,12 +16,13 @@
 REAFFIRM 003/015/025 + 120. KEEP #6 #8 #12–#28 OPEN (do not merge).
 
 ## Verifier scorecard
-- Scholar **8/8** VERIFIED · process flag: word count ~796 > 500–600
+- Scholar **7/8** · **#2 UNVERIFIED** (abs loads; dual-surfaces claim not on abs) · process flag: word count ~796 > 500–600
 - Practitioner **8/8** VERIFIED
 - Analogist **6 Hold** VERIFIED · 7–8 Fail-transfer
 - Soft folklore invent gates: **0**
 
 ## Implications (verified only)
+- Flag Scholar #2 UNVERIFIED — drop from implications.
 - Tip MCP SoR is server.ts (30) + README (30). Do not invent tip-already-synced from open covering.
 - Handbook 19→30 residual stays INSIDE #12/#16. Do not invent mandatory-new MCP leftover PR or risk-free merge.
 
