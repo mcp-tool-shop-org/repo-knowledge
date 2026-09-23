@@ -16,13 +16,13 @@
 REAFFIRM 035/057/073/097 + 124. KEEP #6 #8 #12–#26 #28 OPEN (do not merge).
 
 ## Verifier scorecard
-- Scholar **7/8** · **#7 UNVERIFIED** (Tan dual-surfaces / tip-already-synced invent gate not on abs) · process flag ~855w > 500–600
+- Scholar **6/8** · **#7 UNVERIFIED** (Tan dual-surfaces / tip-already-synced invent gate not on abs) · **#8 UNVERIFIED** (2402.11048 docs-debt abs ≠ deps-process / mandatory-new-deps-PR invent gate) · process flag ~855w > 500–600
 - Practitioner **8/8** VERIFIED
 - Analogist **6 Hold-with-limit** · **7–8 Fail-transfer**
 - Soft folklore invent gates: **0**
 
 ## Implications (verified only)
-- Flag Scholar #7 UNVERIFIED — drop from implications.
+- Flag Scholar #7/#8 UNVERIFIED — drop from implications.
 - Tip SoR KEEP package pins. Do not invent merge-is-fine, tip-already-synced via #8, merge-#8-clears-tip, or mandatory-new-deps-PR.
 - #8 stays OPEN deps-process inventory — not tip clearance. Study land only.
 
