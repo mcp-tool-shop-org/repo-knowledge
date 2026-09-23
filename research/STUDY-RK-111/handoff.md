@@ -93,3 +93,5 @@ Tip already carries CLI-PR-003 + health-commands doctor/feed/table builder cover
 Scholar **8/8** · Practitioner **8/8** · Analogist **6 Hold-with-limit · 7–8 Fail-transfer**
 
 ✅ Builder may land
+
+Landed five files under research/STUDY-RK-111/ sha=`8ab6be8bb073c64c3f27b3610e13ddd18a570cc2` tip-before-stamp=`c399182`.
