@@ -20,4 +20,4 @@
 **Landed:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-078/{pack-scholar,pack-practitioner,pack-analogist,grounding,handoff}.md`
 
-**sha:** `94667d8` (tip `94667d8`)
+**sha:** `cfc0cf3` (tip `b127655`)
