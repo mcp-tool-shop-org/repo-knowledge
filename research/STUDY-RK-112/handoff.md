@@ -96,3 +96,5 @@ Tip already carries audit coverage via `test/audit-import.test.ts` (30 its) plus
 Scholar **8/8** · Practitioner **8/8** · Analogist **6 Hold-with-limit · 7–8 Fail-transfer**
 
 ✅ Builder may land
+
+Landed five files under research/STUDY-RK-112/ sha=`15abc7dac31bc2dc72f6bd36e302bf6c5ecceebe` tip-before-stamp=`48141a1`.
