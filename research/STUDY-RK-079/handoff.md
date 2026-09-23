@@ -10,4 +10,4 @@ Next: STUDY-RK-080 exhausted 051–080 when 079 complete; then continue STUDY-RK
 
 Last line ✅ · 🛑 · 🔧.
 
-**Land sha:** PENDING
+**Land sha:** `1d13bc2`
