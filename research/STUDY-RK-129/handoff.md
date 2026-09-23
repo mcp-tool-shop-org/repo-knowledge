@@ -5,3 +5,5 @@
 Land five files under `research/STUDY-RK-129/` from `/workspace/studio/outbox-STUDY-RK-129/` (pack-scholar.md · pack-practitioner.md · pack-analogist.md · grounding.md · handoff.md). Optional: verifier-scorecard.md. 🛑 do not merge #6 #8 #12–#26 #28. Next named 130 idle — do not invent STUDY-RK-131.
 
 Quiet in group: paths · land sha · tip · stop.
+
+Landed at sha=`3309681` tip pending stamp.
