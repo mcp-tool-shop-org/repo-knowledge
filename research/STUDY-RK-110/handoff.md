@@ -84,3 +84,5 @@ Soft folklore invent gates in Analogist pack: **0**.
 - Coding row: **none** for `--json` / CLI-JSON-CORE. NEW coding PR: **no**.
 
 ✅ Builder may land · 🛑 Coordinator · 🔧 seat rework
+
+Landed five files under research/STUDY-RK-110/ sha=`fe8825e8d2050e3d5137460545c6a88bd3eac63c` tip-before-stamp=`96b4e42`.
