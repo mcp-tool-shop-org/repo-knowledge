@@ -21,3 +21,5 @@ Optional sidecar: scorecard.md may stay outbox-only (not required in the five). 
 After land sha: STUDY-RK-092 (#22 note --delete if still open) · do not invent 101.
 
 ✅ Builder may land
+
+Land sha=`0fa8e2f` · tip `1d2f572` (pre-land) · tip after push: `0fa8e2f`
