@@ -82,3 +82,5 @@ Soft folklore invent gates in Analogist pack: **0**.
 - Coding row: **none** for FTS. NEW coding PR: **no**.
 
 ✅ Builder may land · 🛑 Coordinator · 🔧 seat rework
+
+Landed five files under research/STUDY-RK-107/ sha=`5c9ab11ef7f52e1619138a3872c791361328339f` tip-before-stamp=`b24994b`.
