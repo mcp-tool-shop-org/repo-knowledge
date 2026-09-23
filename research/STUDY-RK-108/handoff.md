@@ -85,3 +85,5 @@ Soft folklore invent gates in Analogist pack: **0**.
 - Coding row: **none** for classify. NEW coding PR: **no**.
 
 ✅ Builder may land · 🛑 Coordinator · 🔧 seat rework
+
+Landed five files under research/STUDY-RK-108/ sha=`b166f66763dbefba9e844e2549af53dd07523c0b` tip-before-stamp=`046fae3`.
