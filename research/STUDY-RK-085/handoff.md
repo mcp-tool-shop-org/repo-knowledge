@@ -8,3 +8,5 @@ Merge: 🛑 do not merge #19/#20 (or #6 #8 #12–#26).
 Next: STUDY-RK-086 vitest still-open #13–#15 vs 022/023/024. Do not invent STUDY-RK-101.
 
 Last line ✅ · 🛑 · 🔧.
+
+**Land sha:** `5fb1f24`
