@@ -22,12 +22,22 @@ rk sync --owners my-org
 # Sync multiple orgs with local scanning
 rk sync --owners org1,org2 --local /path/to/repos
 
+# Cap local scan recursion (default: 4)
+rk sync --owners my-org --local /path/to/repos --local-depth 4
+
 # Include release history (slower)
 rk sync --owners my-org --releases
 
 # Include forked repos
 rk sync --owners my-org --forks
+
+# Archive repos absent from the GitHub listing
+rk sync --owners my-org --prune-vanished
 ```
+
+`--local-depth` sets the max recursion depth for `--local` scanning (default: `4`).
+
+`--prune-vanished` archives repos absent from the GitHub listing. Without the flag, vanished repos are detected and warned only. Use only with a fully-scoped token.
 
 ### `rk scan <path>`
 
@@ -161,6 +171,215 @@ rk sync-dogfood
 
 # Use a local testing-os checkout
 rk sync-dogfood --local /path/to/testing-os
+```
+
+### `rk suggest-dogfood`
+
+Get dogfood intelligence suggestions for a repo or a product surface. Specify exactly one of `--repo` or `--surface`.
+
+```bash
+rk suggest-dogfood --repo mcp-tool-shop-org/shipcheck
+rk suggest-dogfood --surface cli
+```
+
+## Lifecycle commands
+
+### `rk delete <slug>`
+
+Hard-delete a repo and all child rows (cascade). Irreversible. Pass `--yes` (`-y`) to skip the confirmation prompt.
+
+```bash
+rk delete my-org/old-repo
+rk delete my-org/old-repo --yes
+```
+
+### `rk archive <slug>`
+
+Mark a repo archived (`lifecycle_status=archived`). Preserves notes and findings. Optional: `--reason` (recorded as a warning note).
+
+```bash
+rk archive my-org/old-repo --reason "Superseded by my-org/new-repo"
+```
+
+### `rk verify-local`
+
+Verify each repo `local_path` exists on the current rig. Optional: `--rig` (default: `RK_RIG_ID` env or hostname), `--strict` (exit non-zero if any drift detected).
+
+```bash
+rk verify-local
+rk verify-local --rig my-rig --strict
+```
+
+### `rk init-rig`
+
+Register the current rig in the rigs table. Optional: `--id` (default: `RK_RIG_ID` env or hostname), `--hostname` (default: OS hostname), `--root` (default: cwd).
+
+```bash
+rk init-rig
+rk init-rig --id studio --hostname studio-box --root /path/to/workspace
+```
+
+### `rk prune`
+
+Hard-delete repos archived longer than `--days` (default: `30`). Without `--apply`, candidates are listed only. Pass `--dry-run` to show candidates without deleting, or `--apply` to delete. Do not combine `--dry-run` and `--apply`.
+
+```bash
+rk prune --days 30
+rk prune --days 30 --apply
+```
+
+## Publish-state commands
+
+### `rk versions <slug>`
+
+Show the cross-channel published-version dashboard (`npm`, `pypi`, `github_release`). Optional: `--refresh` (sync from registries before rendering), `--strict` (exit non-zero if the `--refresh` sync surfaced errors), `--channel` (`npm|pypi|github_release`).
+
+```bash
+rk versions my-org/my-repo
+rk versions my-org/my-repo --refresh --channel npm
+```
+
+### `rk drift <slug>`
+
+Compare source-of-truth version (`package.json` / `pyproject.toml`) vs registry latest. Optional: `--strict` (exit non-zero if any drift detected).
+
+```bash
+rk drift my-org/my-repo
+rk drift my-org/my-repo --strict
+```
+
+### `rk bind-package <slug>`
+
+Bind npm / PyPI package names and `publisher_method` on a repo. Specify at least one of `--npm`, `--pypi`, `--publisher-method`. Publisher methods: `pypi_trusted`, `pypi_token`, `npm_token`, `npm_trusted`, `github_release_only`, `none`.
+
+```bash
+rk bind-package my-org/my-repo --npm @scope/my-repo
+rk bind-package my-org/my-repo --pypi my-repo --publisher-method pypi_trusted
+```
+
+## Health commands
+
+### `rk health` / `rk health feed`
+
+Change feed since last sync (default `health` surface). Optional: `--refresh` (run build-health sync before rendering), `--strict` (exit non-zero if the `--refresh` sync surfaced errors), `--rig`, `--json`.
+
+```bash
+rk health
+rk health feed --json
+```
+
+### `rk health doctor <slug>`
+
+Single-repo deep-dive: dep audit, CI, actions, and toolchain. Optional: `--refresh`, `--strict`, `--rig`, `--json`.
+
+```bash
+rk health doctor my-org/my-repo
+rk health doctor my-org/my-repo --json
+```
+
+### `rk health table`
+
+Portfolio health table. JSON is the default output. Optional: `--refresh`, `--strict`, `--rig`, `--text` (pretty-text instead of JSON).
+
+```bash
+rk health table
+rk health table --text
+```
+
+## Operational commands
+
+### `rk owners`
+
+Manage the `rk.config.json` owners list:
+
+```bash
+rk owners list
+rk owners add my-org
+rk owners remove my-org
+```
+
+### `rk fsck`
+
+Run DB integrity checks and write a `db_health_runs` audit row. Optional: `--strict` (exit non-zero if any check returns count > 0), `--json`.
+
+```bash
+rk fsck
+rk fsck --strict --json
+```
+
+### `rk diff <slug>`
+
+Show DB-entry change history for a repo over a time window (notes, audit runs, dep-audit snapshots, published versions). Optional: `--since` (default: 7 days ago), `--until` (default: now), `--json`.
+
+```bash
+rk diff my-org/my-repo
+rk diff my-org/my-repo --since 2026-06-01 --json
+```
+
+### `rk runs`
+
+List recent operational runs (`db_health_runs` from `rk fsck`, `sync_runs` from `rk sync`). Optional: `--db-health`, `--sync`, `--limit` (default: `10`), `--json`.
+
+```bash
+rk runs
+rk runs --sync --limit 5 --json
+```
+
+## Backup, restore, and preflight
+
+### `rk backup`
+
+Snapshot the database to a vacuumed copy under `data/backups/` (or `--out`).
+
+```bash
+rk backup
+rk backup --out /path/to/snapshot.db
+```
+
+### `rk restore <path>`
+
+Restore the database from a backup file. Confirm-gated; refuses a newer-schema backup. Pass `--yes` (`-y`) to skip the confirmation prompt.
+
+```bash
+rk restore data/backups/snapshot.db
+rk restore /path/to/snapshot.db --yes
+```
+
+### `rk doctor`
+
+Environment preflight: config, DB, schema version, `gh` auth, current rig, recent sync/fsck runs. Distinct from `rk health doctor <slug>`. Optional: `--json`, `--strict` (exit non-zero when any check is red).
+
+```bash
+rk doctor
+rk doctor --json --strict
+```
+
+### `rk config` / `rk config show`
+
+Show the resolved effective config with per-field provenance. Optional: `--json`.
+
+```bash
+rk config
+rk config show --json
+```
+
+### `rk config validate`
+
+Validate `rk.config.json`. Exits non-zero on placeholder owners, bad shapes, or unresolvable paths. Optional: `--json`.
+
+```bash
+rk config validate
+```
+
+## Classification
+
+### `rk classify <slug>`
+
+Set curated status, stage, and category. These fields are not populated by `sync` or `scan`. Status: `active`, `paused`, `archived`, `unknown`. Category: `product`, `tool`, `library`, `experiment`, `blueprint`, `marketing`. Pass `""` to clear `stage` or `category`.
+
+```bash
+rk classify my-org/my-repo --status active --stage shipped --category tool
+rk classify my-org/my-repo --stage ""
 ```
 
 ## Games commands

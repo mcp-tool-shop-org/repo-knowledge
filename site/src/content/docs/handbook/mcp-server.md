@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-The MCP server exposes 19 tools over stdio, enabling Claude and other AI agents to query, annotate, and audit repos conversationally.
+The MCP server exposes 30 tools over stdio, enabling Claude and other AI agents to query, annotate, and audit repos conversationally.
 
 ## Configuration
 
@@ -70,6 +70,39 @@ The MCP server reads `rk.config.json` from the working directory at startup. Ens
 | `audit_detail` | Full audit report for a repo |
 | `audit_controls_list` | List canonical controls by domain |
 | `audit_unaudited` | List repos with no audit runs |
+
+## Build-health tools
+
+DB-only reads. These tools do not hit registries or refresh over the network; they reflect state as of the last `rk sync`.
+
+| Tool | Description |
+|------|-------------|
+| `health_feed` | Portfolio build-health change feed: audit deltas, unpinned actions, CI streak breaks, toolchain drift |
+| `health_doctor` | Single-repo build-health deep dive: CI, toolchain, dep audit, workflow actions |
+| `health_portfolio` | Portfolio health rollup — one row per repo with CI / dep / action-pin grades |
+
+## Operational tools
+
+| Tool | Description |
+|------|-------------|
+| `db_fsck` | Run the DB integrity checker (orphan rows, broken relationships, FTS drift). Writes one `db_health_runs` row per call |
+| `repo_diff` | Per-repo DB-entry change history within a time window (default: last 7 days) |
+| `ops_runs` | List recent `db_health_runs` (fsck) and/or `sync_runs` rows |
+
+## Lifecycle and publish tools
+
+| Tool | Description |
+|------|-------------|
+| `archive_repo` | Mark a repo archived. Preserves notes and findings; optional reason is recorded as a warning note |
+| `delete_repo` | Hard-delete a repo and related rows (FK cascade). Irreversible; `confirm` must be `true` |
+| `repo_versions` | List published versions already in the DB (npm / pypi / github-release). Read-only — no registry refresh |
+
+## Dogfood and audit-drill tools
+
+| Tool | Description |
+|------|-------------|
+| `suggest_dogfood` | Dogfood intelligence suggestions (findings, patterns, recommendations, doctrine) for a repo or a product surface |
+| `audit_failing` | List repos whose latest audit has failing controls in a given domain |
 
 ## Multi-agent workflows
 
