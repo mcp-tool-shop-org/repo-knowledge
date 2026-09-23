@@ -250,6 +250,18 @@ describe('MCP server end-to-end JSON-RPC behavior (ts-A-004)', () => {
     expect(out.results.some(r => r.slug === 'acme/alpha')).toBe(true);
   });
 
+  it('related_repos returns { relationships: [] } when no edges are recorded (STUDY-RK-026)', () => {
+    const { responses } = exchange([
+      { id: 1, name: 'related_repos', args: { slug: 'acme/alpha' } },
+    ]);
+    const out = toolJson(responses.get(1)) as { slug: string; relationships: unknown[] };
+    expect(out.slug).toBe('acme/alpha');
+    expect(Array.isArray(out.relationships)).toBe(true);
+    expect(out.relationships).toEqual([]);
+    // Payload stays { slug, relationships } — no invented edges, no schema break.
+    expect(Object.keys(out).sort()).toEqual(['relationships', 'slug']);
+  });
+
   it('add_relationship enforces the relation_type enum (invalid value rejected)', () => {
     const { responses } = exchange([
       // Valid relation first — proves the happy path works.

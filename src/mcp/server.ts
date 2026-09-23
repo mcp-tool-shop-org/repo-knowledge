@@ -269,6 +269,9 @@ server.tool(
       return { content: [{ type: 'text' as const, text: notFoundMessage(slug) }] };
     }
     const related = getRelated(repoId);
+    // STUDY-RK-026: keep { relationships: [] } for agents. Empty is engine
+    // state (nothing recorded), not enrichment-complete / Isolated-OK. Do
+    // not invent edges or change the payload shape.
     return {
       content: [{ type: 'text' as const, text: JSON.stringify({ slug, relationships: related }, null, 2) }],
     };
