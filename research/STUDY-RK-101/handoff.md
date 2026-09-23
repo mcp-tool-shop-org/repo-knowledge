@@ -27,3 +27,5 @@
 
 **Land target:**
 - `/workspace/studio/repo-knowledge/research/STUDY-RK-101/`
+
+Flag-patch grounding+handoff. sha=e123c39 tip=e123c39
