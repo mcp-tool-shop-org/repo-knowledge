@@ -11,4 +11,6 @@
 
 **Outcome:** Research packs landed. No coding PR.
 
-Landed sha: _(Builder fills)_ · tip `ea985f1`
+Landed sha: `67237e2` · tip `ea985f1`
+
+**Land sha:** `67237e2`
