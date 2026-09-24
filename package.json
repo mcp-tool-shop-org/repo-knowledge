@@ -28,8 +28,8 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "tsup && node scripts/postbuild.js",
-    "dev": "tsup --watch",
+    "build": "tsdown && node scripts/postbuild.js",
+    "dev": "tsdown --watch",
     "pretest": "npm run build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -53,7 +53,7 @@
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "eslint": "^10.1.0",
-    "tsup": "^8.0.0",
+    "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.2"

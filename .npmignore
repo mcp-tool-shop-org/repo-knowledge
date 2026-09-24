@@ -6,7 +6,7 @@ scripts/
 *.db-wal
 .github/
 tsconfig.json
-tsup.config.ts
+tsdown.config.ts
 vitest.config.ts
 eslint.config.js
 .gitignore
