@@ -10,7 +10,7 @@ The `main` branch is the release branch. All changes should follow these rules:
 - **Direct push:** Allowed for maintainers (single-maintainer project)
 - **Force push:** Never force-push to `main`
 - **Release flow:** Version bump in `package.json` → commit → push → `npm publish`
-- **CI matrix:** Node 20 + 22 on `ubuntu-latest`
+- **CI matrix:** tests run on Node 20 + 22 on `ubuntu-latest`; the build, typecheck and lint run on Node 22 in both cells, because tsdown requires Node >=22.18. Building from source needs Node 22.18+; running the published package still needs only Node 20+.
 - **Dependency audit:** `npm audit --audit-level=moderate` runs in CI (non-blocking)
 
 If CI fails on push, fix immediately before any further work.
