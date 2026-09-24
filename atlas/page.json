@@ -1,0 +1,363 @@
+{
+  "authored": [
+    ".claude/",
+    ".github/",
+    "assets/",
+    "research/",
+    "site/",
+    "templates/"
+  ],
+  "breaks": [
+    {
+      "doors": 2,
+      "importedBy": [
+        "src"
+      ],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "root"
+    },
+    {
+      "doors": 2,
+      "importedBy": [],
+      "importedByTests": [
+        "test"
+      ],
+      "kind": "part",
+      "name": "src"
+    },
+    {
+      "doors": 2,
+      "importedBy": [],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "scripts"
+    },
+    {
+      "doors": 2,
+      "importedBy": [],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "test"
+    }
+  ],
+  "changes": {
+    "first": true
+  },
+  "changesTogether": [
+    {
+      "a": "src/mcp/server.ts",
+      "b": "test/mcp-server.test.ts",
+      "either": 7,
+      "partLabels": [
+        "src",
+        "test"
+      ],
+      "parts": [
+        "src",
+        "test"
+      ],
+      "relation": "b-imports-a",
+      "shared": 6
+    },
+    {
+      "a": "src/db/init.ts",
+      "b": "test/migration-sequence.test.ts",
+      "either": 13,
+      "partLabels": [
+        "src",
+        "test"
+      ],
+      "parts": [
+        "src",
+        "test"
+      ],
+      "relation": "b-imports-a",
+      "shared": 10
+    },
+    {
+      "a": "src/index.ts",
+      "b": "test/migration-sequence.test.ts",
+      "either": 10,
+      "partLabels": [
+        "src",
+        "test"
+      ],
+      "parts": [
+        "src",
+        "test"
+      ],
+      "relation": "b-imports-a",
+      "shared": 7
+    },
+    {
+      "a": "src/index.ts",
+      "b": "src/sync/index.ts",
+      "either": 8,
+      "partLabels": [
+        "src",
+        "src"
+      ],
+      "parts": [
+        "src",
+        "src"
+      ],
+      "relation": "inside",
+      "shared": 5
+    },
+    {
+      "a": "test/migration-sequence.test.ts",
+      "b": "test/publish-state.test.ts",
+      "either": 10,
+      "partLabels": [
+        "test",
+        "test"
+      ],
+      "parts": [
+        "test",
+        "test"
+      ],
+      "relation": "inside",
+      "shared": 6
+    }
+  ],
+  "changesTogetherNote": [
+    "Confidence is low: fewer than 20 source files reach 10 revisions in the window.",
+    "Window: 180 days; a pair counts from 3 shared commits."
+  ],
+  "changesTogetherWithTests": 0,
+  "commit": "823601731ae25a1d41917a2d0b05b1ee08ad14de",
+  "doors": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "landings": [
+        "data/"
+      ],
+      "name": "CI",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "scripts",
+          "depth": 0,
+          "files": 1
+        },
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 32
+        },
+        {
+          "boundary": "test",
+          "depth": 0,
+          "files": 48
+        },
+        {
+          "boundary": "root",
+          "depth": 1,
+          "files": 1
+        }
+      ],
+      "runs": [
+        "scripts/postbuild.js",
+        "src/",
+        "test/"
+      ],
+      "runsCount": 3,
+      "sends": [],
+      "stages": [],
+      "triggers": [
+        "on a pull request touching 10 paths",
+        "on a push to main touching 10 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "landings": [
+        "REMEDIATION-WORKLIST.md",
+        "audit_report.md",
+        "data/"
+      ],
+      "name": "Release",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "scripts",
+          "depth": 0,
+          "files": 4
+        },
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 32
+        },
+        {
+          "boundary": "test",
+          "depth": 0,
+          "files": 48
+        },
+        {
+          "boundary": "root",
+          "depth": 1,
+          "files": 1
+        }
+      ],
+      "runs": [
+        "scripts/gen-audit-report.mjs",
+        "scripts/gen-worklist.mjs",
+        "scripts/postbuild.js",
+        "src/",
+        "test/"
+      ],
+      "runsCount": 5,
+      "sends": [
+        "publishes to npm",
+        "creates a GitHub release"
+      ],
+      "stages": [],
+      "triggers": [
+        "when a tag matching `v*.*.*` is pushed",
+        "or by hand"
+      ]
+    },
+    {
+      "file": ".github/workflows/pages.yml",
+      "landings": [],
+      "name": "Deploy site to GitHub Pages",
+      "pushes": false,
+      "reach": [],
+      "runs": [],
+      "runsCount": 0,
+      "sends": [
+        "deploys the site"
+      ],
+      "stages": [],
+      "triggers": [
+        "on a pull request touching 2 paths",
+        "on a push to main touching 2 paths",
+        "or by hand"
+      ]
+    }
+  ],
+  "duplicates": [],
+  "duplicatesLead": null,
+  "duplicatesNote": [],
+  "generated": [
+    {
+      "place": "AUDIT-WORKLIST.md",
+      "writers": [
+        "scripts/gen-audit-worklist.mjs"
+      ]
+    },
+    {
+      "place": "ENRICHMENT-WORKLIST.md",
+      "writers": [
+        "scripts/gen-enrichment-worklist.mjs"
+      ]
+    },
+    {
+      "place": "REMEDIATION-CHECKLIST.md",
+      "writers": [
+        "scripts/gen-remediation-checklist.mjs"
+      ]
+    },
+    {
+      "place": "REMEDIATION-WORKLIST.md",
+      "writers": [
+        "scripts/gen-worklist.mjs"
+      ]
+    },
+    {
+      "place": "audit_report.md",
+      "writers": [
+        "scripts/gen-audit-report.mjs"
+      ]
+    },
+    {
+      "place": "data/",
+      "writers": [
+        "src/cli.ts"
+      ]
+    }
+  ],
+  "generatedAt": "2026-09-23T17:32:34.050Z",
+  "limits": [
+    "3 writes and 39 reads use paths built at run time and are not named here.",
+    "Readers marked (found by text) come from scanning unparsed files.",
+    "Statistics confidence is low: fewer than 20 source files reach 10 revisions in the window."
+  ],
+  "mainDoor": ".github/workflows/ci.yml",
+  "parts": 11,
+  "readers": [
+    {
+      "readers": [
+        "package.json (found by text)"
+      ],
+      "target": "data/"
+    }
+  ],
+  "repo": "mcp-tool-shop-org/repo-knowledge",
+  "sequences": [],
+  "startHere": [
+    ".github/workflows/ci.yml",
+    "test/",
+    "package.json",
+    "data/",
+    "package.json"
+  ],
+  "summary": null,
+  "summaryFrom": null,
+  "testFiles": 55,
+  "testedBy": {
+    "scripts": 0,
+    "src": 45
+  },
+  "unread": [
+    {
+      "place": "AUDIT-WORKLIST.md",
+      "writers": [
+        "scripts/gen-audit-worklist.mjs"
+      ]
+    },
+    {
+      "place": "ENRICHMENT-WORKLIST.md",
+      "writers": [
+        "scripts/gen-enrichment-worklist.mjs"
+      ]
+    },
+    {
+      "place": "REMEDIATION-CHECKLIST.md",
+      "writers": [
+        "scripts/gen-remediation-checklist.mjs"
+      ]
+    },
+    {
+      "place": "REMEDIATION-WORKLIST.md",
+      "writers": [
+        "scripts/gen-worklist.mjs"
+      ]
+    },
+    {
+      "place": "audit_report.md",
+      "writers": [
+        "scripts/gen-audit-report.mjs"
+      ]
+    },
+    {
+      "place": "data/",
+      "writers": [
+        "src/cli.ts"
+      ]
+    }
+  ],
+  "unreadNote": [],
+  "untested": [
+    {
+      "part": "scripts",
+      "partLabel": "scripts",
+      "testedBy": 0
+    }
+  ],
+  "untestedNote": [],
+  "written": 6
+}
