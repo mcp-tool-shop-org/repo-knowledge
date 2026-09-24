@@ -7,7 +7,15 @@ export default defineConfig({
     'mcp/server': 'src/mcp/server.ts',
   },
   format: ['esm'],
-  dts: true,
+  dts: {
+    // tsup forces `baseUrl: "."` into its declaration build (8.5.1,
+    // dist/rollup.js: `baseUrl: compilerOptions.baseUrl || "."`), and
+    // TypeScript 6 fails any baseUrl as deprecated (TS5101). tsconfig.json
+    // sets no baseUrl, and `npm run typecheck` still fails on deprecated
+    // options there — this silences only tsup's own injection. It does not
+    // carry to TypeScript 7, where baseUrl stops working.
+    compilerOptions: { ignoreDeprecations: '6.0' },
+  },
   clean: true,
   sourcemap: true,
   target: 'node20',
