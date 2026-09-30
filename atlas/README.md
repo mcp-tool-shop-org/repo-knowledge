@@ -1,41 +1,56 @@
 # repo-knowledge: how it works
 
-Mapped at 2026-09-23 from commit 8236017.
+Mapped at 2026-09-30 from commit f0654a0 by Atlas 1.24.0.
 
 ## What this is
 
-11 parts. Work enters through 3 doors; the busiest is CI, which reaches 4 parts.
+11 parts, mostly Markdown (646 files); code in TypeScript (84), JavaScript (10), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 3 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run rk. People import @mcptoolshop/repo-knowledge.
 
-## What changed since the last map
+## What changed since 2026-09-23 (8236017)
 
-This is the first map.
+- src no longer imports the repository root.
+- CI's pull request trigger now also names `codecov.yml`, `eslint.config.js`, `scripts/postbuild.js`, `tsup.config.ts` and `vitest.config.ts`.
+- CI's push trigger now also names `codecov.yml`, `eslint.config.js`, `scripts/postbuild.js`, `tsup.config.ts` and `vitest.config.ts`.
+- CI now also builds src/cli.ts, src/index.ts and src/mcp/server.ts.
+- And 4 more changes to doors.
+- dist is now written by scripts/postbuild.js.
+- .github/workflows/ci.yml is now read by test/build-health.test.ts, test/doctor.test.ts, test/feed.test.ts, test/health-commands.test.ts, test/migration-009.test.ts and test/table.test.ts.
+- .github/workflows/release.yml is now read by test/build-health.test.ts.
+- And 12 more new writers and readers of places.
+- data was generated and is now authored.
+- 1 file added and 775 changed content, across 10 parts.
 
 ## What comes in
 
-1. **CI.** On a pull request touching 10 paths; on a push to main touching 10 paths; or by hand. Runs scripts/postbuild.js, src/ and test/.
-2. **Release.** When a tag matching `v*.*.*` is pushed; or by hand. Runs scripts/gen-audit-report.mjs, scripts/gen-worklist.mjs, scripts/postbuild.js and 2 more.
-3. **Deploy site to GitHub Pages.** On a pull request touching 2 paths; on a push to main touching 2 paths; or by hand. Runs no file this map can see.
+1. **CI.** On a pull request touching 15 paths; on a push to main touching 15 paths; or by hand. Runs scripts/postbuild.js and test/; builds src/cli.ts, src/index.ts and src/mcp/server.ts; checks src/.
+2. **Release.** When a tag matching `v*.*.*` is pushed; or by hand. Runs scripts/gen-audit-report.mjs, scripts/gen-worklist.mjs, scripts/postbuild.js and 48 more; builds src/cli.ts, src/index.ts and src/mcp/server.ts; checks src/.
+3. **Deploy site to GitHub Pages.** On a pull request to main touching 2 paths; on a push to main touching 2 paths; or by hand. Runs site/astro.config.mjs and site/src/.
+4. **@mcptoolshop/repo-knowledge** (the package people import). Loads src/index.ts and src/mcp/server.ts.
+5. **rk** (a command people run). Runs src/cli.ts.
 
 ## What happens through CI
 
-1. The workflow runs scripts/postbuild.js in scripts, src/ in src and test/ in test.
-2. That reaches the repository root (1 file).
-3. It writes to data/.
+1. The workflow runs scripts/postbuild.js in scripts and test/ in test; it builds src/cli.ts, src/index.ts and src/mcp/server.ts in src; it checks src/ in src.
+2. It writes to dist/, which is not tracked.
+3. It uploads coverage to Codecov.
 
 ## Who reads the results
 
-- **data/** is read by package.json (found by text).
+CI writes only to dist/, which is not tracked.
 
 ## The other doors
 
-**Release** runs scripts/gen-audit-report.mjs, scripts/gen-worklist.mjs, scripts/postbuild.js and 2 more, reaches the repository root, writes to REMEDIATION-WORKLIST.md, audit_report.md and data/, publishes to npm, and creates a GitHub release.
+**Release** runs scripts/gen-audit-report.mjs, scripts/gen-worklist.mjs, scripts/postbuild.js and 48 more, builds src/cli.ts, src/index.ts and src/mcp/server.ts, checks src/, writes to dist/, which is not tracked, and publishes to npm, creates a GitHub release, and uploads sbom.json to the release, on a tag push.
 
-**Deploy site to GitHub Pages** runs no file this map can see and deploys the site.
+**Deploy site to GitHub Pages** runs site/astro.config.mjs and site/src/, and deploys the site on a push to main or by hand.
+
+**@mcptoolshop/repo-knowledge** (the package people import) loads src/index.ts and src/mcp/server.ts.
+
+**rk** (a command people run) runs src/cli.ts and runs gh and git.
 
 ## What breaks what
 
-- **the repository root** is imported by 1 part (src) and sits on the path of 2 doors.
-- **src** is imported only from tests, by 1 part (test), and sits on the path of 2 doors.
+- **src** is imported only from tests, by 1 part (test), and sits on the path of 4 doors.
 - **scripts** is imported by no other part and sits on the path of 2 doors.
 - **test** is imported by no other part and sits on the path of 2 doors.
 
@@ -47,9 +62,9 @@ This is the first map.
 - **src/index.ts** and **src/sync/index.ts** changed together in 5 of 8 commits, inside the src part.
 - **test/migration-sequence.test.ts** and **test/publish-state.test.ts** changed together in 6 of 10 commits, inside the test part.
 
-Confidence is low: fewer than 20 source files reach 10 revisions in the window.
+Confidence is low: fewer than 25 source files reach 10 revisions in the window.
 
-Window: 180 days; a pair counts from 3 shared commits.
+Window: 180 days; a pair counts from 3 shared commits, since 3 source files reach 10 revisions; the floor rises to 10 when 25 do.
 
 ## What no test touches
 
@@ -60,9 +75,8 @@ Window: 180 days; a pair counts from 3 shared commits.
 - **AUDIT-WORKLIST.md** is written by scripts/gen-audit-worklist.mjs and read by nothing else in this repository.
 - **ENRICHMENT-WORKLIST.md** is written by scripts/gen-enrichment-worklist.mjs and read by nothing else in this repository.
 - **REMEDIATION-CHECKLIST.md** is written by scripts/gen-remediation-checklist.mjs and read by nothing else in this repository.
-- **REMEDIATION-WORKLIST.md** is written by scripts/gen-worklist.mjs and read by nothing else in this repository.
-- **audit_report.md** is written by scripts/gen-audit-report.mjs and read by nothing else in this repository.
-- **data/** is written by src/cli.ts and read by nothing else in this repository.
+- **REMEDIATION-WORKLIST.md** is written by scripts/gen-worklist.mjs when run without --selftest and read by nothing else in this repository.
+- **audit_report.md** is written by scripts/gen-audit-report.mjs when run without --selftest and read by nothing else in this repository.
 
 ## Helpers that look duplicated
 
@@ -73,24 +87,27 @@ No two parts export a helper that looks alike.
 - **AUDIT-WORKLIST.md** is written by scripts/gen-audit-worklist.mjs.
 - **ENRICHMENT-WORKLIST.md** is written by scripts/gen-enrichment-worklist.mjs.
 - **REMEDIATION-CHECKLIST.md** is written by scripts/gen-remediation-checklist.mjs.
-- **REMEDIATION-WORKLIST.md** is written by scripts/gen-worklist.mjs.
-- **audit_report.md** is written by scripts/gen-audit-report.mjs.
-- **data/** is written by src/cli.ts.
+- **REMEDIATION-WORKLIST.md** is written by scripts/gen-worklist.mjs when run without --selftest.
+- **audit_report.md** is written by scripts/gen-audit-report.mjs when run without --selftest.
 
 ## Hand-authored
 
-People write .claude/, .github/, assets/, research/, site/ and templates/. Nothing in this repository writes to them.
+People write .claude/, .github/, assets/, data/, research/, site/ and templates/; 3 writes with paths built at run time may land here.
 
 ## Where to start
 
-.github/workflows/ci.yml → test/ → package.json → data/ → package.json
+.github/workflows/ci.yml → src/index.ts → src/sync/publish.ts → src/db/init.ts
 
 Read those in order to follow one pull request end to end.
 
 ## What this map cannot see
 
-- 3 writes and 39 reads use paths built at run time and are not named here.
-- Readers marked (found by text) come from scanning unparsed files.
-- Statistics confidence is low: fewer than 20 source files reach 10 revisions in the window.
+- 1 import could not be resolved: `src/mcp/server.ts` imports `zod`, which is not declared.
+- 3 writes and 15 reads use paths built at run time and are not named here.
+- 1 write goes to places this repository does not track, so it is not listed as generated.
+- 2 writes and 77 reads go to a path their caller passes, not to this repository.
+- 4 writes and 13 reads go to the directory the command is run in (CHANGELOG.md, LICENSE, README.md and 5 more places), not to this repository.
+- 1 command is built at run time and not followed.
+- Statistics confidence is low: fewer than 25 source files reach 10 revisions in the window.
 
 Regenerate with `npx --yes @dogfood-lab/atlas map`.

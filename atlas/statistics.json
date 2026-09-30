@@ -1,4 +1,8 @@
 {
+  "authorship": {
+    "parts": [],
+    "places": []
+  },
   "boundaries": [
     {
       "breakage": {
@@ -86,16 +90,14 @@
         "collapsed": false,
         "confidence": "low",
         "importsAndCoChanges": [],
-        "importsOnly": [
-          "src"
-        ]
+        "importsOnly": []
       },
       "cohesion": null,
       "cohesionDropped": false,
       "confidence": "low",
       "highWater": null,
       "name": "root",
-      "qualifyingSourceCommits": 2,
+      "qualifyingSourceCommits": 3,
       "rebaseline": null
     },
     {
@@ -187,8 +189,8 @@
     "definition": "commits is how many commits in the window touch the file, including merges and commits dropped from coupling. lines is added plus deleted in those commits.",
     "files": [
       {
-        "commits": 5,
-        "lines": 40,
+        "commits": 9,
+        "lines": 253,
         "path": ".github/workflows/ci.yml"
       },
       {
@@ -217,8 +219,8 @@
         "path": "AUDIT-WORKLIST.md"
       },
       {
-        "commits": 15,
-        "lines": 211,
+        "commits": 16,
+        "lines": 212,
         "path": "CHANGELOG.md"
       },
       {
@@ -318,8 +320,38 @@
       },
       {
         "commits": 1,
+        "lines": 96,
+        "path": "atlas/README.md"
+      },
+      {
+        "commits": 1,
+        "lines": 46,
+        "path": "atlas/boundaries.yaml"
+      },
+      {
+        "commits": 1,
+        "lines": 363,
+        "path": "atlas/page.json"
+      },
+      {
+        "commits": 1,
+        "lines": 4028,
+        "path": "atlas/statistics.json"
+      },
+      {
+        "commits": 1,
+        "lines": 4908,
+        "path": "atlas/structure.json"
+      },
+      {
+        "commits": 1,
         "lines": 579,
         "path": "audit_report.md"
+      },
+      {
+        "commits": 2,
+        "lines": 36,
+        "path": "codecov.yml"
       },
       {
         "commits": 7,
@@ -3892,8 +3924,8 @@
         "path": "test/version.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 18,
+        "commits": 3,
+        "lines": 28,
         "path": "tsup.config.ts"
       },
       {
@@ -3905,11 +3937,11 @@
   },
   "confidence": {
     "level": "low",
-    "reason": "fewer than 20 source files reach 10 revisions in the window"
+    "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-09-23T17:32:34.050Z",
+  "generatedAt": "2026-09-30T20:12:03.944Z",
   "generatedFrom": {
-    "commit": "823601731ae25a1d41917a2d0b05b1ee08ad14de"
+    "commit": "f0654a0dc611fa59020f2fcd4e19f510691e7a25"
   },
   "pairs": [
     {
@@ -3998,16 +4030,18 @@
     "couplingPopulation": "source",
     "fallenShared": 3,
     "floor": "fallen",
+    "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-09-23T09:31:52-07:00",
-    "inScopeFiles": 777,
+    "headDate": "2026-09-26T19:44:57-07:00",
+    "inScopeFiles": 783,
     "pinnedStart": null,
-    "qualifyingCommits": 313,
+    "priorFloor": "fallen",
+    "qualifyingCommits": 316,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-03-27T16:31:52.000Z",
+    "since": "2026-03-31T02:44:57.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",
@@ -4017,9 +4051,12 @@
       ".tsx",
       ".mts",
       ".cts",
-      ".py"
+      ".py",
+      ".rs",
+      ".gd"
     ],
     "sourceFileReach": 20,
+    "sourceFileRise": 25,
     "sourceFilesReachingStrongFloor": 3,
     "strength": 0.5,
     "windowDays": 180
