@@ -17,7 +17,7 @@ Eight doc/API sources. All Verifier PASS. Do not invent STUDY-RK-051.
 
 5. REMEDIATION-INSTRUCTIONS absolutes | org: local | path: REMEDIATION-INSTRUCTIONS.md | Finding: F:\AI\repo-knowledge\… and F:\AI\<repo-name> as work locations.
 
-6. ROADMAP companion absolutes | org: local | path: ROADMAP.md | Finding: /Users/michaelfrilot/.claude/projects/… memory companion paths.
+6. ROADMAP companion absolutes | org: local | path: ROADMAP.md | Finding: /Users/<user>/.claude/projects/… memory companion paths.
 
 7. ROADMAP multi-rig examples | org: local | path: ROADMAP.md | Finding: /Volumes/T9-Shared/AI and F:\AI\X as multi-rig path examples.
 
