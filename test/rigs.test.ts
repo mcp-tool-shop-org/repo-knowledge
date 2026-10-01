@@ -51,7 +51,7 @@ describe('upsertRig (F-TS-FT1)', () => {
   it('inserts a new rig on first call', () => {
     upsertRig({
       rig_id: 'mac-m5max',
-      hostname: 'mike-mbp.local',
+      hostname: 'alicedoe-mbp.local',
       primary_root: '/Volumes/T9-Shared/AI',
     });
 
@@ -62,7 +62,7 @@ describe('upsertRig (F-TS-FT1)', () => {
 
     expect(row).toBeDefined();
     expect(row.rig_id).toBe('mac-m5max');
-    expect(row.hostname).toBe('mike-mbp.local');
+    expect(row.hostname).toBe('alicedoe-mbp.local');
     expect(row.primary_root).toBe('/Volumes/T9-Shared/AI');
     expect(row.last_seen_at).toBeTruthy();
   });
@@ -149,7 +149,7 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     upsertRepoLocalPath({
       repo_id: Number(repoId),
       rig_id: 'mac-m5max',
-      local_path: '/Users/mike/code/o/r',
+      local_path: '/Users/alicedoe/code/o/r',
     });
 
     const db = getDb();
@@ -158,7 +158,7 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     ).get(repoId, 'mac-m5max') as { repo_id: number; rig_id: string; local_path: string; last_seen_at: string };
 
     expect(row).toBeDefined();
-    expect(row.local_path).toBe('/Users/mike/code/o/r');
+    expect(row.local_path).toBe('/Users/alicedoe/code/o/r');
     expect(row.last_seen_at).toBeTruthy();
   });
 
@@ -169,12 +169,12 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     upsertRepoLocalPath({
       repo_id: Number(repoId),
       rig_id: 'mac-m5max',
-      local_path: '/Users/mike/code/o/r',
+      local_path: '/Users/alicedoe/code/o/r',
     });
     upsertRepoLocalPath({
       repo_id: Number(repoId),
       rig_id: 'mac-m5max',
-      local_path: '/Users/mike/work/o/r', // moved
+      local_path: '/Users/alicedoe/work/o/r', // moved
     });
 
     const db = getDb();
@@ -183,7 +183,7 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     ).all(repoId, 'mac-m5max') as { local_path: string }[];
 
     expect(rows.length).toBe(1);
-    expect(rows[0].local_path).toBe('/Users/mike/work/o/r');
+    expect(rows[0].local_path).toBe('/Users/alicedoe/work/o/r');
   });
 
   it('allows the same repo on multiple rigs', () => {
