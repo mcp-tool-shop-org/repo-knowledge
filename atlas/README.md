@@ -1,28 +1,19 @@
 # repo-knowledge: how it works
 
-Mapped at 2026-09-30 from commit f0654a0 by Atlas 1.24.0.
+Mapped at 2026-10-01 from commit 1222602 by Atlas 1.24.0.
 
 ## What this is
 
 11 parts, mostly Markdown (646 files); code in TypeScript (84), JavaScript (10), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 3 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run rk. People import @mcptoolshop/repo-knowledge.
 
-## What changed since 2026-09-23 (8236017)
+## What changed since 2026-09-30 (f0654a0)
 
-- src no longer imports the repository root.
-- CI's pull request trigger now also names `codecov.yml`, `eslint.config.js`, `scripts/postbuild.js`, `tsup.config.ts` and `vitest.config.ts`.
-- CI's push trigger now also names `codecov.yml`, `eslint.config.js`, `scripts/postbuild.js`, `tsup.config.ts` and `vitest.config.ts`.
-- CI now also builds src/cli.ts, src/index.ts and src/mcp/server.ts.
-- And 4 more changes to doors.
-- dist is now written by scripts/postbuild.js.
-- .github/workflows/ci.yml is now read by test/build-health.test.ts, test/doctor.test.ts, test/feed.test.ts, test/health-commands.test.ts, test/migration-009.test.ts and test/table.test.ts.
-- .github/workflows/release.yml is now read by test/build-health.test.ts.
-- And 12 more new writers and readers of places.
-- data was generated and is now authored.
-- 1 file added and 775 changed content, across 10 parts.
+- CI's pull request trigger no longer names `.github/workflows/**`, `atlas/**`, `codecov.yml`, `eslint.config.js`, `package-lock.json`, `package.json`, `scripts/postbuild.js`, `site/astro.config.mjs`, `site/package-lock.json`, `site/package.json`, `src/**`, `test/**`, `tsconfig.json`, `tsup.config.ts` and `vitest.config.ts`.
+- 2 files changed content, across 2 parts.
 
 ## What comes in
 
-1. **CI.** On a pull request touching 15 paths; on a push to main touching 15 paths; or by hand. Runs scripts/postbuild.js and test/; builds src/cli.ts, src/index.ts and src/mcp/server.ts; checks src/.
+1. **CI.** On a pull request; on a push to main touching 15 paths; or by hand. Runs scripts/postbuild.js and test/; builds src/cli.ts, src/index.ts and src/mcp/server.ts; checks src/.
 2. **Release.** When a tag matching `v*.*.*` is pushed; or by hand. Runs scripts/gen-audit-report.mjs, scripts/gen-worklist.mjs, scripts/postbuild.js and 48 more; builds src/cli.ts, src/index.ts and src/mcp/server.ts; checks src/.
 3. **Deploy site to GitHub Pages.** On a pull request to main touching 2 paths; on a push to main touching 2 paths; or by hand. Runs site/astro.config.mjs and site/src/.
 4. **@mcptoolshop/repo-knowledge** (the package people import). Loads src/index.ts and src/mcp/server.ts.
