@@ -1,6 +1,6 @@
 {
   "name": "@mcptoolshop/repo-knowledge",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Repo knowledge system — relational catalog with full-text search, audit evidence, and MCP access",
   "type": "module",
   "main": "./dist/index.js",
@@ -51,12 +51,12 @@
     "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^26.0.0",
-    "@vitest/coverage-v8": "^4.1.2",
+    "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^10.1.0",
     "tsup": "^8.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=20"
@@ -81,5 +81,8 @@
     "fts5",
     "repository-management",
     "mcp-tool-shop"
-  ]
+  ],
+  "overrides": {
+    "minimatch": "^11.0.5"
+  }
 }
