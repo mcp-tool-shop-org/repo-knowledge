@@ -16,9 +16,9 @@ export default defineConfig({
       // Thresholds keep test rot from silently lowering the floor. Pick numbers
       // that the current suite clears comfortably; raise them as the suite grows.
       thresholds: {
-        lines: 50,
-        branches: 40,
-        functions: 50,
+        lines: 52,
+        branches: 48,
+        functions: 61,
       },
     },
   },

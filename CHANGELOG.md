@@ -2,15 +2,24 @@
 
 ## [Unreleased]
 
-### Changed
+## [2.1.2] - 2026-11-08
 
-- Docs resolve of leftover STUDY-RK PRs: strip machine-absolute paths (#20); Claude Games POINTS vs templates (#21); handbook ops `rk backup`/`rk restore` instead of live-file `cp` (#23); `rk init` / `primaryLanguage` getting-started (#24); better-sqlite3 dual-path install docs without pinning an addon patch version (#19); one-line lock that publish-state is not a registry publish (#18).
-- **`rk show` prints an honest empty Relationships section** when no edges are stored (`No relationships recorded`) instead of omitting the heading. Empty `getRelated` is engine state, not Isolated-OK or enrichment-complete; the command never invents edges. `rk related` keeps the text sentinel `No relationships recorded for: <slug>` and `--json` `[]`. MCP `related_repos` still returns `{ relationships: [] }` for agents.
+Patch release: two behaviour fixes, a working build under TypeScript 6, and a dependency security refresh. No breaking changes.
 
 ### Fixed
 
-- **The build runs again under TypeScript 6.** tsup forces `baseUrl: "."` into its declaration build, and TypeScript 6 fails any `baseUrl` as deprecated (TS5101), so every build after the #8 dependency bump stopped at the DTS step even though `tsconfig.json` sets no `baseUrl`. `tsup.config.ts` now passes `ignoreDeprecations: "6.0"` to tsup's declaration pass only: `npm run typecheck` still fails on any deprecated option in `tsconfig.json`, and the DTS pass still fails on type errors. CI's path filters now also list the files its steps read (`tsup.config.ts`, `scripts/postbuild.js`, `vitest.config.ts`, `eslint.config.js`); before, a change to tsup's config alone could not trigger the required checks.
-- **`rk audit import` no longer drops the whole bundle over one unknown finding domain.** `audit_findings.domain` carries a fixed 19-value CHECK enum; a finding whose domain fell outside it (e.g. the dogfood swarm's persist bridge emitting `documentation` for docs-category findings — the ai-rpg-engine v2.8 incident, 2026-07-22) tripped the shared validator and aborted the entire atomic import, so a single drifted row dropped every finding in the bundle and the audit evidence never landed. An unknown-but-present domain now normalizes to `code_quality` and is surfaced as a warning (in the `ImportResult`, on stderr, and in the `rk audit import` summary), mirroring the skip-with-note resilience already in `sync/dogfood.ts`. A **missing** domain still hard-errors — that is a structurally malformed finding, not enum drift. The producer half (the swarm persist bridge mapping `docs` → `inventory` instead of the invalid `documentation`) ships separately in `dogfood-lab/testing-os`.
+- **`rk audit import` no longer drops a whole audit batch over one unknown finding domain.** A finding whose domain is not one of the 19 allowed values (for example `documentation`, which the dogfood swarm emitted for docs findings) used to abort the entire import, so none of the findings in that batch were saved. The unknown domain is now stored as `code_quality` and reported as a warning: in the `rk audit import` summary, on stderr, and in the import result. A finding with no domain at all is still rejected as malformed.
+- **The related-repos result is honest when there is nothing to show.** `rk show` now always prints the Relationships section and says `No relationships recorded` when a repo has no edges, instead of leaving the heading out. The MCP `related_repos` tool still returns `{ "relationships": [] }`. An empty result means nothing is recorded, not that the repo has been checked and is isolated.
+- **The build runs again under TypeScript 6.** The declaration (DTS) step of the `tsup` build was failing on a deprecated option that tsup injects; it is now handled for the declaration pass only, so `npm run typecheck` still flags deprecated options in `tsconfig.json`.
+
+### Security
+
+- Dependency refresh clears every advisory `npm audit` reported, including the production chain through the MCP SDK (`proxy-addr`, `hono`, `body-parser`, `path-to-regexp`, `qs`, `zod`, `fast-uri`, `ip-address`, `nanoid`, `@hono/node-server`) and `devalue`. Development-only tools were updated too (`vite`, `vitest`, `postcss`, `source-map-js`, `esbuild`, `minimatch`). `npm audit` now reports 0 vulnerabilities.
+
+### Changed
+
+- CI: runs on every pull request, uploads coverage to Codecov, and checks the Atlas repository map (pinned to 1.24.0). The coverage floor is raised to the measured level (lines 52, branches 48, functions 61; target 90). Test fixtures no longer contain home-directory paths.
+- Docs: handbook and README clean-ups (no machine-specific paths, `rk backup`/`rk restore` in the operations guide, clearer install notes). Research notes for STUDY-RK-0xx added to `research/`.
 
 ## [2.1.1] - 2026-06-22
 

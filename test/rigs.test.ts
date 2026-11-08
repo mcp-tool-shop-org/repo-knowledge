@@ -149,7 +149,7 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     upsertRepoLocalPath({
       repo_id: Number(repoId),
       rig_id: 'mac-m5max',
-      local_path: '/Users/alicedoe/code/o/r',
+      local_path: '/workspace/dev/code/o/r',
     });
 
     const db = getDb();
@@ -158,7 +158,7 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     ).get(repoId, 'mac-m5max') as { repo_id: number; rig_id: string; local_path: string; last_seen_at: string };
 
     expect(row).toBeDefined();
-    expect(row.local_path).toBe('/Users/alicedoe/code/o/r');
+    expect(row.local_path).toBe('/workspace/dev/code/o/r');
     expect(row.last_seen_at).toBeTruthy();
   });
 
@@ -169,12 +169,12 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     upsertRepoLocalPath({
       repo_id: Number(repoId),
       rig_id: 'mac-m5max',
-      local_path: '/Users/alicedoe/code/o/r',
+      local_path: '/workspace/dev/code/o/r',
     });
     upsertRepoLocalPath({
       repo_id: Number(repoId),
       rig_id: 'mac-m5max',
-      local_path: '/Users/alicedoe/work/o/r', // moved
+      local_path: '/workspace/dev/work/o/r', // moved
     });
 
     const db = getDb();
@@ -183,7 +183,7 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     ).all(repoId, 'mac-m5max') as { local_path: string }[];
 
     expect(rows.length).toBe(1);
-    expect(rows[0].local_path).toBe('/Users/alicedoe/work/o/r');
+    expect(rows[0].local_path).toBe('/workspace/dev/work/o/r');
   });
 
   it('allows the same repo on multiple rigs', () => {
@@ -191,7 +191,7 @@ describe('upsertRepoLocalPath (F-TS-FT1)', () => {
     upsertRig({ rig_id: 'mac-m5max', hostname: 'm', primary_root: '/x' });
     upsertRig({ rig_id: 'windows-5080', hostname: 'w', primary_root: 'E:/' });
 
-    upsertRepoLocalPath({ repo_id: Number(repoId), rig_id: 'mac-m5max', local_path: '/Users/m/code/o/r' });
+    upsertRepoLocalPath({ repo_id: Number(repoId), rig_id: 'mac-m5max', local_path: '/workspace/m/o/r' });
     upsertRepoLocalPath({ repo_id: Number(repoId), rig_id: 'windows-5080', local_path: 'E:/AI/o/r' });
 
     const paths = getRepoLocalPaths(Number(repoId));
