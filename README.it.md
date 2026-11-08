@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="README.ja.md">日本語</a> | <a href="README.zh.md">中文</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.md">English</a> | <a href="README.pt-BR.md">Português (BR)</a>
+  <a href="README.ja.md">日本語</a> | <a href="README.zh.md">中文</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.it.md">Italiano</a> | <a href="README.pt-BR.md">Português (BR)</a>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 
 ## Perché
 
-I registri dei pacchetti e le API di GitHub ti indicano cosa _è_ un repository. Non ti dicono a cosa serve, come si relaziona con gli altri tuoi repository, qual è la sua tesi architettonica o se ha superato l'ultima verifica della sicurezza. Repo-knowledge colma questa lacuna: un singolo database locale che contiene la tesi, l'architettura, le prove delle verifiche, le relazioni e una ricerca completa su tutti questi elementi.
+I registri dei pacchetti e le API GitHub ti indicano cosa _è_ un repository. Non ti dicono a cosa _serve_, come si relaziona con gli altri repository, qual è la sua architettura o se ha superato l'ultima verifica di sicurezza. Repo-knowledge colma questa lacuna: un singolo database locale che contiene la tesi, l'architettura, le prove della verifica, le relazioni e la ricerca full-text su tutti questi elementi.
 
 ## Installazione
 
@@ -29,20 +29,20 @@ I registri dei pacchetti e le API di GitHub ti indicano cosa _è_ un repository.
 npm install -g @mcptoolshop/repo-knowledge
 ```
 
-**Requisiti:**
-- Node.js 20+
-- CLI `gh` (autenticata) per la sincronizzazione con GitHub
-- Strumenti di compilazione C/C++ per `better-sqlite3`, oppure verranno utilizzati automaticamente i binari precompilati sulle piattaforme supportate.
+**Requirements:**
+- Node.js 20+ — this package's `engines.node` is `>=20`. The locked `better-sqlite3` addon's own `engines` list is vendor majors, not a prebuild-coverage claim.
+- `gh` CLI (authenticated) for GitHub sync
+- C/C++ build tools for `better-sqlite3` when a prebuild misses. The addon install script is dual-path: `prebuild-install || node-gyp rebuild --release`. A matching prebuild is used when one is available; otherwise `node-gyp` compiles from source. That is not universal platform coverage. If install fails, see the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
 
 ## Modello di sicurezza
 
-**Dati interessati:** database SQLite locale, metadati dell'API GitHub tramite la CLI `gh` (nomi dei repository, descrizioni, argomenti, stelle; nessun contenuto del codice sorgente).
+**Dati interessati:** database locale SQLite, metadati dell'API GitHub tramite CLI `gh` (nomi, descrizioni, argomenti, stelle dei repository; nessun contenuto del codice sorgente).
 
-**Dati NON interessati:** non viene letto alcun codice sorgente da GitHub, non vengono memorizzate credenziali e non vengono inviati dati a servizi esterni.
+**Dati NON interessati:** nessun codice sorgente viene letto da GitHub, nessuna credenziale viene archiviata e nessun dato viene inviato a servizi esterni.
 
-**Autorizzazioni:** richiede la CLI `gh` autenticata per la sincronizzazione con GitHub; tutti i dati rimangono locali.
+**Autorizzazioni:** richiede l'autenticazione tramite CLI `gh` per la sincronizzazione GitHub; tutti i dati rimangono locali.
 
-**Nessun telemetria, nessuna analisi, nessun "chiamata a casa".**
+**Nessun telemetria, nessuna analisi, nessun invio di dati.**
 
 ## Avvio rapido
 
@@ -72,98 +72,98 @@ rk audit seed-controls
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk init` | Inizializza la configurazione, il database e i controlli di verifica iniziali. |
-| `rk sync` | Sincronizzazione completa: organizzazioni GitHub + repository locali + indice FTS (Full-Text Search). |
-| `rk scan <path>` | Scansiona una singola directory del repository locale. |
-| `rk show <slug>` | Mostra la conoscenza completa del repository con lo stato della verifica. |
-| `rk list` | Elenca tutti i repository (filtrabili per stato, linguaggio, tipo). |
-| `rk find <query>` | Ricerca full-text su tutti i contenuti indicizzati. |
-| `rk related <slug>` | Mostra i repository correlati a un determinato repository. |
-| `rk note <slug>` | Aggiungi una nota testuale (tesi, architettura, avviso, ecc.) con `--type` e `--content` (e facoltativamente `--title`); `--delete` elimina una nota specificando `--type` + `--title`. |
-| `rk relate <from> <type> <to>` | Registra una relazione tra i repository (opzionale: `--note`). |
-| `rk stats` | Mostra le statistiche del database. |
-| `rk reindex` | Ricostruisce l'indice FTS. |
-| `rk sync-dogfood` | Sincronizza le prove di "dogfooding" da dogfood-lab/testing-os nei fatti del repository. |
-| `rk suggest-dogfood --repo <slug>` | Suggerisce risultati noti di "dogfooding" per un repository o una superficie. |
+| `rk init` | Inizializza la configurazione, il database e i controlli di verifica |
+| `rk sync` | Sincronizzazione completa: GitHub organizzazioni + repository locali + indice FTS |
+| `rk scan <path>` | Analizza una singola directory di repository locale |
+| `rk show <slug>` | Mostra la conoscenza completa del repository con la postura di verifica |
+| `rk list` | Elenca tutti i repository (filtrabili per stato, linguaggio, forma) |
+| `rk find <query>` | Ricerca full-text su tutti i contenuti indicizzati |
+| `rk related <slug>` | Mostra i repository correlati a un determinato repository |
+| `rk note <slug>` | Aggiungi una nota tipizzata (tesi, architettura, avviso, ecc.) con `--type` e `--content` (opzionale `--title`); `--delete` rimuove una nota tramite `--type` + `--title` |
+| `rk relate <from> <type> <to>` | Registra una relazione tra i repository (opzionale `--note`) |
+| `rk stats` | Mostra le statistiche del database |
+| `rk reindex` | Ricostruisci l'indice FTS |
+| `rk sync-dogfood` | Sincronizza le prove di dogfooding da dogfood-lab/testing-os nei fatti del repository |
+| `rk suggest-dogfood --repo <slug>` | Suggerisci risultati di dogfooding noti per un repository o una superficie |
 
-> **`--json` ovunque sia rilevante.** `list`, `find`, `show`, `related` e `stats`, oltre alle cinque letture di verifica (`posture`, `findings`, `controls`, `unaudited`, `failing`) accettano tutte l'opzione `--json` per un output leggibile dalla macchina. JSON è il contratto fondamentale tra i comandi principali: puoi collegare direttamente uno qualsiasi di essi a `jq`.
+> **`--json` ovunque sia importante.** `list`, `find`, `show`, `related` e `stats`, oltre alle cinque letture di verifica (`posture`, `findings`, `controls`, `unaudited`, `failing`), accettano tutte `--json` per un output leggibile dalla macchina. JSON è il contratto fondamentale per tutti i comandi principali: puoi inviare l'output di qualsiasi comando direttamente a `jq`.
 
 ### Comandi del ciclo di vita (v2.0.0)
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk delete <slug> [--yes]` | Elimina in cascata un repository e tutte le righe figlio. |
-| `rk archive <slug> [--reason <text>]` | Imposta lo stato del ciclo di vita su `archived` (preserva note/risultati). |
-| `rk verify-local [--rig <id>] [--strict]` | Verifica che il percorso locale esista per ogni "rig"; aggiorna i percorsi locali del repository (`repo_local_paths`). |
-| `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` | Registra l'ambiente corrente. |
-| `rk prune [--dry-run] [--apply] [--days <N>]` | Elimina in modo definitivo i repository archiviati da più di N giorni (valore predefinito: 30). |
+| `rk delete <slug> [--yes]` | Elimina a cascata un repository e tutte le righe figlio |
+| `rk archive <slug> [--reason <text>]` | Inverti `lifecycle_status` in `archived` (preserva note/risultati) |
+| `rk verify-local [--rig <id>] [--strict]` | Verifica che `local_path` esista per ogni rig; aggiorna `repo_local_paths` |
+| `rk init-rig [--id <id>] [--hostname <h>] [--root <path>]` | Registra il rig corrente |
+| `rk prune [--dry-run] [--apply] [--days <N>]` | Elimina definitivamente i repository archiviati da più di N giorni (predefinito 30) |
 
 ### Comandi dello stato di pubblicazione (v2.0.0)
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk versions <slug> [--refresh] [--channel <name>]` | Dashboard della versione pubblicata su tutti i canali (npm/pypi/github_release). |
-| `rk drift <slug> [--strict]` | Confronta la versione "fonte della verità" con l'ultima versione del registro. |
-| `rk bind-package <slug> [--npm <name>] [--pypi <name>] [--publisher-method <method>]` | Impostazione manuale del collegamento. |
+| `rk versions <slug> [--refresh] [--channel <name>]` | Dashboard della versione pubblicata tra canali (npm/pypi/github_release) |
+| `rk drift <slug> [--strict]` | Confronta la versione di riferimento con l'ultima versione del registro |
+| `rk bind-package <slug> [--npm <name>] [--pypi <name>] [--publisher-method <method>]` | Impostazione manuale del binding |
 
-### Comandi di integrità (v2.0.0, basati sulla ricerca)
+### Comandi di integrità (v2.0.0 — basati sulla ricerca)
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk health` (valore predefinito: feed). | Modifica il feed: delta dall'ultima sincronizzazione, intersezione KEV, interruzioni della serie CI, deriva dei pin di azione. |
-| `rk health doctor <slug>` | Analisi approfondita di un singolo repository (verifica delle dipendenze, azioni del flusso di lavoro, segnale CI, toolchain). |
-| `rk health table [--json\ | --text]` | Tabella dello stato del portfolio; JSON è il contratto fondamentale. |
+| `rk health` (predefinito = feed) | Modifica del feed: differenze rispetto all'ultima sincronizzazione, intersezione KEV, interruzioni della serie CI, deriva dell'azione-pin |
+| `rk health doctor <slug>` | Analisi approfondita di un singolo repository (verifica delle dipendenze, azioni del flusso di lavoro, segnale CI, toolchain) |
+| `rk health table [--json\ | --text]` | Tabella di integrità del portfolio; JSON è il contratto fondamentale |
 
 ### Comandi operativi (v2.0.0)
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk fsck [--strict] [--json]` | Verifica dell'integrità del database; scrive una riga di verifica in `db_health_runs`. |
-| `rk diff <slug> [--since <date>] [--until <date>] [--json]` | Cronologia delle modifiche per un repository. |
-| `rk runs [--db-health\ | --sync] [--limit <N>] [--json]` | Elenca le voci recenti di `db_health_runs` / `sync_runs`. |
-| `rk owners list` | Elenca i proprietari configurati di GitHub. |
-| `rk owners add <owner>` | Aggiunge i proprietari a `rk.config.json`. |
-| `rk owners remove <owner>` | Rimuove i proprietari da `rk.config.json`. |
+| `rk fsck [--strict] [--json]` | Verifica dell'integrità del database; scrive una riga di verifica in `db_health_runs` |
+| `rk diff <slug> [--since <date>] [--until <date>] [--json]` | Cronologia delle modifiche per un repository |
+| `rk runs [--db-health\ | --sync] [--limit <N>] [--json]` | Elenca le voci `db_health_runs` / `sync_runs` recenti |
+| `rk owners list` | Elenca i proprietari configurati GitHub |
+| `rk owners add <owner>` | Aggiungi ai proprietari `rk.config.json` |
+| `rk owners remove <owner>` | Rimuovi dai proprietari `rk.config.json` |
 
 ### Backup, ripristino e preflight (v2.1.0)
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk backup [--out <path>]` | Crea uno snapshot del database della conoscenza in una copia "vacuumed" (`VACUUM INTO`) nella directory `data/backups/` o `--out`. |
-| `rk restore <path> [--yes]` | Ripristina il database da uno snapshot: verifica lo schema, scambio atomico, conferma (rifiuta un backup con uno schema più recente). |
-| `rk doctor [--json] [--strict]` | Preflight dell'ambiente: configurazione, database, versione dello schema, autenticazione `gh`, ambiente corrente, esecuzioni recenti di sincronizzazione/fsck. |
-| `rk config [--json]` | Mostra la configurazione effettiva risolta con la provenienza per ogni campo. |
-| `rk config validate [--json]` | Valida `rk.config.json`: termina con un codice diverso da zero in caso di proprietari segnaposto, tipi non validi o percorsi irrisolvibili. |
+| `rk backup [--out <path>]` | Crea uno snapshot del database di conoscenza in una copia svuotata (`VACUUM INTO`) in `data/backups/` o `--out` |
+| `rk restore <path> [--yes]` | Ripristina il database da uno snapshot: convalida dello schema, scambio atomico, conferma obbligatoria (rifiuta un backup con uno schema più recente) |
+| `rk doctor [--json] [--strict]` | Preflight dell'ambiente: configurazione, database, versione dello schema, autenticazione `gh`, rig corrente, esecuzioni di sincronizzazione/fsck recenti |
+| `rk config [--json]` | Mostra la configurazione effettiva risolta con la provenienza per ogni campo |
+| `rk config validate [--json]` | Valida `rk.config.json`: esce con un codice di errore se sono presenti proprietari segnaposto, forme non valide o percorsi non risolvibili |
 
 ### Classificazione (v2.1.1)
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk classify <slug> [--status <s>] [--stage <s>] [--category <c>]` | Imposta i campi del ciclo di vita definiti: `status` (`attivo`/`in pausa`/`archiviato`/`sconosciuto`), `stage` a testo libero (ad esempio, `spedito`, `Fase 1`) e `category` (`prodotto`/`strumento`/`libreria`/`esperimento`/`modello`/`marketing`). Questi campi non vengono popolati tramite `sync` o `scan`; per cancellare `stage`/`category`, passa `""`. |
+| `rk classify <slug> [--status <s>] [--stage <s>] [--category <c>]` | Imposta i campi del ciclo di vita curati: `status` (`active`/`paused`/`archived`/`unknown`), `stage` in formato libero (ad esempio, `shipped`, `Phase 1`) e `category` (`product`/`tool`/`library`/`experiment`/`blueprint`/`marketing`). Questi non vengono popolati da `sync` o `scan`; passa `""` per cancellare `stage`/`category` |
 
 ### Comandi di verifica
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk audit seed-controls` | Inizializza/aggiorna il catalogo canonico di 80 controlli. |
-| `rk audit import <dir>` | Importa i risultati della verifica da file con contratto JSON. |
-| `rk audit posture [slug]` | Mostra lo stato della verifica per un repository o per l'intero portfolio. |
-| `rk audit findings` | Elenca i risultati aperti nell'intero portfolio. |
-| `rk audit controls` | Elenca i controlli canonici per dominio. |
-| `rk audit unaudited` | Elenca i repository che non hanno eseguiti controlli di verifica. |
-| `rk audit failing <domain>` | Elenca i repository in cui un determinato dominio di verifica ha prodotto risultati negativi. |
+| `rk audit seed-controls` | Inizializza/aggiorna il catalogo canonico di 80 controlli |
+| `rk audit import <dir>` | Importa i risultati della verifica da file con contratto JSON |
+| `rk audit posture [slug]` | Mostra la postura di verifica per un repository o per l'intero portfolio |
+| `rk audit findings` | Elenca i risultati aperti nell'intero portfolio |
+| `rk audit controls` | Elenca i controlli canonici per dominio |
+| `rk audit unaudited` | Elenca i repository che non hanno eseguiti controlli di verifica |
+| `rk audit failing <domain>` | Elenca i repository che non superano un determinato dominio di verifica |
 
 ### Comandi dei giochi
 
 | Comando | Descrizione |
 |---------|-------------|
-| `rk games score <worklist>` | Valuta un file REMEDIATION-WORKLIST.md e mostra la classifica. |
+| `rk games score <worklist>` | Valuta un file REMEDIATION-WORKLIST.md e mostra la classifica |
 
 ## Server MCP
 
-Il server MCP espone 30 strumenti per flussi di lavoro integrati con l'IA. Aggiungilo alla configurazione del tuo client MCP:
+Il server MCP espone 30 strumenti per flussi di lavoro integrati con l'IA. Aggiungilo alla configurazione del client MCP:
 
-**Claude Code (configurazione specifica del progetto `.claude.json`):**
+**Claude Code (ambito del progetto `.claude.json`):**
 ```json
 {
   "mcpServers": {
@@ -198,7 +198,7 @@ Il server legge `rk.config.json` dalla directory di lavoro all'avvio. Assicurati
 **Audit:**
 `audit_posture` `audit_portfolio` `audit_findings` `audit_detail` `audit_submit` `audit_controls_list` `audit_unaudited`
 
-**Stato di salute della build** (letture solo dal database, senza aggiornamenti dalla rete):
+**Verifica dello stato di build** (letture solo dal database, senza aggiornamenti di rete):
 `health_feed` `health_doctor` `health_portfolio`
 
 **Igiene operativa:**
@@ -207,7 +207,7 @@ Il server legge `rk.config.json` dalla directory di lavoro all'avvio. Assicurati
 **Ciclo di vita e pubblicazione:**
 `archive_repo` `delete_repo` `repo_versions`
 
-**Dogfood e simulazione di audit:**
+**Test interni e simulazione di audit:**
 `suggest_dogfood` `audit_failing`
 
 ## Framework di audit
@@ -236,15 +236,15 @@ Il sistema di audit copre 19 aree con 80 controlli:
 | supply_chain | SBOM, provenienza |
 | integrazioni | Contratti API, versionamento |
 
-Ogni esecuzione di audit produce evidenze strutturate: risultati dei controlli (superato/fallito/avviso/non applicabile), risultati con gravità e azioni correttive e metriche aggregate. Lo stato viene derivato automaticamente: **sano**, **richiede attenzione** o **critico**.
+Ogni esecuzione di audit produce prove strutturate: risultati dei controlli (superato/fallito/avviso/non applicabile), risultati con gravità e azioni correttive e metriche aggregate. Lo stato viene derivato automaticamente: **sano**, **richiede attenzione** o **critico**.
 
 ## Orchestrazione multi-agente: The Claude Games
 
-repo-knowledge include modelli per operazioni parallele multi-Claude su ampi portafogli. The Claude Games coordinano più agenti AI tramite un elenco di lavoro condiviso:
+repo-knowledge include modelli per operazioni multi-Claude parallele su ampi portafogli. The Claude Games coordinano più agenti AI tramite un elenco di lavoro condiviso:
 
 1. **Passaggio di audit:** ogni agente seleziona i repository dall'elenco di lavoro, esegue l'audit con 80 controlli e invia i risultati strutturati.
 2. **Passaggio di arricchimento:** gli agenti aggiungono tesi, note sull'architettura e mappature delle relazioni.
-3. **Passaggio di correzione:** gli agenti risolvono i problemi utilizzando un flusso di lavoro a 8 passaggi con punteggio.
+3. **Passaggio di correzione:** gli agenti correggono i risultati utilizzando un flusso di lavoro a 8 passaggi con punteggio.
 
 Consulta [`templates/claude-games/`](templates/claude-games/) per il playbook completo.
 
@@ -263,7 +263,7 @@ repos
       +-- audit_metrics (pass_rate, coverage, counts)
 ```
 
-Tutti i dati sono archiviati in un singolo database SQLite con ricerca full-text FTS5 su documenti, note e descrizioni dei repository.
+Tutti i dati risiedono in un singolo database SQLite con ricerca FTS5 full-text su documenti, note e descrizioni dei repository.
 
 ## Configurazione
 
@@ -278,7 +278,7 @@ Crea `rk.config.json` nella directory principale del tuo spazio di lavoro (o ese
 }
 ```
 
-Tutte le impostazioni provengono da `rk.config.json` (creato da `rk init`). Il server MCP legge anche la configurazione dalla directory di lavoro.
+Tutte le impostazioni provengono da `rk.config.json` (create da `rk init`). Il server MCP legge anche la configurazione dalla directory di lavoro.
 
 ## Licenza
 
@@ -286,4 +286,4 @@ Tutte le impostazioni provengono da `rk.config.json` (creato da `rk init`). Il s
 
 ---
 
-Creato da <a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a>
+Realizzato da <a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a>
