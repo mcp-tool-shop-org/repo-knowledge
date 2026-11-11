@@ -97,7 +97,7 @@
       "confidence": "low",
       "highWater": null,
       "name": "root",
-      "qualifyingSourceCommits": 3,
+      "qualifyingSourceCommits": 4,
       "rebaseline": null
     },
     {
@@ -113,7 +113,7 @@
       "confidence": "low",
       "highWater": null,
       "name": "scripts",
-      "qualifyingSourceCommits": 4,
+      "qualifyingSourceCommits": 3,
       "rebaseline": null
     },
     {
@@ -142,12 +142,12 @@
         ],
         "importsOnly": []
       },
-      "cohesion": 0.399554,
+      "cohesion": 0.301295,
       "cohesionDropped": false,
       "confidence": "low",
       "highWater": null,
       "name": "src",
-      "qualifyingSourceCommits": 21,
+      "qualifyingSourceCommits": 20,
       "rebaseline": null
     },
     {
@@ -176,12 +176,12 @@
         "importsAndCoChanges": [],
         "importsOnly": []
       },
-      "cohesion": 0.260445,
+      "cohesion": 0.224752,
       "cohesionDropped": false,
       "confidence": "low",
       "highWater": null,
       "name": "test",
-      "qualifyingSourceCommits": 24,
+      "qualifyingSourceCommits": 25,
       "rebaseline": null
     }
   ],
@@ -189,13 +189,13 @@
     "definition": "commits is how many commits in the window touch the file, including merges and commits dropped from coupling. lines is added plus deleted in those commits.",
     "files": [
       {
-        "commits": 11,
-        "lines": 257,
+        "commits": 14,
+        "lines": 320,
         "path": ".github/workflows/ci.yml"
       },
       {
-        "commits": 3,
-        "lines": 98,
+        "commits": 2,
+        "lines": 48,
         "path": ".github/workflows/pages.yml"
       },
       {
@@ -209,24 +209,14 @@
         "path": ".gitignore"
       },
       {
-        "commits": 4,
-        "lines": 269,
+        "commits": 3,
+        "lines": 13,
         "path": "AUDIT-CONTRACT.md"
       },
       {
-        "commits": 1,
-        "lines": 195,
-        "path": "AUDIT-WORKLIST.md"
-      },
-      {
-        "commits": 16,
-        "lines": 212,
+        "commits": 17,
+        "lines": 231,
         "path": "CHANGELOG.md"
-      },
-      {
-        "commits": 1,
-        "lines": 29,
-        "path": "ENRICHMENT-WORKLIST.md"
       },
       {
         "commits": 1,
@@ -234,73 +224,58 @@
         "path": "HANDBOOK.md"
       },
       {
-        "commits": 2,
-        "lines": 125,
+        "commits": 1,
+        "lines": 8,
         "path": "KNOWLEDGE-CONTRACT.md"
       },
       {
-        "commits": 1,
-        "lines": 240,
-        "path": "KNOWLEDGE-WORKLIST.md"
-      },
-      {
         "commits": 7,
-        "lines": 779,
+        "lines": 715,
         "path": "README.es.md"
       },
       {
-        "commits": 7,
-        "lines": 701,
+        "commits": 8,
+        "lines": 851,
         "path": "README.fr.md"
       },
       {
         "commits": 7,
-        "lines": 827,
+        "lines": 758,
         "path": "README.hi.md"
       },
       {
         "commits": 7,
-        "lines": 773,
+        "lines": 699,
         "path": "README.it.md"
       },
       {
         "commits": 7,
-        "lines": 769,
+        "lines": 741,
         "path": "README.ja.md"
       },
       {
-        "commits": 9,
-        "lines": 138,
+        "commits": 8,
+        "lines": 136,
         "path": "README.md"
       },
       {
         "commits": 7,
-        "lines": 795,
+        "lines": 737,
         "path": "README.pt-BR.md"
       },
       {
         "commits": 7,
-        "lines": 757,
+        "lines": 673,
         "path": "README.zh.md"
       },
       {
         "commits": 1,
-        "lines": 3384,
-        "path": "REMEDIATION-CHECKLIST.md"
-      },
-      {
-        "commits": 2,
-        "lines": 144,
+        "lines": 14,
         "path": "REMEDIATION-INSTRUCTIONS.md"
       },
       {
         "commits": 1,
-        "lines": 88,
-        "path": "REMEDIATION-WORKLIST.md"
-      },
-      {
-        "commits": 2,
-        "lines": 182,
+        "lines": 16,
         "path": "ROADMAP.md"
       },
       {
@@ -314,13 +289,13 @@
         "path": "SHIP_GATE.md"
       },
       {
-        "commits": 2,
-        "lines": 319,
+        "commits": 1,
+        "lines": 64,
         "path": "THE-CLAUDE-GAMES.md"
       },
       {
-        "commits": 3,
-        "lines": 242,
+        "commits": 6,
+        "lines": 299,
         "path": "atlas/README.md"
       },
       {
@@ -329,24 +304,19 @@
         "path": "atlas/boundaries.yaml"
       },
       {
-        "commits": 3,
-        "lines": 1065,
+        "commits": 6,
+        "lines": 1338,
         "path": "atlas/page.json"
       },
       {
-        "commits": 3,
-        "lines": 4174,
+        "commits": 6,
+        "lines": 4288,
         "path": "atlas/statistics.json"
       },
       {
-        "commits": 3,
-        "lines": 15028,
+        "commits": 6,
+        "lines": 15103,
         "path": "atlas/structure.json"
-      },
-      {
-        "commits": 1,
-        "lines": 579,
-        "path": "audit_report.md"
       },
       {
         "commits": 2,
@@ -355,12 +325,12 @@
       },
       {
         "commits": 8,
-        "lines": 2965,
+        "lines": 1857,
         "path": "package-lock.json"
       },
       {
         "commits": 11,
-        "lines": 46,
+        "lines": 41,
         "path": "package.json"
       },
       {
@@ -804,8 +774,8 @@
         "path": "research/STUDY-RK-018/pack-analogist.md"
       },
       {
-        "commits": 1,
-        "lines": 28,
+        "commits": 3,
+        "lines": 32,
         "path": "research/STUDY-RK-018/pack-practitioner.md"
       },
       {
@@ -1069,8 +1039,8 @@
         "path": "research/STUDY-RK-029/pack-analogist.md"
       },
       {
-        "commits": 1,
-        "lines": 28,
+        "commits": 3,
+        "lines": 32,
         "path": "research/STUDY-RK-029/pack-practitioner.md"
       },
       {
@@ -3019,8 +2989,8 @@
         "path": "research/STUDY-RK-116/pack-analogist.md"
       },
       {
-        "commits": 1,
-        "lines": 29,
+        "commits": 3,
+        "lines": 33,
         "path": "research/STUDY-RK-116/pack-practitioner.md"
       },
       {
@@ -3384,28 +3354,13 @@
         "path": "sbom.json"
       },
       {
-        "commits": 4,
-        "lines": 592,
+        "commits": 3,
+        "lines": 150,
         "path": "scripts/gen-audit-report.mjs"
       },
       {
-        "commits": 1,
-        "lines": 70,
-        "path": "scripts/gen-audit-worklist.mjs"
-      },
-      {
-        "commits": 1,
-        "lines": 92,
-        "path": "scripts/gen-enrichment-worklist.mjs"
-      },
-      {
-        "commits": 1,
-        "lines": 271,
-        "path": "scripts/gen-remediation-checklist.mjs"
-      },
-      {
-        "commits": 4,
-        "lines": 191,
+        "commits": 3,
+        "lines": 120,
         "path": "scripts/gen-worklist.mjs"
       },
       {
@@ -3419,8 +3374,8 @@
         "path": "scripts/postbuild.js"
       },
       {
-        "commits": 3,
-        "lines": 151,
+        "commits": 2,
+        "lines": 40,
         "path": "scripts/sync-releases.cjs"
       },
       {
@@ -3429,8 +3384,8 @@
         "path": "site/astro.config.mjs"
       },
       {
-        "commits": 1,
-        "lines": 6625,
+        "commits": 3,
+        "lines": 6637,
         "path": "site/package-lock.json"
       },
       {
@@ -3454,8 +3409,8 @@
         "path": "site/src/content/docs/handbook/index.md"
       },
       {
-        "commits": 3,
-        "lines": 39,
+        "commits": 2,
+        "lines": 37,
         "path": "site/src/content/docs/handbook/mcp-server.md"
       },
       {
@@ -3469,8 +3424,8 @@
         "path": "site/src/content/docs/handbook/security.md"
       },
       {
-        "commits": 5,
-        "lines": 241,
+        "commits": 4,
+        "lines": 235,
         "path": "site/src/content/docs/handbook/usage.md"
       },
       {
@@ -3494,8 +3449,8 @@
         "path": "src/cli-exit.ts"
       },
       {
-        "commits": 21,
-        "lines": 3814,
+        "commits": 20,
+        "lines": 3741,
         "path": "src/cli.ts"
       },
       {
@@ -3609,8 +3564,8 @@
         "path": "src/index.ts"
       },
       {
-        "commits": 8,
-        "lines": 1177,
+        "commits": 7,
+        "lines": 1173,
         "path": "src/mcp/server.ts"
       },
       {
@@ -3624,13 +3579,13 @@
         "path": "src/sync/build-health.ts"
       },
       {
-        "commits": 3,
-        "lines": 307,
+        "commits": 2,
+        "lines": 132,
         "path": "src/sync/dogfood-suggest.ts"
       },
       {
-        "commits": 6,
-        "lines": 728,
+        "commits": 5,
+        "lines": 502,
         "path": "src/sync/dogfood.ts"
       },
       {
@@ -3754,8 +3709,8 @@
         "path": "test/doctor.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 291,
+        "commits": 2,
+        "lines": 30,
         "path": "test/dogfood-intelligence-sync.test.ts"
       },
       {
@@ -3874,8 +3829,8 @@
         "path": "test/relation-types.test.ts"
       },
       {
-        "commits": 1,
-        "lines": 266,
+        "commits": 4,
+        "lines": 306,
         "path": "test/rigs.test.ts"
       },
       {
@@ -3929,8 +3884,8 @@
         "path": "tsup.config.ts"
       },
       {
-        "commits": 1,
-        "lines": 11,
+        "commits": 2,
+        "lines": 17,
         "path": "vitest.config.ts"
       }
     ]
@@ -3939,17 +3894,24 @@
     "level": "low",
     "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-10-01T02:00:33.069Z",
+  "generatedAt": "2026-11-11T22:33:32.727Z",
   "generatedFrom": {
-    "commit": "1222602f0b87b3560e4eb044791c50ca68a34cfa"
+    "commit": "df78cdf0d59f0c4c513be5647876a9d8d743a1e4"
   },
   "pairs": [
     {
       "a": "src/cli.ts",
       "b": "src/db/init.ts",
-      "either": 20,
+      "either": 19,
       "shared": 11,
-      "strength": 0.55
+      "strength": 0.578947
+    },
+    {
+      "a": "src/cli.ts",
+      "b": "test/migration-sequence.test.ts",
+      "either": 18,
+      "shared": 9,
+      "strength": 0.5
     },
     {
       "a": "src/db/init.ts",
@@ -3981,24 +3943,17 @@
     },
     {
       "a": "src/mcp/server.ts",
-      "b": "src/sync/dogfood.ts",
-      "either": 8,
-      "shared": 4,
-      "strength": 0.5
-    },
-    {
-      "a": "src/mcp/server.ts",
       "b": "test/cli-publish.test.ts",
-      "either": 8,
+      "either": 7,
       "shared": 4,
-      "strength": 0.5
+      "strength": 0.571429
     },
     {
       "a": "src/mcp/server.ts",
       "b": "test/mcp-server.test.ts",
-      "either": 7,
+      "either": 6,
       "shared": 6,
-      "strength": 0.857143
+      "strength": 1
     },
     {
       "a": "src/sync/index.ts",
@@ -4032,16 +3987,16 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-09-30T14:27:31-07:00",
+    "headDate": "2026-11-08T08:05:00-05:00",
     "inScopeFiles": 783,
     "pinnedStart": null,
     "priorFloor": "fallen",
-    "qualifyingCommits": 317,
+    "qualifyingCommits": 320,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-04-03T21:27:31.000Z",
+    "since": "2026-05-12T13:05:00.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",

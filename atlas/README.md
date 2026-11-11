@@ -1,15 +1,14 @@
 # repo-knowledge: how it works
 
-Mapped at 2026-10-01 from commit 1222602 by Atlas 1.24.0.
+Mapped at 2026-11-11 from commit df78cdf by Atlas 1.26.0.
 
 ## What this is
 
 11 parts, mostly Markdown (646 files); code in TypeScript (84), JavaScript (10), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 3 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run rk. People import @mcptoolshop/repo-knowledge.
 
-## What changed since 2026-09-30 (f0654a0)
+## What changed since 2026-10-01 (1222602)
 
-- CI's pull request trigger no longer names `.github/workflows/**`, `atlas/**`, `codecov.yml`, `eslint.config.js`, `package-lock.json`, `package.json`, `scripts/postbuild.js`, `site/astro.config.mjs`, `site/package-lock.json`, `site/package.json`, `src/**`, `test/**`, `tsconfig.json`, `tsup.config.ts` and `vitest.config.ts`.
-- 2 files changed content, across 2 parts.
+Nothing structural changed since 2026-10-01; 17 files changed content.
 
 ## What comes in
 
@@ -47,7 +46,7 @@ CI writes only to dist/, which is not tracked.
 
 ## What tends to change together
 
-- **src/mcp/server.ts** and **test/mcp-server.test.ts** changed together in 6 of 7 commits, and the test part imports the src part.
+- **src/mcp/server.ts** and **test/mcp-server.test.ts** changed together in 6 of 6 commits, and the test part imports the src part.
 - **src/db/init.ts** and **test/migration-sequence.test.ts** changed together in 10 of 13 commits, and the test part imports the src part.
 - **src/index.ts** and **test/migration-sequence.test.ts** changed together in 7 of 10 commits, and the test part imports the src part.
 - **src/index.ts** and **src/sync/index.ts** changed together in 5 of 8 commits, inside the src part.
